@@ -1,0 +1,74 @@
+# Release：推 v* 标签时打出三个平台的绿色包并附到 GitHub Release。
+#
+#   git tag v0.0.1 && git push origin v0.0.1
+#
+# pack.mjs 在一台机器上就能交叉打全平台（Go 交叉编译 + supportedArchitectures），
+# 所以只需要一个 ubuntu runner。也支持 workflow_dispatch 手动触发（只上传
+# artifact、不创建 Release），用来调试打包流程。
+#
+# 前置条件：tag 必须与 packages/launcher/package.json 的 version 一致
+# （zip 文件名里的版本号取自那里，不一致等于发错货）。
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # 打 Windows 托盘 exe 用；版本取自 go.mod（当前 1.21，runner 自带的也满足，
+      # 显式声明是为了 runner 预装版本漂移时不炸）
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packaging/win-launcher/go.mod
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: 校验 tag 与版本一致
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./packages/launcher/package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag v$tag 与 packages/launcher/package.json 的 version $pkg 不一致"
+            exit 1
+          fi
+
+      # pack.mjs 不自动 build（缺 dist 会拦一道），所以先显式构建
+      - run: pnpm build
+      - run: pnpm release
+
+      - name: 生成校验和
+        run: cd release && sha256sum *.zip > checksums.txt && cat checksums.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-zips
+          path: |
+            release/*.zip
+            release/checksums.txt
+          if-no-files-found: error
+
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            release/*.zip
+            release/checksums.txt

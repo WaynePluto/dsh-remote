@@ -1,0 +1,16 @@
+# dsh-remote 的 dsh 插件叠加层，由 launcher 用 `dsh --patch <这个文件>` 传给 dsh。
+#
+# 为什么是这个形态：
+#   * dsh 的 profile 是用户自己的（D14），launcher 只在它完全不存在时写一次模板，
+#     所以插件不能靠改用户的 cordis.patch.yml 生效；
+#   * `--patch` 叠加层在 profile 层之后应用，属于 dsh 官方的启动参数
+#     （apps/cli/src/args.ts 的 `--patch <path>`，可重复）；
+#   * `./` 开头的 insert 名字由 dsh 锚定到本文件所在目录再转成 file:// URL
+#     （packages/boot/app-boot/src/index.ts 的 anchorInsertedPluginNames），
+#     所以这里写相对路径，包被解压到哪里都成立 —— 绝不要改成绝对路径。
+#
+# 没有 id 的 insert 补丁把条目追加到条目表末尾（cordis-plugin-include 的
+# applyEntryPatches），插件因此在 dsh 自己的插件树之后加载；它只订阅一个在每次
+# 渲染 index.html 时才收集的事件表，所以加载顺序不影响结果。
+- insert:
+    - name: './dist/index.js'

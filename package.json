@@ -1,0 +1,77 @@
+{
+  "name": "dsh-remote-root",
+  "version": "0.0.1",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.17.0",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "prepare": "husky",
+    "build": "pnpm -r build",
+    "dev": "node --import tsx scripts/dev-stack.mjs",
+    "start": "node --import tsx scripts/dev-stack.mjs --built",
+    "relay:init": "node scripts/relay-cli.mjs init",
+    "relay:passwd": "node scripts/relay-cli.mjs passwd",
+    "relay:totp-reset": "node scripts/relay-cli.mjs totp reset",
+    "typecheck": "pnpm -r typecheck",
+    "release": "node scripts/pack.mjs --target=all",
+    "release:win": "node scripts/pack.mjs --target=win32-x64",
+    "release:linux": "node scripts/pack.mjs --target=linux-x64",
+    "release:mac": "node scripts/pack.mjs --target=darwin-arm64",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint . --fix",
+    "test": "pnpm -r --if-present test",
+    "check:dependencies": "node scripts/check-dependency-versions.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "archiver": "8.0.0",
+    "husky": "9.1.7",
+    "oxlint": "1.81.0",
+    "tsdown": "0.22.14",
+    "tsx": "4.23.13",
+    "typescript": "6.0.3"
+  },
+  "pnpm": {
+    "supportedArchitectures": {
+      "os": [
+        "win32",
+        "linux",
+        "darwin"
+      ],
+      "cpu": [
+        "x64",
+        "arm64"
+      ],
+      "libc": [
+        "glibc"
+      ]
+    },
+    "overrides": {
+      "@deepseek-ai/dsh-anonymous-user-id": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-attachment": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-authorization": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-bash-local": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-code-runtime": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-compaction": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-fs": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-invariants": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-jobs": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-output-retention": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-sandbox": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-scope": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-session-persistence": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-session-query": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-session-telemetry": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-session-title-llm": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-settings": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-shell": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-spill": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-subagent-in-process-driver": "0.1.2-alpha.4",
+      "@deepseek-ai/dsh-workflow": "0.1.2-alpha.4"
+    }
+  }
+}

@@ -1,0 +1,37 @@
+# CI：每次 push / PR 跑 lint、typecheck、build、test、依赖版本检查。
+# 双平台矩阵：项目面向 Windows 被控机开发（托盘、taskkill、路径处理），
+# 但 relay 部署在 Linux 上，两边都得绿。
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm 版本取自根 package.json 的 packageManager 字段
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # husky 的 prepare 钩子在 CI 里无害（.git 由 checkout 提供）
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm check:dependencies

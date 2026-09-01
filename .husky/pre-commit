@@ -1,0 +1,13 @@
+# 1) 直接依赖必须固定版本号：package.json 里不允许出现 ^ / ~ / 范围 / dist-tag。
+#    检查的是工作区文件（不是暂存内容），与 `pnpm check:dependencies` 同一份逻辑。
+node scripts/check-dependency-versions.mjs || exit 1
+
+# 2) 让 pnpm-lock.yaml 保持可移植：去掉 resolution 里的 tarball 直链，
+#    安装时由各环境自己的 registry 解析（`.npmrc` 的 lockfile-include-tarball-url=false 是同一目的）。
+if git diff --cached --name-only | grep -q '^pnpm-lock.yaml$'; then
+  if grep -q 'tarball: http' pnpm-lock.yaml; then
+    sed -i 's/, tarball: https\?:\/\/[^},]*//g' pnpm-lock.yaml
+    git add pnpm-lock.yaml
+    echo "[pre-commit] stripped registry tarball URLs from pnpm-lock.yaml"
+  fi
+fi

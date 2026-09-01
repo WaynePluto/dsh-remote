@@ -1,0 +1,72 @@
+# Caddyfile —— 给 dsh-remote 集线器（hub）前置 TLS 的示例
+#
+# 需要替换的占位符：
+#   dsh.example.com      换成你自己的域名
+#   admin@example.com    ACME 账号邮箱（证书到期提醒会发到这里）
+#   <dns-provider>       你的 DNS 服务商模块名，例如 cloudflare / alidns / dnspod
+#   CADDY_DNS_TOKEN      放 API token 的环境变量名（token 本身写在 systemd 的
+#                        EnvironmentFile 里，不要写进这个文件）
+#   127.0.0.1:30809      relay 的监听地址，对应 launcher 配置里的 relay.host / relay.port
+#
+# ---------------------------------------------------------------------------
+# 前提：relay 必须以「域名模式」运行
+# ---------------------------------------------------------------------------
+# 域名模式 = relay 启动时带上 --domain <域名> --scheme https
+#（packages/relay/src/cli.ts）。只有这时 relay 才会：
+#   * 把 <slug>.dsh.example.com 解析成机器（packages/relay/src/http/security.ts）
+#   * 发 __Secure- 前缀 + Secure + Domain=.dsh.example.com 的会话 cookie
+#     （packages/relay/src/auth/cookies.ts）
+#
+# 当前 launcher 拉起本机 relay 时用的是固定参数
+# `--scheme http --lan-http --direct-slug <slug>`（packages/launcher/src/relay.ts），
+# 还没有把域名模式暴露成配置项。在那之前，本文件对流量的作用是：
+#   ✓ 成员机器用 wss://dsh.example.com 拨号进来（隧道的 /_tunnel/control 与
+#     /_tunnel/stream 在任何 Host / Origin 校验之前处理，所以现在就能用）
+#   ✗ 浏览器用 https://<机器>.dsh.example.com 访问会拿到 404/403：
+#     Host 不是 IP、Origin 又是 https，两道检查都不通过
+# 详情和临时替代做法见同目录 README.md 的「现状与限制」。
+# ---------------------------------------------------------------------------
+
+{
+	# ACME 账号邮箱。
+	email admin@example.com
+}
+
+# 泛域名证书不覆盖 apex 本身，所以 *.dsh.example.com 和 dsh.example.com 两个名字都要写：
+#   dsh.example.com        集线器自己（登录页 /_auth/login、管理页 /_admin、隧道入口）
+#   *.dsh.example.com      每台成员机器一个子域名（铁律 6：一台机器一个子域名，不挂子路径）
+*.dsh.example.com, dsh.example.com {
+	# 泛域名证书只能用 DNS-01 挑战，HTTP-01 拿不到 *.example.com。
+	# DNS 模块不在官方默认二进制里，需要自己构建一份带插件的 Caddy：
+	#     xcaddy build --with github.com/caddy-dns/<dns-provider>
+	# 或用官方下载页的 "custom build" 勾选对应的 DNS 提供商。
+	# 同一个 site block 里的 tls 指令对两个名字都生效，apex 也会走 DNS-01；
+	# 想让 apex 单独走 HTTP-01，就把它拆成一个不带 tls 指令的 block。
+	tls {
+		dns <dns-provider> {env.CADDY_DNS_TOKEN}
+	}
+
+	# HSTS：includeSubDomains 覆盖到每一台成员机器的子域名。
+	# 加 preload 之前先确认这个域名下没有别的必须走 HTTP 的服务。
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+	# 关键：保留浏览器发来的原始 Host。
+	#   * relay 靠 Host 判断该路由到哪台机器
+	#   * 模式 A（唯一模式）把这个 Host 原样转发给成员机器的 dsh，dsh 用 --trusted-host 校验它
+	#     （铁律 7；relay 不会重写 Host/Origin）
+	# Caddy 的 reverse_proxy 默认就是保留原始 Host，所以这里什么都不用写。
+	# 千万不要加 `header_up Host {upstream_hostport}` —— 那会让所有请求变成 404。
+	#
+	# WebSocket 升级（dsh 的 /api/remote.mux，以及 dsh-remote 的
+	# /_tunnel/control、/_tunnel/stream）Caddy 默认就能正确转发，不需要额外配置。
+	#
+	# dsh 的前端插件走 combo 路由 /plugins/??a/client.js,b/client.js&rev=…，
+	# URL 里带 `??` 与逗号；Caddy 默认透传原始 URI，同样不需要配置。
+	#
+	# Caddy 默认会补上 X-Forwarded-For / -Proto / -Host，relay 不信任这些头来判断
+	# 是不是本机访问（docs/04-security.md），所以留着也不会造成绕过。
+	reverse_proxy 127.0.0.1:30809
+}
+
+# Caddy 默认会在 80 端口上把 http:// 跳转到 https://，所以防火墙要放行 80 和 443。
+# 只放行 443 也能跑（DNS-01 不需要 80），代价是用户手敲 http:// 时不会自动跳转。

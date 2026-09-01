@@ -1,0 +1,2 @@
+# 编译产物，由 scripts/pack.mjs 直接输出到暂存目录；这里只挡住手动 go build 的落点。
+*.exe

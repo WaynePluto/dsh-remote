@@ -1,0 +1,12 @@
+packages:
+  - 'packages/*'
+  # dsh 的扩展一律做成插件（dsh 官方推荐的扩展方式），全部放在这一层。
+  - 'packages/plugins/*'
+
+# dsh 的 profile fallback 从应用包的逻辑安装路径遍历依赖闭包，要求
+# node_modules 使用扁平布局；isolated linker 只会因历史 hoist 残留而偶然可用。
+nodeLinker: hoisted
+
+# pnpm 10 起默认不执行依赖的构建脚本，需要显式放行。
+# 只放行确实需要的，避免绿色包引入编译工具链依赖。
+onlyBuiltDependencies: []

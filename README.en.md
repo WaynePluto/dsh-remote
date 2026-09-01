@@ -1,0 +1,198 @@
+# dsh-remote
+
+[简体中文](README.md) | **English**
+
+Drive **DeepSeek Harness (dsh)** from any browser: let dsh work on your desktop, keep directing it from your phone on the road, and pick up the same session on your laptop at home.
+
+- **Bundles dsh**: installing dsh-remote is all you need — **no separate dsh installation**. dsh ships as a dependency; upgrading dsh-remote upgrades dsh
+- **No dsh forks or patches** — always tracks the official release
+- Controlled machines **listen on no public port**; they dial out, so your router needs no port forwarding
+- The UI is dsh's own (all 40 official UI plugins work unchanged)
+- Every non-loopback browser visit **requires login** (password + TOTP)
+
+## How it connects
+
+Every machine running dsh-remote is **identical**: its own dsh, a console, and a dialer. The only difference is **which one you treat as the entry machine** — the one your browser actually opens.
+
+> **Each machine runs its own dsh; file access and command execution happen locally on that machine.**
+> Opening pc2's page directs pc2's dsh working on pc2's code; pc1 only forwards. "Attaching pc2 to pc1" means pc2's dsh becomes reachable at pc1's address from then on — not the other way around. **Choosing a machine = choosing where your code runs.**
+
+```
+                    ┌──────────────────────────────────────┐
+   phone /          │  pc1 (entry machine, e.g. a VPS      │
+   tablet    ───>   │  or an always-on home computer)      │
+   browser          │                                      │
+                    │   console  ←── login, routing, list  │
+                    │      ↑  ↑                            │
+                    │      │  └──> pc1's own dsh           │
+                    └──────┼───────────────────────────────┘
+                           │
+              reverse tunnel (dialed out by the exposed machine,
+                           no public IP needed)
+                           │
+              ┌────────────┴────────────┐
+              │                         │
+      ┌───────┴────────┐       ┌────────┴───────┐
+      │  pc2            │       │  pc3           │
+      │  dialer ──> dsh │       │  dialer ──> dsh│
+      └────────────────┘       └────────────────┘
+      office desktop                 home laptop
+```
+
+- The relation is **one-way**: pc1 can open pc2, but pc2 cannot open pc1; any machine can act as the entry
+- Exposed machines **need no public IP and no port forwarding**
+- Each attached machine gets a **fixed port** on the entry machine (e.g. `http://pc1:30810` is pc2) — safe to bookmark; with a domain and HTTPS you can also use `pc2.your-domain` subdomains (optional)
+- dsh only ever listens on `127.0.0.1`; every outward-facing door is guarded by the console
+
+## Requirements
+
+| | Requirement |
+|---|---|
+| OS | Windows / Linux / macOS |
+| Node.js | **22.19+** (LTS from [nodejs.org](https://nodejs.org); check with `node -v`) |
+| Network | Exposed machines must reach the entry machine; the entry machine must be reachable if it is on the public internet |
+| dsh | **Not needed** — bundled in the package |
+
+## Install
+
+Download the zip for **your platform** from [Releases](../../releases) and unpack (dsh is included):
+
+- **Windows**: double-click `dsh-remote.exe`. The exe is unsigned; if SmartScreen complains, choose "More info → Run anyway". Or run `pwsh -File .\start.ps1`
+- **Linux / macOS**: `./start.sh`
+
+> Packages are per-platform because dsh's dependencies ship prebuilt platform binaries; dsh-remote's own code has zero native modules.
+
+From source (identical functionality):
+
+```bash
+git clone <this-repo-url> dsh-remote
+cd dsh-remote
+pnpm install
+pnpm build
+```
+
+## First start
+
+On the machine you want as the **entry machine**:
+
+```bash
+pnpm start
+```
+
+The terminal will report that no admin account exists and print an address. Open it **on that machine** (e.g. `http://127.0.0.1:30809`):
+
+1. Set an admin password
+2. Scan the QR code with an authenticator app (Microsoft / Google Authenticator, 1Password, …)
+3. Enter the 6-digit code to confirm
+
+From then on, access from your phone or any other computer uses this password plus the TOTP code.
+
+> 🔒 The setup wizard is **loopback-only** (`127.0.0.1`); anyone else on the LAN only sees "finish setup on that machine" and cannot hijack the admin account.
+
+Restart, and the terminal prints every access address:
+
+```
+  ✓ Node v22.19.0
+  ✓ dsh ready            127.0.0.1:3080
+  ✓ pc1 console running  0.0.0.0:30809
+  ○ no remote entry      pc1 reachable from localhost and LAN only
+
+  ┌────────────────────────────────────────────────────┐
+  │  local console  http://127.0.0.1:30809   no login  │
+  │  LAN access     http://10.1.2.87:30809   login     │
+  └────────────────────────────────────────────────────┘
+```
+
+On the machine itself, `http://127.0.0.1:30809` is **login-free** (loopback only). dsh's own address is never advertised — always go through the console, which handles the token exchange dsh has required since 0.1.2. `Ctrl+C` shuts down all three processes together.
+
+## Attaching a second machine
+
+1. Start dsh-remote on **pc2** too; it will say "no remote entry" — expected, leave it running
+2. On **pc1**, open `http://127.0.0.1:30809/_admin`, enter pc2's machine name under "expose another machine via pc1", and issue a token. The page shows a copy-paste command:
+   ```
+   dsh-remote-connector --relay ws://192.168.1.10:30809 --slug pc2 --enroll-token xxxxx --hub-authority 192.168.1.10
+   ```
+3. On **pc2**, open the console → "Remote entry" page (`http://127.0.0.1:30809/_admin/hub`) and paste the whole command into the only input box
+
+pc2 **connects immediately, no restart**, and gets a fixed port on pc1; from pc1's address plus that port you are now driving **dsh on pc2**.
+
+> The token is single-use and valid for **5 minutes**: it is deleted from the database once pc2 registers its device public key and is never shown again — just issue a new one if it expires.
+>
+> ⚠️ pc2's dsh must trust pc1's address: after pasting, **restart dsh-remote on pc2 once** and the launcher adds it automatically.
+
+## Day-to-day
+
+Everything happens in the browser. The console at `/_admin` has three tabs; each page is headed "you are managing pc1", since consoles on different machines look identical:
+
+| Tab | Path | What it manages |
+|---|---|---|
+| Machines | `/_admin` | machines exposed via this one; enrollment tokens |
+| Remote entry | `/_admin/hub` | which machine this one is attached to; set / cancel |
+| Account | `/_admin/account` | change password, reset authenticator |
+
+| To do this | Go here |
+|---|---|
+| See which machines you can open | "Machines" |
+| Expose one more machine | "Machines" → "expose another machine via …" |
+| Detach and disable a machine | "Machines" → "stop … and remove" — **dsh-remote on that machine exits entirely**, its tokens are revoked |
+| Set / cancel this machine's remote entry | "Remote entry" |
+| Change password / new phone for authenticator | "Account" |
+| See what happened recently | There is no such page in the UI — see "Security" below |
+
+### Emergency: if the web UI is unreachable
+
+Only for two situations: **first deployment on a headless server**, or **both password and authenticator lost**.
+
+```bash
+node dist/relay.js init          # create the admin (first server deployment)
+node dist/relay.js passwd        # reset the admin password
+node dist/relay.js totp reset    # reset the authenticator, re-scan
+```
+
+> These commands **do not ask for the old password** — anyone who can run commands on that machine can already read the database file directly. What you must guard is login to the machine itself. On a VPS the setup wizard is loopback-only, so use `init` to create the admin.
+
+## Security
+
+This tool hands your dev machine to a browser. Read this once:
+
+- **Never expose it to the public internet without HTTPS.** Plain HTTP on the LAN is an accepted trade-off (a loud warning is printed at startup); on the public internet you must put HTTPS in front (Caddy or similar with automatic certificates).
+- dsh itself has no authentication and only listens on `127.0.0.1`; the console is the only door — **a compromised console account equals a compromised machine** (whoever can start a session can run commands).
+- Five failed logins lock the account for 15 minutes.
+- **Security records are not in the web UI**: login attempts, machine attach/remove, password/authenticator changes are written to both the relay log (JSON lines with `"audit":true`) and the `audit_log` table in `relay.db`, never auto-expiring; inspect them on the machine running the relay.
+- Threat model and accepted trade-offs: [docs/04-security.md](docs/04-security.md) (Chinese).
+
+## Troubleshooting
+
+| Symptom | Cause |
+|---|---|
+| Node version too low | Install 22.19+ |
+| Works locally, not from the LAN | Firewall. Windows: `New-NetFirewallRule -DisplayName "dsh-remote" -Direction Inbound -LocalPort 30809 -Protocol TCP -Action Allow` |
+| Correct password rejected | Check the startup log for a "pre-scrypt password hash" warning; if present, reset the password once on the local admin page |
+| 403 on an attached machine's page | Its dsh doesn't trust the entry machine's address yet — restart dsh-remote on that machine |
+
+## Docs (for developers, in Chinese)
+
+| Doc | Contents |
+|---|---|
+| [AGENTS.md](AGENTS.md) | conventions and hard rules for AI assistants |
+| [docs/01-decisions.md](docs/01-decisions.md) | decisions made; list of rejected designs |
+| [docs/02-dsh-facts.md](docs/02-dsh-facts.md) | verified dsh source facts (each with file paths) |
+| [docs/03-architecture.md](docs/03-architecture.md) | components, tunnel protocol, request flow |
+| [docs/04-security.md](docs/04-security.md) | auth design, threat model, accepted risks |
+| [docs/05-roadmap.md](docs/05-roadmap.md) | milestones and acceptance criteria |
+| [docs/06-packaging.md](docs/06-packaging.md) | portable package layout, launcher, dependencies |
+
+## Status
+
+M0–M2 complete; M3 (portable package and launcher) working. See [docs/05-roadmap.md](docs/05-roadmap.md) (Chinese).
+
+| Item | Value |
+|---|---|
+| dsh version | `0.1.2-alpha.4` (developer preview, **breaking changes expected**) |
+| dsh Node requirement | `^22.19.0 \|\| >=24.0.0` |
+| Runtime policy | uses your local Node; no Node binary bundled |
+| Native modules | zero in our own code (scrypt from Node core); dsh ships prebuilt per-platform binaries, hence per-platform packages |
+
+## License
+
+[MIT](LICENSE) © dsh-remote contributors

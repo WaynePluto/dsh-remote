@@ -1,0 +1,29 @@
+{
+  "name": "@dsh-remote/launcher",
+  "version": "0.0.1",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "dsh-remote": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.1.2-alpha.4",
+    "@dsh-remote/connector": "workspace:*",
+    "@dsh-remote/dsh-plugin-remote-privileged": "workspace:*",
+    "@dsh-remote/protocol": "workspace:*",
+    "@dsh-remote/relay": "workspace:*",
+    "commander": "15.0.0",
+    "undici": "8.10.1",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "vitest": "4.1.11"
+  }
+}

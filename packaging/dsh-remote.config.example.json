@@ -1,0 +1,11 @@
+{
+  "dsh": {
+    "port": 3080
+  },
+  "relay": {
+    "port": 30809,
+    "host": "0.0.0.0",
+    "slug": "my-pc"
+  },
+  "home": "~/.dsh-remote"
+}
