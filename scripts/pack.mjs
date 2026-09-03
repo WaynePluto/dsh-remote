@@ -17,7 +17,7 @@
  *     start.ps1 *  start.sh *               终端入口，各平台只放自己那个
  *     README.txt  dsh-remote.config.example.json
  *     package.json                          只为声明 "type": "module"
- *     dist/index.js  proxy-bootstrap.js     launcher 本体，deploy 直接放好的
+ *     dist/index.js                          launcher 本体，deploy 直接放好的
  *     dist/relay.js  connector.js           一行的跳转入口，见 STUB_ENTRIES
  *     node_modules/                         一次解析产出的整棵运行时依赖树
  *       @dsh-remote/relay/dist/cli.js         relay 与 connector 就地运行，
@@ -45,8 +45,11 @@
  *
  * 跨平台打包已经解锁：根 package.json 里配了 `pnpm.supportedArchitectures`，一次
  * pnpm install 就把声明的各个平台的二进制都拉进来，再由 pruneToTarget 按包的
- * os/cpu/libc 字段裁到单一目标。当前声明的是 win32/linux/darwin 与 x64/arm64 的组合
- * （libc 只要 glibc），三个发行目标在一台机器上全都能打；代价是开发机 node_modules 变大。
+ * os/cpu/libc 字段裁到单一目标。supportedArchitectures 是 os × cpu 的组合展开，装不出
+ * 「只要这三个三元组」，所以根 package.json 里还配了 `pnpm.ignoredOptionalDependencies`
+ * （`*win32-arm64*` / `*linux-arm64*` / `*darwin-x64*` / `*musl*`）把多出来的那几份减掉，
+ * 净结果正好是下面 TARGETS 的三个目标；三个发行目标在一台机器上全都能打。细节见
+ * docs/06-packaging.md §1「跨平台打包」。
  */
 
 import { spawnSync } from 'node:child_process'
@@ -180,6 +183,33 @@ const WIN_SUBSYSTEM_GUI = 2
 const KEEP_AT_PACKAGE_ROOT = new Set(['dist', 'node_modules'])
 
 /**
+ * pnpm 自己的安装账本，运行时一个字节都用不到，但会把**解析这棵树时用的 registry**
+ * 原样写进去：`.modules.yaml` 记一行 `default: <registry>`，`.pnpm/lock.yaml` 每个包
+ * 记一条 `tarball: <registry>/...`。在内网镜像后面 deploy 出来的包，等于把公司内部的
+ * Artifactory 地址随发行包发出去几百次。
+ *
+ * Node 的模块解析从不读这两个文件（真正的包目录与符号链接都在 `.pnpm/<name>@<ver>/`
+ * 下，照旧保留），所以进包的时候直接丢掉。
+ */
+const PNPM_BOOKKEEPING = [/(^|\/)\.modules\.yaml$/, /(^|\/)\.pnpm\/lock\.yaml$/]
+
+/**
+ * `node_modules/.bin` 下的一个脚本。同样要能匹配「条目名就以 `.bin/` 开头」的形状：
+ * 写成 `includes('/.bin/')` 的话，顶层那个 .bin（恰恰是启动脚本所在的地方）一个都不会命中。
+ */
+const BIN_SCRIPT = /(^|\/)\.bin\//
+
+/**
+ * 这个 zip 条目是不是上面那种账本文件。
+ * @param {string} name 条目名，可能是 Windows 的反斜杠形式。
+ * @returns {boolean} 是则不入包。
+ */
+function isPnpmBookkeeping(name) {
+  const normalized = name.replaceAll('\\', '/')
+  return PNPM_BOOKKEEPING.some(pattern => pattern.test(normalized))
+}
+
+/**
  * 打包前必须已经存在的构建产物。
  *
  * deploy 只是原样复制各个包的 dist/，少了文件它不会抱怨，只会安静地产出一个缺胳膊
@@ -187,10 +217,27 @@ const KEEP_AT_PACKAGE_ROOT = new Set(['dist', 'node_modules'])
  */
 const BUILD_ARTIFACTS = [
   'packages/launcher/dist/index.js',
-  'packages/launcher/dist/proxy-bootstrap.js',
   'packages/relay/dist/cli.js',
   'packages/connector/dist/cli.js',
   'packages/plugins/remote-privileged/dist/index.js',
+  'packages/plugins/copilot-auth/dist/index.js',
+  'packages/plugins/models-catalog/dist/index.js',
+  'packages/plugins/proxy/dist/index.js',
+  'packages/plugins/turn-retry/dist/index.js',
+  'packages/plugins/exec-process/dist/index.js',
+  'packages/plugins/notify/dist/index.js',
+  'packages/plugins/services/dist/index.js',
+  'packages/plugins/terminal/dist/index.js',
+  // 浏览器半：缺了 dsh 不是少一个卡片，而是整个 web UI 启动失败（客户端模块扫描会把
+  // 缺失的 bundle 汇成一次响亮的抛错）。
+  'packages/plugins/copilot-auth/dist/client.js',
+  'packages/plugins/models-catalog/dist/client.js',
+  'packages/plugins/proxy/dist/client.js',
+  'packages/plugins/turn-retry/dist/client.js',
+  'packages/plugins/exec-process/dist/client.js',
+  'packages/plugins/notify/dist/client.js',
+  'packages/plugins/services/dist/client.js',
+  'packages/plugins/terminal/dist/client.js',
 ]
 
 /**
@@ -205,6 +252,32 @@ const BUILD_ARTIFACTS = [
 const DSH_PLUGIN_FILES = [
   'node_modules/@dsh-remote/dsh-plugin-remote-privileged/dsh-overlay.yml',
   'node_modules/@dsh-remote/dsh-plugin-remote-privileged/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-copilot-auth/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-copilot-auth/dist/index.js',
+  // dsh 的客户端模块系统顺着 overlay 的文件路径往上找到这个包的 package.json，
+  // 照 exports["./client"] 把下面这个 bundle 下发给页面；缺了 dsh 启动即失败。
+  'node_modules/@dsh-remote/dsh-plugin-copilot-auth/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-models-catalog/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-models-catalog/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-models-catalog/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-proxy/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-proxy/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-proxy/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-turn-retry/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-turn-retry/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-turn-retry/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-exec-process/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-exec-process/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-exec-process/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-notify/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-notify/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-notify/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-services/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-services/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-services/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-terminal/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-terminal/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-terminal/dist/client.js',
 ]
 
 /**
@@ -671,9 +744,13 @@ async function createZip(prefix, output, files, withExecutable) {
     archive.file(inPackage(WIN_EXECUTABLE), { name: `${prefix}/${WIN_EXECUTABLE}`, mode: 0o755 })
   }
   archive.directory(join(PACKAGE_DIR, 'dist'), `${prefix}/dist`)
-  // node_modules/.bin 下的脚本在 Linux 上要可执行，Windows 的文件系统给不出这个位。
+  // 回调拿到的 entry.name 是相对 node_modules 的名字（`.bin/tool`、`.pnpm/lock.yaml`），
+  // 不带上面那个目标前缀——所以这里的两个判断都要能匹配「开头就是」的形状。
   archive.directory(join(PACKAGE_DIR, 'node_modules'), `${prefix}/node_modules`, (entry) => {
-    if (entry.name.includes('/.bin/')) entry.mode = 0o755
+    // 返回 false 的条目不入包：pnpm 的账本会泄露解析这棵树时用的 registry 地址。
+    if (isPnpmBookkeeping(entry.name)) return false
+    // node_modules/.bin 下的脚本在 Linux 上要可执行，Windows 的文件系统给不出这个位。
+    if (BIN_SCRIPT.test(entry.name.replaceAll('\\', '/'))) entry.mode = 0o755
     return entry
   })
   await archive.finalize()
@@ -690,10 +767,11 @@ if (typeof version !== 'string' || version === '') fail('packages/launcher/packa
 const prefix = `dsh-remote-${version}`
 
 const UNLOCK_CROSS_BUILD_HINT =
-  '这个目标的平台不在根 package.json 的 `pnpm.supportedArchitectures` 里（现在声明的是\n' +
-  '       os: win32/linux/darwin，cpu: x64/arm64，libc: glibc）。把它的 os/cpu 加进邻个字段再\n' +
-  '       pnpm install，把该平台的预编译二进制拉下来；代价是开发机 node_modules 变大。\n' +
-  '       已经配过了还报这个错，先 pnpm install 一次。'
+  '这个目标的平台没有被根 package.json 的 pnpm 配置装进来（`supportedArchitectures` 现在声明的是\n' +
+  '       os: win32/linux/darwin，cpu: x64/arm64，libc: glibc，再由 `ignoredOptionalDependencies`\n' +
+  '       减掉 win32-arm64 / linux-arm64 / darwin-x64 / musl）。把它的 os/cpu 加进前者、\n' +
+  '       并从后者的模式列表里去掉，再 pnpm install 把该平台的预编译二进制拉下来；\n' +
+  '       代价是开发机 node_modules 变大。已经配过了还报这个错，先 pnpm install 一次。'
 
 /**
  * 解析 `--target=`：可重复、可逗号分隔，`all` 展开成全部目标，不给就打本机。

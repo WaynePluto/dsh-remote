@@ -33,7 +33,6 @@ export const DSH_PROFILE = 'dsh-remote-web'
 export const DSH_BIN = fileURLToPath(pathToFileURL(
   createRequire(join(ROOT, 'packages/launcher/package.json')).resolve('@deepseek-ai/dsh/lib/bin.js'),
 ))
-export const PROXY_BOOTSTRAP = join(ROOT, 'packages/launcher/dist/proxy-bootstrap.js')
 
 /** Where every dsh-remote dsh plugin lives (D17). */
 export const PLUGINS_DIRECTORY = join(ROOT, 'packages/plugins')
@@ -49,17 +48,25 @@ export const PLUGINS_DIRECTORY = join(ROOT, 'packages/plugins')
  * without the plugins tests something nobody ships.
  * @returns Absolute overlay paths, sorted by plugin directory name.
  * @throws Error When a plugin has no build output, which dsh would only report
- * as an unresolvable module deep inside its loader.
+ * as an unresolvable module deep inside its loader — or, for the browser half
+ * of a `dsh.client` plugin, as a FAILED fiber that takes the whole web UI down.
  */
 export function dshPluginOverlays() {
   if (!existsSync(PLUGINS_DIRECTORY)) return []
   const overlays = []
   for (const entry of readdirSync(PLUGINS_DIRECTORY, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
     if (!entry.isDirectory()) continue
-    const overlay = join(PLUGINS_DIRECTORY, entry.name, 'dsh-overlay.yml')
+    const packageDirectory = join(PLUGINS_DIRECTORY, entry.name)
+    const overlay = join(packageDirectory, 'dsh-overlay.yml')
     if (!existsSync(overlay)) continue
-    if (!existsSync(join(PLUGINS_DIRECTORY, entry.name, 'dist/index.js'))) {
-      throw new Error(`dsh 插件 ${entry.name} 还没有构建产物，先跑 pnpm build。`)
+    // The manifest decides which artifacts must exist: every plugin has a Host
+    // module, and one declaring `dsh.client` also has a browser bundle dsh
+    // serves to the page.
+    const manifest = JSON.parse(readFileSync(join(packageDirectory, 'package.json'), 'utf8'))
+    const artifacts = ['dist/index.js', ...(manifest.dsh?.client === undefined ? [] : ['dist/client.js'])]
+    for (const artifact of artifacts) {
+      if (existsSync(join(packageDirectory, artifact))) continue
+      throw new Error(`dsh 插件 ${entry.name} 还没有构建产物（${artifact}），先跑 pnpm build。`)
     }
     overlays.push(overlay)
   }

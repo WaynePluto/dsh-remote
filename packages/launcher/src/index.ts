@@ -24,12 +24,10 @@ import {
   dshTokenFromLine,
   DSH_TOKEN_ENV_NAME,
   DSH_TOKEN_TIMEOUT_MS,
-  proxyEnvironmentConfigured,
   resolveDshBin,
-  resolveProxyBootstrap,
   waitForDsh,
 } from './dsh.js'
-import { DSH_PLUGIN_PACKAGES, resolveDshPluginOverlays } from './dsh-plugins.js'
+import { DSH_PLUGIN_PACKAGE_NAMES, resolveDshPluginOverlays } from './dsh-plugins.js'
 import { LauncherError } from './errors.js'
 import { JWT_SECRET_ENV_NAME, jwtSecretFilePath, loadOrCreateJwtSecret } from './jwt-secret.js'
 import { membershipFilePath, readMembership } from './membership.js'
@@ -118,7 +116,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   const dshPatchFiles = resolveDshPluginOverlays()
   const relayEntry = resolveRelayEntry()
   const connectorEntry = resolveConnectorEntry()
-  say(`dsh 插件：${DSH_PLUGIN_PACKAGES.join('、')}`)
+  say(`dsh 插件：${DSH_PLUGIN_PACKAGE_NAMES.join('、')}`)
 
   // Never logged: this secret signs every console session.
   const jwtSecret = loadOrCreateJwtSecret(
@@ -126,12 +124,6 @@ export async function run(argv: readonly string[]): Promise<number> {
     message => console.warn(`[dsh-remote] ${message}`),
   )
   const relayEnv: NodeJS.ProcessEnv = { ...process.env, [JWT_SECRET_ENV_NAME]: jwtSecret }
-
-  const proxyConfigured = proxyEnvironmentConfigured()
-  const proxyBootstrap = proxyConfigured ? resolveProxyBootstrap() : undefined
-  if (proxyConfigured && proxyBootstrap === undefined) {
-    console.warn('[dsh-remote] 检测到代理环境变量，但找不到 proxy-bootstrap.js；dsh 可能连不上模型服务。')
-  }
 
   let shuttingDown = false
   // Assigned synchronously by the executor below; optional only because the
@@ -179,7 +171,6 @@ export async function run(argv: readonly string[]): Promise<number> {
       trustedHosts,
       patchFiles: dshPatchFiles,
       extraArgs: config.dsh.extraArgs,
-      proxyBootstrap,
     }),
     onLine: (line) => {
       if (dshTokenSeen) return

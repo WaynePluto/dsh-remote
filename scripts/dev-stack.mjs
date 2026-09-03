@@ -12,9 +12,9 @@ import { createPrivateKey } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
-import { pathToFileURL } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
 import process from 'node:process'
+import { ensureProfile, profileDirectory, resolveDshHome } from '../packages/launcher/src/profile.ts'
 import { issueDeviceEnrollToken, openRelayStore } from '../packages/relay/src/store/index.ts'
 import {
   DEVICE_KEY_FILE,
@@ -23,7 +23,6 @@ import {
   DSH_PORT,
   DSH_PROFILE,
   MACHINE_SLUG,
-  PROXY_BOOTSTRAP,
   RELAY_DATABASE,
   RELAY_PORT,
   ROOT,
@@ -175,16 +174,21 @@ const adminReady = adminInitialized()
 const secrets = localSecrets()
 const environment = relayEnvironment(secrets)
 const lanIp = lanAddress()
-const proxyConfigured = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy']
-  .some(name => (process.env[name] ?? '').trim() !== '')
-const usesProxyBootstrap = proxyConfigured && existsSync(PROXY_BOOTSTRAP)
-if (proxyConfigured && !usesProxyBootstrap) {
-  console.warn('[dsh-remote] 检测到代理环境变量，但缺少 packages/launcher/dist/proxy-bootstrap.js；dsh 可能连不上 provider。先运行 pnpm build。')
-}
+
+// No proxy preload: the outbound proxy is configured in dsh's own
+// Settings → Proxy page by `@dsh-remote/dsh-plugin-proxy`, which is
+// deliberately the only source of that fact (docs/proxy-plugin-design.md).
 
 // Mode A: the relay forwards the original Host, so dsh must trust the exact
 // authorities a browser will send. Port-less entries match any port.
 const trustedHosts = ['127.0.0.1', 'localhost', ...lanIp === undefined ? [] : [lanIp]]
+
+// dsh refuses to boot a profile it has no template for, so the dev stack has to
+// bootstrap the shared DSH_HOME exactly like the launcher does (D14): create the
+// minimal template only when the directory is missing, never rewrite it.
+const dshHome = resolveDshHome()
+const profileBootstrap = ensureProfile({ home: dshHome, profile: DSH_PROFILE })
+console.log(`[dsh-remote] ${profileBootstrap === 'created' ? '已创建' : '使用已有的'} dsh profile ${profileDirectory(dshHome, DSH_PROFILE)}`)
 
 const enrollToken = needsEnrollment() ? createEnrollToken() : undefined
 
@@ -196,8 +200,6 @@ const dshTokenPromise = new Promise((resolve) => { noteDshToken = resolve })
 let dshTokenSeen = false
 
 start('dsh', process.execPath, [
-  // Node needs a file:// URL for --import with an absolute Windows path.
-  ...usesProxyBootstrap ? ['--import', pathToFileURL(PROXY_BOOTSTRAP).href] : [],
   DSH_BIN,
   '--profile', DSH_PROFILE,
   // dsh-remote's own dsh plugins (D17). --patch is a launcher flag, so it has to

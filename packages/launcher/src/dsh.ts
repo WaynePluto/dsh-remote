@@ -1,8 +1,7 @@
-import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { connect } from 'node:net'
-import { dirname, join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { LauncherError } from './errors.js'
 
@@ -52,11 +51,6 @@ export function dshTokenFromLine(line: string): string | undefined {
   return token === null || token === '' ? undefined : token
 }
 
-const PROXY_ENV_NAMES = [
-  'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY',
-  'http_proxy', 'https_proxy', 'all_proxy',
-] as const
-
 /** Directory this module was loaded from; the anchor for every sibling lookup. */
 export function launcherDirectory(): string {
   return dirname(fileURLToPath(import.meta.url))
@@ -82,27 +76,6 @@ export function resolveDshBin(): string {
 }
 
 /**
- * @param env - environment to inspect.
- * @returns True when any conventional proxy variable is set.
- */
-export function proxyEnvironmentConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
-  return PROXY_ENV_NAMES.some(name => (env[name] ?? '').trim() !== '')
-}
-
-/**
- * Locate the built proxy bootstrap that is preloaded into the dsh child.
- *
- * Only a built `.js` file counts: the child is a plain `node`, so a TypeScript
- * source next to the sources could not be preloaded anyway.
- * @param directory - where to look, defaulting to this module's directory.
- * @returns The path, or undefined when the file has not been built.
- */
-export function resolveProxyBootstrap(directory: string = launcherDirectory()): string | undefined {
-  const candidates = [join(directory, 'proxy-bootstrap.js'), join(directory, '..', 'dist', 'proxy-bootstrap.js')]
-  return candidates.find(candidate => existsSync(candidate))
-}
-
-/**
  * Build the argv of the dsh child process.
  *
  * Mode A (铁律 7): dsh binds loopback only and is told which authorities a
@@ -110,8 +83,15 @@ export function resolveProxyBootstrap(directory: string = launcherDirectory()): 
  *
  * dsh-remote's own dsh plugins arrive as `--patch` overlays, which is a launcher
  * flag: it has to sit next to `--profile`, before the web app's own arguments.
+ *
+ * No proxy preload: the outbound proxy is configured in dsh's own Settings →
+ * Proxy page by `@dsh-remote/dsh-plugin-proxy`, which is deliberately the ONLY
+ * source of that fact. A launcher that also installed one from the environment
+ * gave the process a second, invisible source — and it produced a real failure:
+ * switching the proxy off still went through the environment's proxy while the
+ * page reported a direct connection (docs/proxy-plugin-design.md).
  * @param options - dsh entry point, profile, patch overlays, port, trusted
- * hosts, extra args, and the optional proxy bootstrap to preload.
+ * hosts, and extra args.
  * @returns The arguments to pass to `node`.
  */
 export function dshArguments(options: {
@@ -122,12 +102,8 @@ export function dshArguments(options: {
   /** Plugin overlays from `resolveDshPluginOverlays`; applied after the profile layer. */
   readonly patchFiles?: readonly string[] | undefined
   readonly extraArgs?: readonly string[] | undefined
-  readonly proxyBootstrap?: string | undefined
 }): string[] {
   return [
-    // Node's --import needs a file:// URL: a bare Windows absolute path is
-    // parsed as a bare specifier and fails to resolve.
-    ...options.proxyBootstrap === undefined ? [] : ['--import', pathToFileURL(options.proxyBootstrap).href],
     options.dshBin,
     '--profile', options.profile,
     ...(options.patchFiles ?? []).flatMap(file => ['--patch', file]),

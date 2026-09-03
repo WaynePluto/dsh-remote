@@ -11,7 +11,7 @@
 Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -like '192.168.*' -or $_.IPAddress -like '10.*' } | Select-Object IPAddress, InterfaceAlias
 
 # 2. 仅限内网，用完立刻 Ctrl+C
-node --import ./packages/launcher/dist/proxy-bootstrap.js packages\launcher\node_modules\@deepseek-ai\dsh\lib\bin.js --profile dsh-remote-web --no-open --host 0.0.0.0 --port 3080 --trusted-host <你的内网IP>:3080
+node packages\launcher\node_modules\@deepseek-ai\dsh\lib\bin.js --profile dsh-remote-web --no-open --host 0.0.0.0 --port 3080 --trusted-host <你的内网IP>:3080
 ```
 
 ⚠️ 此时 dsh 在内网上**没有任何认证**（官方原话：`there is no TLS, auth, or origin policy`）。测完立刻停掉。

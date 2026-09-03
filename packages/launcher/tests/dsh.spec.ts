@@ -1,16 +1,20 @@
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { connectorArguments, resolveConnectorEntry } from '../src/connector.js'
-import { dshArguments, dshTokenFromLine, proxyEnvironmentConfigured } from '../src/dsh.js'
+import { dshArguments, dshTokenFromLine } from '../src/dsh.js'
 import { DSH_PLUGIN_PACKAGES, PLUGIN_OVERLAY_FILE, resolveDshPluginOverlays } from '../src/dsh-plugins.js'
 import { LauncherError } from '../src/errors.js'
 
 const DSH_BIN = join('C:', 'green', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
 
-/** An `exists` predicate accepting a plugin overlay and the built module beside it. */
-const installedAt = (root: string) => (path: string): boolean =>
-  path === join(root, PLUGIN_OVERLAY_FILE) || path === join(root, 'dist', 'index.js')
+/** An `exists` predicate accepting every plugin's overlay and its built artifacts. */
+const installedAt = (roots: Readonly<Record<string, string>>) => (path: string): boolean =>
+  DSH_PLUGIN_PACKAGES.some(({ name, artifacts }) => {
+    const root = roots[name]
+    if (root === undefined) return false
+    return path === join(root, PLUGIN_OVERLAY_FILE)
+      || artifacts.some(artifact => path === join(root, ...artifact))
+  })
 
 describe('dsh arguments', () => {
   it('runs mode A: loopback bind plus every authority a browser may send', () => {
@@ -56,22 +60,19 @@ describe('dsh arguments', () => {
     ])
   })
 
-  it('preloads the proxy bootstrap as a file URL, which is what --import needs', () => {
-    const bootstrap = join('C:', 'green', 'dist', 'proxy-bootstrap.js')
+  it('never preloads anything: the proxy is the plugin\'s business, not the launcher\'s', () => {
+    // A launcher-installed environment proxy was a SECOND source of that fact,
+    // invisible in the UI, and it produced a real failure: switching the proxy
+    // off in Settings still went out through the environment's proxy while the
+    // page reported a direct connection (docs/proxy-plugin-design.md).
     const args = dshArguments({
       dshBin: DSH_BIN,
       profile: 'dsh-remote-web',
       port: 3080,
       trustedHosts: ['127.0.0.1'],
-      proxyBootstrap: bootstrap,
     })
-    expect(args.slice(0, 3)).toEqual(['--import', pathToFileURL(bootstrap).href, DSH_BIN])
-  })
-
-  it('only bothers with the proxy preload when a proxy variable is set', () => {
-    expect(proxyEnvironmentConfigured({})).toBe(false)
-    expect(proxyEnvironmentConfigured({ HTTPS_PROXY: '   ' })).toBe(false)
-    expect(proxyEnvironmentConfigured({ https_proxy: 'http://127.0.0.1:7890' })).toBe(true)
+    expect(args[0]).toBe(DSH_BIN)
+    expect(args).not.toContain('--import')
   })
 })
 
@@ -129,20 +130,22 @@ describe('connector entry', () => {
 describe('dsh plugin overlays', () => {
   const packed = join('C:', 'green', 'dist')
   const source = join('D:', 'dev', 'dsh-remote', 'packages', 'launcher', 'src')
-  const [plugin] = DSH_PLUGIN_PACKAGES
-  const scoped = plugin.split('/')
-  const bare = (scoped[1] ?? plugin).replace(/^dsh-plugin-/u, '')
+  const bareName = (name: string): string => (name.split('/')[1] ?? name).replace(/^dsh-plugin-/u, '')
+  /** Where each plugin sits in a green package. */
+  const deployedRoots = Object.fromEntries(DSH_PLUGIN_PACKAGES.map(({ name }) =>
+    [name, join(packed, '..', 'node_modules', ...name.split('/'))]))
+  /** Where each plugin sits in the workspace. */
+  const workspaceRoots = Object.fromEntries(DSH_PLUGIN_PACKAGES.map(({ name }) =>
+    [name, join(source, '..', '..', 'plugins', bareName(name))]))
 
-  it('finds the plugin deployed into the package own node_modules', () => {
-    const root = join(packed, '..', 'node_modules', ...scoped)
-    expect(resolveDshPluginOverlays(packed, installedAt(root)))
-      .toEqual([join(root, PLUGIN_OVERLAY_FILE)])
+  it('finds every plugin deployed into the package own node_modules', () => {
+    expect(resolveDshPluginOverlays(packed, installedAt(deployedRoots)))
+      .toEqual(DSH_PLUGIN_PACKAGES.map(({ name }) => join(deployedRoots[name] as string, PLUGIN_OVERLAY_FILE)))
   })
 
-  it('finds the workspace plugin from the launcher own location', () => {
-    const root = join(source, '..', '..', 'plugins', bare)
-    expect(resolveDshPluginOverlays(source, installedAt(root)))
-      .toEqual([join(root, PLUGIN_OVERLAY_FILE)])
+  it('finds every workspace plugin from the launcher own location', () => {
+    expect(resolveDshPluginOverlays(source, installedAt(workspaceRoots)))
+      .toEqual(DSH_PLUGIN_PACKAGES.map(({ name }) => join(workspaceRoots[name] as string, PLUGIN_OVERLAY_FILE)))
   })
 
   it('refuses to start dsh without the overlay, instead of serving a half-broken UI', () => {
@@ -152,8 +155,19 @@ describe('dsh plugin overlays', () => {
   it('refuses an overlay whose plugin was never built', () => {
     // The overlay names ./dist/index.js; without it dsh fails deep inside its
     // loader with a bare module-resolution error nobody can act on.
-    const overlay = join(packed, '..', 'node_modules', ...scoped, PLUGIN_OVERLAY_FILE)
-    expect(() => resolveDshPluginOverlays(packed, path => path === overlay)).toThrow(LauncherError)
+    const overlays = DSH_PLUGIN_PACKAGES.map(({ name }) => join(deployedRoots[name] as string, PLUGIN_OVERLAY_FILE))
+    expect(() => resolveDshPluginOverlays(packed, path => overlays.includes(path))).toThrow(LauncherError)
+  })
+
+  it('refuses a plugin whose browser bundle is missing, which would fail dsh\'s whole web UI', () => {
+    // dsh's client module scan aggregates a missing bundle into one loud throw
+    // that FAILS the fiber serving the page, so the check cannot stop at the
+    // Host module.
+    const withoutClientBundle = (path: string): boolean =>
+      installedAt(deployedRoots)(path) && !path.endsWith(join('dist', 'client.js'))
+    expect(DSH_PLUGIN_PACKAGES.some(({ artifacts }) =>
+      artifacts.some(artifact => artifact.join('/') === 'dist/client.js'))).toBe(true)
+    expect(() => resolveDshPluginOverlays(packed, withoutClientBundle)).toThrow(LauncherError)
   })
 })
 
