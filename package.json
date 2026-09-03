@@ -50,6 +50,12 @@
         "glibc"
       ]
     },
+    "ignoredOptionalDependencies": [
+      "*darwin-x64*",
+      "*linux-arm64*",
+      "*musl*",
+      "*win32-arm64*"
+    ],
     "overrides": {
       "@deepseek-ai/dsh-anonymous-user-id": "0.1.2-alpha.4",
       "@deepseek-ai/dsh-attachment": "0.1.2-alpha.4",

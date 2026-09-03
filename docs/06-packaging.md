@@ -39,7 +39,8 @@
 ### 跨平台打包（已解锁）
 
 根 `package.json` 配了 `pnpm.supportedArchitectures`，一次 `pnpm install` 就把声明的各平台
-预编译二进制都拉进开发机的 `node_modules`：
+预编译二进制都拉进开发机的 `node_modules`；`pnpm.ignoredOptionalDependencies` 再把组合里
+多出来的那三种减掉：
 
 ```json
 "pnpm": {
@@ -47,7 +48,10 @@
     "os": ["win32", "linux", "darwin"],
     "cpu": ["x64", "arm64"],
     "libc": ["glibc"]
-  }
+  },
+  "ignoredOptionalDependencies": [
+    "*win32-arm64*", "*linux-arm64*", "*darwin-x64*", "*musl*"
+  ]
 }
 ```
 
@@ -56,14 +60,26 @@
 > 这段配置为什么长这样，只记在这里：JSON 写不了注释，而 `package.json` 的 schema 也不允许
 > 在 `pnpm` 里放额外的说明字段（编辑器会报「不允许属性」）。改它之前先读完本节。
 
-- 代价：开发机 `node_modules` 实测 **808 MB**（只要 win32+linux 的 x64 时是 458 MB）。
-  单个 zip 不受影响，仍是 **61.5–65.8 MB**：`pruneToTarget` 按包的 `os`/`cpu`/`libc` 字段 +
-  `node-pty/prebuilds/<平台>` 裁到单一目标（每个目标裁掉 33–34 项）
-- `cpu` 里的 `arm64` 会顺带拉下 `linux-arm64` / `win32-arm64` 那几份（os 与 cpu 是组合展开），
-  现在没有对应的发行目标，白占体积但无害；哪天要发 `linux-arm64`（树莓派 / ARM 云主机）
-  只需在 `TARGETS` 里加一项
+- **`supportedArchitectures` 是 os × cpu × libc 的笛卡尔积，写不了「三元组」**：光靠它，
+  三个发行目标（win32-x64 / linux-x64 / darwin-arm64）必然连带拉下 win32-arm64、
+  linux-arm64、darwin-x64 三份用不上的二进制。pnpm 没有元组语法，只能事后减：
+  `ignoredOptionalDependencies` 支持名字通配，按平台切分的原生包（`@img/sharp-*`、
+  `@esbuild/*`、`@oxlint/binding-*`、`@rolldown/binding-*`、`@vscode/ripgrep-*`、
+  `@koromix/koffi-*`、`lightningcss-*`、`node-addon-require-builtin-*`、
+  `@deepseek-ai/node-addon-landlock-run-*`）名字里都带 `<platform>-<arch>`，四条模式
+  一次覆盖。`*musl*` 顺手收掉 `supportedArchitectures.libc` 拦不住的 musl 变体
+  （`@img/sharp-libvips-linuxmusl-*`、`@oxlint/binding-linux-x64-musl` 之类）
+- 代价：开发机 `node_modules` 实测 **465 MB**（六种组合全装时是 808 MB，只要 win32+linux
+  的 x64 时是 458 MB）。单个 zip 不受影响，仍是 **61.3–65.6 MB**：`pruneToTarget` 按包的
+  `os`/`cpu`/`libc` 字段 + `node-pty/prebuilds/<平台>` 裁到单一目标
+- **代价二：开发机自己不能是被排除的那三种平台**（linux-arm64 / darwin-x64 / Alpine）。
+  在那种机器上 `pnpm install` 会装不到本机的 oxlint / rolldown 二进制，连开发都跑不起来。
+  真要在上面开发，把对应的那条模式先删掉
+- 哪天要发 `linux-arm64`（树莓派 / ARM 云主机）：删掉 `"*linux-arm64*"`，再在
+  `scripts/pack.mjs` 的 `TARGETS` 里加一项
 - `libc` 只写 `glibc`：**产出的 linux 包在 Alpine / musl 上跑不了**，`pruneToTarget` 也是按 glibc 取舍的
-- lockfile 不受影响：可选依赖本来就全写在 `pnpm-lock.yaml` 里，这个字段只决定装哪几份
+- lockfile 会跟着变：`ignoredOptionalDependencies` 会写进 `pnpm-lock.yaml` 的 `settings`，
+  被排除的包连解析条目一起消失（本次改动删掉 527 行），所以改这个字段必须提交 lockfile
 - 非本机目标拿不到「裁剪后真跑一次」的证据（见 §5 自检），macOS / Linux 包发前最好在真机上
   解压跑一次 `./start.sh`
 
@@ -87,8 +103,7 @@ dsh-remote-0.0.1/
 ├─ dsh-remote.config.example.json
 ├─ package.json               # 只为声明 "type": "module"
 ├─ dist/
-│  ├─ index.js                # launcher 本体
-│  └─ proxy-bootstrap.js
+│  └─ index.js                # launcher 本体
 └─ node_modules/
    ├─ @dsh-remote/relay/dist/cli.js       # launcher 真正 spawn 的 relay
    ├─ @dsh-remote/connector/dist/cli.js
