@@ -1,0 +1,16 @@
+# dsh-remote 的 dsh 插件叠加层，由 launcher 用 `dsh --patch <这个文件>` 传给 dsh。
+#
+# 形态与 turn-retry / models-catalog / copilot-auth / remote-privileged 相同：`./` 开头的
+# insert 名字由 dsh 锚定到本文件所在目录再转成 file:// URL，所以这里只写相对路径（铁律 D17）。
+#
+# 这个插件的**全部行为都在浏览器半**（dist/client.js）。宿主半（dist/index.js）是一个空插件，
+# 它存在的唯一理由是：dsh 的客户端模块系统顺着这一行 insert 的路径往上找到本包的
+# package.json，读 `dsh.client` 与 exports["./client"]，才会把 dist/client.js 下发给页面。
+# **dist/client.js 缺失会让 dsh 的 web UI 整个起不来**（FAILED fiber），不是静默降级。
+#
+# 顺序无关：本插件只往 `conversation.chat.node` 这个 keyed 槽里注册，且用 priority 影子覆盖
+# dsh 自己的 `turn-process` 条目（priority 更小的渲染）。槽的影子规则与注册先后无关，
+# 所以这一行放在哪里都一样。
+- insert:
+    - id: exec-process
+      name: './dist/index.js'

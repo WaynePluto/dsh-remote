@@ -1,0 +1,19 @@
+{
+  // The browser half is checked in its own program, like every other two-half
+  // plugin in this repo: the Host and browser halves of several dsh packages
+  // merge different shapes into cordis's `Context`, and one program holding
+  // both would see them collide.
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM"],
+    "types": []
+  },
+  "include": [
+    "src/client/**/*.ts",
+    "src/client/**/*.tsx",
+    "src/shared.ts",
+    "tests/**/*.ts",
+    "tests/**/*.tsx"
+  ]
+}
