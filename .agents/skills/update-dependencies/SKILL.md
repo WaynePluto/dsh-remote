@@ -153,6 +153,9 @@ pnpm test
 
 ```powershell
 node scripts/m0-fence-check.mjs --token <dsh 启动行里的 token>   # Host/Origin 围栏 + dsh 自带认证
+node scripts/copilot-auth-check.mjs                            # 两个插件的宿主半 + 浏览器半仍被 dsh 装载
+node scripts/proxy-check.mjs                                   # 代理插件：设置命名空间仍注册，写入的接受/拒绝仍如预期
+node scripts/turn-retry-check.mjs                              # 失败重试插件：projection 注册 + 瀑布签名 + RPC 通道
 pnpm dev                             # 起 relay + connector + dsh，浏览器走一遍登录 → 发消息 → 流式输出
 ```
 
@@ -160,13 +163,34 @@ pnpm dev                             # 起 relay + connector + dsh，浏览器�
 首页是否被 relay 的 `?token=` 重定向换成了 dsh 的 cookie（不应看到 dsh 的 401 文本）、
 `/api/remote.mux` 是否 101、`/plugins/??…` combo bundle 是否 200、审批卡片能否点。
 
+⚠️ **`proxy-check.mjs` 还盯着一条 dsh 行为**：`SettingsScope.mutate` 在宿主拒绝时是 **resolve
+不是 reject**（docs/02 §8.8）。哪天 dsh 改成 reject（或给 snapshot 加上 error 字段），
+代理页里那段「写完再核对是否落地」的代码就可以简化 —— 但**在确认之前不要删**，
+它现在是页面唯一能知道「被拒了」的途径。
+
+**插件侧额外要复核的四件事**（后三条由两个 check 脚本覆盖，它们报错就是其中一条变了）：
+
+1. `remote-privileged` 的逃生门 `__DSH_TRANSPORT__.ownsHost` 还在（docs/02 §4.7）；
+2. `copilot-auth` 依赖的模型页扩展槽 `settings.models.provider-card`、客户端 bundle 工件格式
+   （`window.__ModuleLoader__.load`）与模块表（react / react/jsx-runtime）还在（docs/02 §7.3、§7.4）；
+3. 凭据记录仍是 `llm-pi-ai/github-copilot` + `{kind:'grant', payload:<pi-ai 凭据>}`，且 pi-ai 内置目录里
+   还有 `github-copilot`（docs/02 §7.1）。同时把 `packages/plugins/copilot-auth` 的 `@earendil-works/pi-ai`
+   版本跟 dsh 依赖的那个对齐。
+4. `turn-retry` 依赖的四样东西还在（docs/02 §10）：`agent/request-error` 瀑布的 payload 与
+   `RequestErrorAction`、`TurnEndReasonMap` 的 `error` 分支、`ctx.sessionProjections.register` 的
+   `wire` 契约、槽 `conversation.input.dock` 与 `ctx.userQuestions.ask` 的形状。
+   **`turn-retry-check.mjs` 里「dsh 正常启动」这一条分量特别重**：projection 注册被拒或瀑布签名对不上
+   都会让 fiber FAILED，dsh 根本走不到打印地址那一步。
+   同时把这个包的 `@deepseek-ai/dsh-llm`（它是**运行时** value import，在 `dependencies` 里）
+   版本跟 dsh 对齐。
+
 ### 7. 整理 dsh 新能力吸收建议
 
 比较新旧版本（skill `dsh-source` 给出源码路径），关注：
 
 - 是否新增了对远程 / 多端访问有用的能力（可能让本项目的某层变薄）
 - 插件与 profile 机制的变化（影响铁律 10 的接入方式）
-- 审批 / 权限模型变化（铁律 5：只用 `'ask'`）
+- 审批 / 权限模型变化（`ApprovalPolicy` 的取值与内置预设表，见 `docs/02-dsh-facts.md` §6.1）
 - 是否出现了可以直接删掉的本仓库兼容代码
 
 整理成推荐列表（能力名、dsh 提供了什么、本仓库需要改多少）报告给用户，
