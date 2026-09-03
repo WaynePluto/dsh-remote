@@ -23,8 +23,8 @@ import { cookieHeader, httpRequest, setCookieArray, type HttpResult } from './he
 const JWT_SECRET = new Uint8Array(32).fill(0x2b)
 const HOST = 'pc1.dsh.test'
 const ORIGIN = 'https://pc1.dsh.test'
-const PASSWORD = 'correct horse battery staple'
-const NEXT_PASSWORD = 'another sufficiently long password'
+const PASSWORD = 'Correct horse battery staple 1'
+const NEXT_PASSWORD = 'Another sufficiently long password 2'
 
 interface Fixture {
   relay: RelayServer

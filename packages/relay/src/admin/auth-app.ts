@@ -72,6 +72,7 @@ function loginPage(options: {
 <div class="field"><label for="password">密码</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024"></div>
 <div class="field"><label for="totp">动态验证码</label><input class="code" id="totp" name="totp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></div>
 <button type="submit">连接到这台机器</button></form>
+<p class="hint">账号是初次设置时自己填的名字（默认 admin）。忘了的话，在运行它的那台电脑上打开控制台的「账号」页就能看到。</p>
 <p class="foot">dsh-remote / access gateway</p>`,
   })
 }

@@ -1,5 +1,5 @@
 import { PASSWORD_MIN_CHARACTERS } from '../../auth/password.js'
-import { escapeHtml, type PageAppearance } from '../shared.js'
+import { PASSWORD_RULE_TEXT, escapeHtml, type PageAppearance } from '../shared.js'
 import { enrollmentPanel } from '../totp-panel.js'
 import {
   ADMIN_ACCOUNT_PATH,
@@ -77,7 +77,7 @@ ${enrollment.confirmable
 <form method="post" action="${ADMIN_PASSWORD_PATH}">
 <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
 <div class="field"><label for="currentPassword">当前密码</label><input id="currentPassword" name="currentPassword" type="password" autocomplete="current-password" required maxlength="256"></div>
-<div class="field"><label for="newPassword">新密码（至少 ${String(PASSWORD_MIN_CHARACTERS)} 个字符）</label><input id="newPassword" name="newPassword" type="password" autocomplete="new-password" required maxlength="256"></div>
+<div class="field"><label for="newPassword">新密码（${PASSWORD_RULE_TEXT}）</label><input id="newPassword" name="newPassword" type="password" autocomplete="new-password" required minlength="${String(PASSWORD_MIN_CHARACTERS)}" maxlength="256"></div>
 <div class="field"><label for="confirmPassword">再输入一次新密码</label><input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" required maxlength="256"></div>
 <button type="submit">修改密码</button></form>
 <p class="hint">改完之后全部登录会话都会被注销，每台设备都要用新密码重新登录。</p></div>

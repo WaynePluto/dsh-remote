@@ -31,25 +31,70 @@ const SALT_BYTES = 16
 /** Identifies the encoding below, and tells a legacy `$argon2…` hash apart. */
 const SCRYPT_PREFIX = '$scrypt$'
 
-export const PASSWORD_MIN_CHARACTERS = 12
+export const PASSWORD_MIN_CHARACTERS = 6
 export const PASSWORD_MAX_BYTES = 1_024
 
+/**
+ * How many of the four character classes a password has to mix.
+ *
+ * Length alone is the stronger lever, but a 6-character minimum is short
+ * enough that an all-lowercase password would be trivially guessable, so the
+ * shortfall is covered by requiring variety instead. TOTP and the 5-failure
+ * lockout remain the real defences (docs/04 §2).
+ */
+export const PASSWORD_REQUIRED_CLASSES = 3
+
+/** Why a candidate password was refused; pages turn this into user-facing text. */
+export type PasswordPolicyReason = 'too-short' | 'too-long' | 'not-varied-enough'
+
 export class PasswordPolicyError extends Error {
-  constructor(message: string) {
+  readonly reason: PasswordPolicyReason
+
+  constructor(reason: PasswordPolicyReason, message: string) {
     super(message)
     this.name = 'PasswordPolicyError'
+    this.reason = reason
   }
+}
+
+/**
+ * Count the character classes present: upper case, lower case, digit, and
+ * everything else (symbols, spaces, and any script without case, which is why
+ * the fallback is "other" rather than a fixed symbol list).
+ * @param password - the candidate.
+ * @returns How many of the four classes occur at least once.
+ */
+function characterClasses(password: string): number {
+  let upper = false
+  let lower = false
+  let digit = false
+  let other = false
+  for (const character of password) {
+    if (character >= '0' && character <= '9') digit = true
+    else if (character !== character.toLowerCase()) upper = true
+    else if (character !== character.toUpperCase()) lower = true
+    else other = true
+  }
+  return [upper, lower, digit, other].filter(Boolean).length
 }
 
 export function validateNewPassword(password: string): void {
   if ([...password].length < PASSWORD_MIN_CHARACTERS) {
     throw new PasswordPolicyError(
+      'too-short',
       `password must contain at least ${String(PASSWORD_MIN_CHARACTERS)} characters`,
     )
   }
   if (Buffer.byteLength(password, 'utf8') > PASSWORD_MAX_BYTES) {
     throw new PasswordPolicyError(
+      'too-long',
       `password must not exceed ${String(PASSWORD_MAX_BYTES)} UTF-8 bytes`,
+    )
+  }
+  if (characterClasses(password) < PASSWORD_REQUIRED_CLASSES) {
+    throw new PasswordPolicyError(
+      'not-varied-enough',
+      `password must mix at least ${String(PASSWORD_REQUIRED_CLASSES)} of: upper case, lower case, digits, other characters`,
     )
   }
 }

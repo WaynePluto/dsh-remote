@@ -206,7 +206,7 @@ describe('relay authentication endpoints', () => {
     const initialized = await initializeAdmin({
       store,
       username: 'admin',
-      password: 'correct horse battery staple',
+      password: 'Correct horse battery staple 1',
     })
     const authentication = await createAuthenticationService({ store, jwtSecret: JWT_SECRET })
     const relay = createRelayServer({
@@ -284,7 +284,7 @@ describe('relay authentication endpoints', () => {
 
       const form = new URLSearchParams({
         username: 'admin',
-        password: 'correct horse battery staple',
+        password: 'Correct horse battery staple 1',
         totp: await generateTotp(initialized.enrollment.secret),
         csrf,
         returnTo: '/conversation?id=1',
@@ -453,7 +453,7 @@ describe('relay authentication endpoints', () => {
 
   it('rejects unauthenticated WebSocket upgrades before allocating a tunnel', async () => {
     const store = openRelayStore({ path: ':memory:' })
-    await initializeAdmin({ store, username: 'admin', password: 'correct horse battery staple' })
+    await initializeAdmin({ store, username: 'admin', password: 'Correct horse battery staple 1' })
     const authentication = await createAuthenticationService({ store, jwtSecret: JWT_SECRET })
     const relay = createRelayServer({
       host: '127.0.0.1',

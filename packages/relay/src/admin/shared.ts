@@ -1,12 +1,36 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { Buffer } from 'node:buffer'
 import {
+  PASSWORD_MIN_CHARACTERS,
+  PASSWORD_REQUIRED_CLASSES,
+  type PasswordPolicyError,
+} from '../auth/password.js'
+import {
   DEFAULT_THEME,
   THEME_PATH,
   THEME_VALUES,
   themeLabel,
   type ThemePreference,
 } from './theme.js'
+
+/**
+ * The one sentence that states the password policy.
+ *
+ * Every place that asks for a password renders this exact text, next to the
+ * field and again in the rejection: a rule the operator only learns by failing
+ * is the reason people fall back to a password they reuse elsewhere.
+ */
+export const PASSWORD_RULE_TEXT = `至少 ${String(PASSWORD_MIN_CHARACTERS)} 个字符，并且用上大写字母、小写字母、数字、符号里的至少 ${String(PASSWORD_REQUIRED_CLASSES)} 类`
+
+/**
+ * @param error - the policy violation.
+ * @returns The Chinese sentence to show the operator.
+ */
+export function passwordPolicyMessage(error: PasswordPolicyError): string {
+  return error.reason === 'too-long'
+    ? '密码太长了，请换一个短一些的。'
+    : `密码不符合要求：${PASSWORD_RULE_TEXT}。`
+}
 
 /**
  * The dark half of the palette, applied either because the operator chose it

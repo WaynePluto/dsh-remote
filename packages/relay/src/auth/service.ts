@@ -7,7 +7,8 @@ import { hashPassword, verifyPassword } from './password.js'
 import { SessionManager, type AuthPrincipal, type SessionTokens } from './session.js'
 import { verifyTotp } from './totp.js'
 
-const DUMMY_PASSWORD = 'not a real user password'
+/** Only ever hashed, never compared against a real one; it satisfies the policy so it can be hashed at all. */
+const DUMMY_PASSWORD = 'Not a real user password 0'
 
 export class InvalidCredentialsError extends Error {
   constructor() {

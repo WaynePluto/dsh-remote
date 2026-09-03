@@ -16,7 +16,7 @@ import {
   verifyTotp,
 } from '../src/index.js'
 
-const VALID_PASSWORD = 'correct horse battery staple'
+const VALID_PASSWORD = 'Correct horse battery staple 1'
 /** A point centered in a 30-second period, avoiding boundary-sensitive tests. */
 const NOW = 1_800_000_015_000
 
@@ -57,13 +57,29 @@ describe('scrypt passwords', () => {
   })
 
   it('enforces minimum characters and maximum UTF-8 bytes for new passwords', async () => {
-    await expect(hashPassword('too-short')).rejects.toBeInstanceOf(PasswordPolicyError)
+    await expect(hashPassword('Ab1x')).rejects.toMatchObject({ reason: 'too-short' })
     await expect(hashPassword('a'.repeat(PASSWORD_MAX_BYTES + 1))).rejects
-      .toBeInstanceOf(PasswordPolicyError)
+      .toMatchObject({ reason: 'too-long' })
 
     const passwordHash = await hashPassword(VALID_PASSWORD)
     await expect(verifyPassword(passwordHash, 'a'.repeat(PASSWORD_MAX_BYTES + 1)))
       .resolves.toBe(false)
+  })
+
+  it('requires three of the four character classes, however long the password is', async () => {
+    // Two classes only, at both the short and the long end.
+    await expect(hashPassword('abcdef')).rejects.toBeInstanceOf(PasswordPolicyError)
+    await expect(hashPassword('abcdef123')).rejects.toMatchObject({ reason: 'not-varied-enough' })
+    await expect(hashPassword('a very long but single case passphrase'))
+      .rejects.toMatchObject({ reason: 'not-varied-enough' })
+
+    // Three classes, exactly at the minimum length; the fourth combination
+    // proves "other" covers symbols and scripts without case alike.
+    await expect(hashPassword('Ab1xyz')).resolves.toContain('$scrypt$')
+    await expect(hashPassword('ab1-cd')).resolves.toContain('$scrypt$')
+    await expect(hashPassword('AB1-CD')).resolves.toContain('$scrypt$')
+    await expect(hashPassword('abcd密码')).rejects.toBeInstanceOf(PasswordPolicyError)
+    await expect(hashPassword('abc密码12')).resolves.toContain('$scrypt$')
   })
 })
 

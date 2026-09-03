@@ -18,7 +18,7 @@ import {
   type UserRecord,
 } from '../src/index.js'
 
-const PASSWORD = 'correct horse battery staple'
+const PASSWORD = 'Correct horse battery staple 1'
 const NOW = 1_800_000_015_000
 const JWT_SECRET = new Uint8Array(32).fill(0x42)
 

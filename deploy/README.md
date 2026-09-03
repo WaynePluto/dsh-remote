@@ -115,8 +115,8 @@ sudo -u DshRemote node /opt/dsh-remote/dist/relay.js init \
 
 它会：
 
-1. 提示你输入两遍管理员密码（**至少 12 个字符**，需要一个真正的终端；用户名默认 `admin`，
-   要改用 `--username <名字>`）
+1. 提示你输入两遍管理员密码（**至少 6 个字符，且用上大写字母、小写字母、数字、符号里的至少 3 类**，
+   需要一个真正的终端；用户名默认 `admin`，要改用 `--username <名字>`；名字只能用字母、数字和 `. _ -`）
 2. 打印一条 `otpauth://…` 的 TOTP URI，把它添加到验证器 App（Microsoft Authenticator、
    Google Authenticator、1Password 都行）
 3. 之后从浏览器登录就是「密码 + 6 位动态码」
@@ -136,6 +136,7 @@ sudo -u DshRemote env DSH_REMOTE_ADMIN_PASSWORD='<至少12位的密码>' \
 > 只是无头服务器上不该为了建个账号专门去架这个，`init` 更直接。
 
 另外两条救急命令用法相同：`passwd`（重设密码）、`totp reset`（重置验证器）。
+它们不带 `--username` 时会自动认库里唯一的那个账号，所以在设置向导里改过账号名也照样能用。
 它们都不问旧密码——能在这台机器上执行命令的人本来就能直接读写数据库文件。
 所以真正要守住的是**这台机器的 SSH 登录**。
 

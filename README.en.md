@@ -81,11 +81,11 @@ pnpm start
 
 The terminal will report that no admin account exists and print an address. Open it **on that machine** (e.g. `http://127.0.0.1:30809`):
 
-1. Set an admin password
+1. Pick the account name (pre-filled `admin`; letters, digits and `. _ -`) and set the admin password (at least 6 characters, mixing at least 3 of: upper case, lower case, digits, symbols)
 2. Scan the QR code with an authenticator app (Microsoft / Google Authenticator, 1Password, …)
 3. Enter the 6-digit code to confirm
 
-From then on, access from your phone or any other computer uses this password plus the TOTP code.
+From then on, access from your phone or any other computer uses **that account name** plus the password and the TOTP code (the console's "Account" page shows the name if you forget it).
 
 > 🔒 The setup wizard is **loopback-only** (`127.0.0.1`); anyone else on the LAN only sees "finish setup on that machine" and cannot hijack the admin account.
 

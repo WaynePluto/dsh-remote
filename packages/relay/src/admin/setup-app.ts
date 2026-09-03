@@ -8,16 +8,25 @@ import type { BrowserAuthenticator } from '../auth/browser.js'
 import type { BrowserCookiePolicy } from '../auth/cookies.js'
 import { isLoopbackBrowserRequest } from '../auth/loopback.js'
 import { PASSWORD_MIN_CHARACTERS, PasswordPolicyError, validateNewPassword } from '../auth/password.js'
+import {
+  DEFAULT_ADMIN_USERNAME,
+  USERNAME_MAX_CHARACTERS,
+  UsernamePolicyError,
+  normalizeUsername,
+  validateNewUsername,
+} from '../auth/username.js'
 import { totpProvisioningUri } from '../auth/totp.js'
 import type { RelayStore } from '../store/store.js'
 import type { UserRecord } from '../store/types.js'
 import { ADMIN_PATH_PREFIX } from './console-app.js'
 import {
+  PASSWORD_RULE_TEXT,
   csrfToken,
   emptyResponse,
   equalCsrf,
   escapeHtml,
   htmlHeaders,
+  passwordPolicyMessage,
   redirectResponse,
   renderPage,
   sameOrigin,
@@ -30,9 +39,6 @@ import { TOTP_PANEL_STYLE, enrollmentPanel, totpQrSvg } from './totp-panel.js'
 export const SETUP_PATH_PREFIX = '/_setup'
 export const SETUP_CREATE_PATH = `${SETUP_PATH_PREFIX}/create`
 export const SETUP_CONFIRM_PATH = `${SETUP_PATH_PREFIX}/confirm`
-
-/** Same name `dsh-remote-relay init` uses, so both routes bootstrap one account. */
-export const SETUP_ADMIN_USERNAME = 'admin'
 
 export function isSetupPath(pathname: string): boolean {
   return pathname === SETUP_PATH_PREFIX || pathname.startsWith(`${SETUP_PATH_PREFIX}/`)
@@ -92,6 +98,7 @@ function reachable(incoming: IncomingMessage): boolean {
 function passwordPage(options: {
   csrf: string
   appearance: PageAppearance
+  username?: string
   error?: string
 }): string {
   return renderPage({
@@ -103,10 +110,11 @@ function passwordPage(options: {
 ${alertMarkup(options.error)}
 <form method="post" action="${SETUP_CREATE_PATH}">
 <input type="hidden" name="csrf" value="${escapeHtml(options.csrf)}">
-<div class="field"><label for="password">设置管理员密码（至少 ${String(PASSWORD_MIN_CHARACTERS)} 个字符）</label><input id="password" name="password" type="password" autocomplete="new-password" required maxlength="256" autofocus></div>
+<div class="field"><label for="username">管理员账号（以后每次登录都要输入它）</label><input id="username" name="username" value="${escapeHtml(options.username ?? DEFAULT_ADMIN_USERNAME)}" autocomplete="username" required maxlength="${String(USERNAME_MAX_CHARACTERS)}" pattern="[A-Za-z0-9][A-Za-z0-9._-]*" autofocus></div>
+<div class="field"><label for="password">设置管理员密码（${PASSWORD_RULE_TEXT}）</label><input id="password" name="password" type="password" autocomplete="new-password" required minlength="${String(PASSWORD_MIN_CHARACTERS)}" maxlength="256"></div>
 <div class="field"><label for="confirmPassword">再输入一次</label><input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" required maxlength="256"></div>
 <button type="submit">下一步：绑定验证器</button></form>
-<p class="hint">账号名固定为 <strong>${escapeHtml(SETUP_ADMIN_USERNAME)}</strong>，以后登录要用它。任何拿到这个账号的人都能在本机执行任意命令，请不要复用其他网站的密码。</p>
+<p class="hint">账号名默认是 <strong>${escapeHtml(DEFAULT_ADMIN_USERNAME)}</strong>，可以改成别的，只能用字母、数字和 <strong>. _ -</strong>；设好之后要自己记住它。任何拿到这个账号的人都能在本机执行任意命令，请不要复用其他网站的密码。</p>
 <p class="foot">dsh-remote / first run</p>`,
   })
 }
@@ -258,13 +266,20 @@ export function createSetupRequestListener(options: {
     if (setupState(store).kind !== 'uninitialized') return redirectResponse(SETUP_PATH_PREFIX, [])
 
     const password = textField(body.password)
+    const username = normalizeUsername(textField(body.username))
     const reject = (message: string): Response => {
       const csrf = csrfToken()
       return page(
-        passwordPage({ csrf, appearance: appearanceOf(context), error: message }),
+        passwordPage({ csrf, appearance: appearanceOf(context), username, error: message }),
         400,
         csrf,
       )
+    }
+    try {
+      validateNewUsername(username)
+    } catch (error) {
+      if (!(error instanceof UsernamePolicyError)) throw error
+      return reject(`账号名只能用 ${String(USERNAME_MAX_CHARACTERS)} 个以内的字母、数字和 . _ -，且要以字母或数字开头。`)
     }
     if (password !== textField(body.confirmPassword)) {
       return reject('两次输入的密码不一致，请重新输入。')
@@ -273,14 +288,14 @@ export function createSetupRequestListener(options: {
       validateNewPassword(password)
     } catch (error) {
       if (!(error instanceof PasswordPolicyError)) throw error
-      return reject(`密码至少需要 ${String(PASSWORD_MIN_CHARACTERS)} 个字符，请换一个更长的。`)
+      return reject(passwordPolicyMessage(error))
     }
 
     let created
     try {
       created = await initializeAdmin({
         store,
-        username: SETUP_ADMIN_USERNAME,
+        username,
         password,
         logger,
       })

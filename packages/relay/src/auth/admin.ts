@@ -3,6 +3,7 @@ import { createAuditRecorder } from '../audit/index.js'
 import type { RelayStore } from '../store/store.js'
 import type { UserRecord } from '../store/types.js'
 import { hashPassword } from './password.js'
+import { normalizeUsername, validateNewUsername } from './username.js'
 import {
   createTotpEnrollment,
   verifyTotp,
@@ -17,10 +18,42 @@ export class AdminAlreadyInitializedError extends Error {
 }
 
 export class AdminNotFoundError extends Error {
-  constructor(username: string) {
-    super(`no administrator named ${username}; run init first`)
+  constructor(username?: string) {
+    super(username === undefined
+      ? 'this relay has no administrator yet; run init first'
+      : `no administrator named ${username}; run init first`)
     this.name = 'AdminNotFoundError'
   }
+}
+
+/** More than one account exists, so "the administrator" is not a single row. */
+export class AdminAmbiguousError extends Error {
+  constructor(count: number) {
+    super(`this relay holds ${String(count)} accounts; pick one with --username`)
+    this.name = 'AdminAmbiguousError'
+  }
+}
+
+/**
+ * Resolve which account a recovery command acts on.
+ *
+ * v1 has exactly one administrator whose name the operator chose in the setup
+ * wizard, so defaulting the CLI to the literal `admin` would break every relay
+ * set up under a different name. Asking the database instead keeps `passwd` and
+ * `totp reset` working without the operator having to remember anything.
+ * @param store - the relay store.
+ * @param requested - an explicit `--username`, when given.
+ * @returns The account name to act on.
+ * @throws AdminNotFoundError When no account exists yet.
+ * @throws AdminAmbiguousError When several exist and none was named.
+ */
+export function resolveAdminUsername(store: RelayStore, requested?: string): string {
+  if (requested !== undefined) return requested
+  const users = store.listUsers()
+  const only = users.length === 1 ? users[0] : undefined
+  if (only !== undefined) return only.username
+  if (users.length === 0) throw new AdminNotFoundError()
+  throw new AdminAmbiguousError(users.length)
 }
 
 export interface InitializeAdminResult {
@@ -41,10 +74,12 @@ export async function initializeAdmin(options: {
   now?: number
   logger?: Logger
 }): Promise<InitializeAdminResult> {
-  const enrollment = createTotpEnrollment(options.username, options.issuer)
+  const username = normalizeUsername(options.username)
+  validateNewUsername(username)
+  const enrollment = createTotpEnrollment(username, options.issuer)
   const passwordHash = await hashPassword(options.password)
   const user = options.store.createFirstUser({
-    username: options.username,
+    username,
     passwordHash,
     totpSecret: enrollment.secret,
     totpEnabled: false,

@@ -13,7 +13,6 @@ import { createAuditRecorder } from '../audit/index.js'
 import { changeAdminPassword, confirmAdminTotp, resetAdminTotp } from '../auth/admin.js'
 import type { BrowserCookiePolicy } from '../auth/cookies.js'
 import {
-  PASSWORD_MIN_CHARACTERS,
   PasswordPolicyError,
   validateNewPassword,
   verifyPassword,
@@ -62,6 +61,7 @@ import {
   emptyResponse,
   equalCsrf,
   htmlHeaders,
+  passwordPolicyMessage,
   redirectResponse,
   sameOrigin,
   textField,
@@ -709,7 +709,7 @@ export function createAdminConsoleRequestListener(options: {
         session,
         appearance,
         status: 400,
-        error: `新密码至少需要 ${String(PASSWORD_MIN_CHARACTERS)} 个字符，密码没有修改。`,
+        error: `${passwordPolicyMessage(error)}密码没有修改。`,
       })
     }
     const result = await changeAdminPassword({

@@ -20,7 +20,7 @@ pnpm relay:init          # 创建管理员，打印 TOTP URI
 $env:DSH_REMOTE_ADMIN_PASSWORD = '你的密码'; pnpm relay:init; Remove-Item Env:DSH_REMOTE_ADMIN_PASSWORD
 ```
 
-密码至少 12 个字符。忘密码或丢验证器见§6。
+密码至少 6 个字符，且大写字母、小写字母、数字、符号四类里至少占三类。忘密码或丢验证器见§6。
 
 ## 1. 启动
 

@@ -19,7 +19,7 @@ import { cookieHeader, httpRequest, type HttpResult } from './helpers.js'
 
 const JWT_SECRET = new Uint8Array(32).fill(0x3c)
 const HOST = 'pc1.dsh.test'
-const PASSWORD = 'correct horse battery staple'
+const PASSWORD = 'Correct horse battery staple 1'
 
 /** Every page the tab strip offers, in the order it lists them. */
 const CONSOLE_PAGES: readonly { path: string; heading: string }[] = [

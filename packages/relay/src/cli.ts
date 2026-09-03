@@ -4,14 +4,19 @@ import { Command, InvalidArgumentError } from 'commander'
 import pino, { type Logger } from 'pino'
 import {
   AdminAlreadyInitializedError,
+  AdminAmbiguousError,
   AdminNotFoundError,
+  DEFAULT_ADMIN_USERNAME,
   PASSWORD_MIN_CHARACTERS,
+  PASSWORD_REQUIRED_CLASSES,
   PasswordPolicyError,
+  UsernamePolicyError,
   changeAdminPassword,
   createAuthenticationService,
   decodeJwtSecret,
   initializeAdmin,
   resetAdminTotp,
+  resolveAdminUsername,
   validateNewPassword,
 } from './auth/index.js'
 import { DEFAULT_MEMBER_PORT_COUNT } from './config.js'
@@ -113,6 +118,8 @@ const PASSWORD_ATTEMPTS = 3
 function reportExpectedError(error: unknown): void {
   if (error instanceof AdminAlreadyInitializedError) program.error(error.message)
   if (error instanceof AdminNotFoundError) program.error(error.message)
+  if (error instanceof AdminAmbiguousError) program.error(error.message)
+  if (error instanceof UsernamePolicyError) program.error(`账号名不符合要求：${error.message}`)
   if (error instanceof CliUserError) program.error(error.message)
   if (error instanceof PasswordPolicyError) program.error(`密码不符合要求：${error.message}`)
 }
@@ -131,7 +138,7 @@ async function newAdminPassword(): Promise<string> {
     return fromEnvironment
   }
 
-  console.log(`管理员密码至少 ${String(PASSWORD_MIN_CHARACTERS)} 个字符，用于保护远程访问这台机器的入口。`)
+  console.log(`管理员密码至少 ${String(PASSWORD_MIN_CHARACTERS)} 个字符，且要用上大写字母、小写字母、数字、符号里的至少 ${String(PASSWORD_REQUIRED_CLASSES)} 类，用于保护远程访问这台机器的入口。`)
   for (let attempt = 1; attempt <= PASSWORD_ATTEMPTS; attempt += 1) {
     // eslint-disable-next-line no-await-in-loop -- an interactive prompt is sequential by nature
     const first = await hiddenPrompt('管理员密码: ')
@@ -251,7 +258,7 @@ program.command('serve', { isDefault: true })
 program.command('init')
   .description('create the sole v1 administrator and TOTP enrollment')
   .option('--data <path>', 'relay SQLite database', './data/relay.db')
-  .option('--username <name>', 'administrator username', 'admin')
+  .option('--username <name>', 'administrator username', DEFAULT_ADMIN_USERNAME)
   .action(async (options: { data: string; username: string }) => {
     const store = openRelayStore({ path: options.data })
     try {
@@ -275,13 +282,13 @@ program.command('init')
 program.command('passwd')
   .description('set a new administrator password and revoke every session')
   .option('--data <path>', 'relay SQLite database', './data/relay.db')
-  .option('--username <name>', 'administrator username', 'admin')
-  .action(async (options: { data: string; username: string }) => {
+  .option('--username <name>', 'administrator username (default: the only account in the database)')
+  .action(async (options: { data: string; username?: string }) => {
     const store = openRelayStore({ path: options.data })
     try {
       const result = await changeAdminPassword({
         store,
-        username: options.username,
+        username: resolveAdminUsername(store, options.username),
         password: await newAdminPassword(),
         logger: cliAuditLogger(),
       })
@@ -301,11 +308,15 @@ const totp = program.command('totp')
 totp.command('reset')
   .description('issue a new TOTP secret after a lost authenticator')
   .option('--data <path>', 'relay SQLite database', './data/relay.db')
-  .option('--username <name>', 'administrator username', 'admin')
-  .action((options: { data: string; username: string }) => {
+  .option('--username <name>', 'administrator username (default: the only account in the database)')
+  .action((options: { data: string; username?: string }) => {
     const store = openRelayStore({ path: options.data })
     try {
-      const result = resetAdminTotp({ store, username: options.username, logger: cliAuditLogger() })
+      const result = resetAdminTotp({
+        store,
+        username: resolveAdminUsername(store, options.username),
+        logger: cliAuditLogger(),
+      })
       console.log('已生成新的 TOTP。请先在验证器中删除旧条目，再添加：')
       console.log(result.enrollment.uri)
       console.log(`旧验证码立即失效，同时吊销了 ${String(result.revokedSessions)} 个登录会话。`)

@@ -17,7 +17,7 @@ import { cookieHeader, httpRequest, setCookieArray, type HttpResult } from './he
 
 const JWT_SECRET = new Uint8Array(32).fill(0x5e)
 const HOST = 'pc1.dsh.test'
-const PASSWORD = 'correct horse battery staple'
+const PASSWORD = 'Correct horse battery staple 1'
 
 const cookies = new BrowserCookiePolicy({ mode: 'domain-https', domain: 'dsh.test' })
 

@@ -18,7 +18,7 @@ import {
 import { httpRequest, setCookieArray, type HttpResult } from './helpers.js'
 
 const JWT_SECRET = new Uint8Array(32).fill(0x5a)
-const PASSWORD = 'correct horse battery staple'
+const PASSWORD = 'Correct horse battery staple 1'
 /** Socket is still loopback here; only the Host half of D15 is violated. */
 const LAN_HOST = '192.168.7.11'
 
@@ -112,7 +112,7 @@ async function completeSetup(fixture: Fixture): Promise<{ secret: string }> {
   const created = await submit(fixture, {
     path: SETUP_CREATE_PATH,
     cookie: csrfPair,
-    fields: { csrf, password: PASSWORD, confirmPassword: PASSWORD },
+    fields: { csrf, username: 'admin', password: PASSWORD, confirmPassword: PASSWORD },
   })
   expect(created.status, created.body).toBe(200)
   const secret = secretFromPage(created.body)
@@ -144,6 +144,9 @@ describe('first-run setup wizard', () => {
     const { body } = await openWizard(fixture)
     expect(body).toContain('创建管理员账号')
     expect(body).toContain(`action="${SETUP_CREATE_PATH}"`)
+    // The account name is a real field, pre-filled: an operator who never reads
+    // the hint still sees which name the login form will ask for.
+    expect(body).toContain('name="username" value="admin"')
     // No login form: there is no account that could satisfy one yet.
     expect(body).not.toContain('/_auth/login')
 
@@ -227,7 +230,7 @@ describe('first-run setup wizard', () => {
     const mismatch = await submit(fixture, {
       path: SETUP_CREATE_PATH,
       cookie: csrfPair,
-      fields: { csrf, password: PASSWORD, confirmPassword: `${PASSWORD}!` },
+      fields: { csrf, username: 'admin', password: PASSWORD, confirmPassword: `${PASSWORD}!` },
     })
     expect(mismatch.status).toBe(400)
     expect(mismatch.body).toContain('两次输入的密码不一致')
@@ -235,12 +238,36 @@ describe('first-run setup wizard', () => {
     const short = await submit(fixture, {
       path: SETUP_CREATE_PATH,
       cookie: csrfPair,
-      fields: { csrf, password: 'short', confirmPassword: 'short' },
+      fields: { csrf, username: 'admin', password: 'short', confirmPassword: 'short' },
     })
     expect(short.status).toBe(400)
     expect(short.body).toContain('个字符')
 
     expect(fixture.store.countUsers()).toBe(0)
+  })
+
+  it('accepts a chosen account name and rejects one that breaks the policy', async () => {
+    const fixture = await startFixture()
+    const { csrf, csrfPair } = await openWizard(fixture)
+
+    const bad = await submit(fixture, {
+      path: SETUP_CREATE_PATH,
+      cookie: csrfPair,
+      fields: { csrf, username: '-张三 ', password: PASSWORD, confirmPassword: PASSWORD },
+    })
+    expect(bad.status).toBe(400)
+    expect(bad.body).toContain('账号名')
+    expect(fixture.store.countUsers()).toBe(0)
+
+    const created = await submit(fixture, {
+      path: SETUP_CREATE_PATH,
+      cookie: csrfPair,
+      // Surrounding whitespace is trimmed, the way the login form trims it too.
+      fields: { csrf, username: '  Wei.Lu  ', password: PASSWORD, confirmPassword: PASSWORD },
+    })
+    expect(created.status, created.body).toBe(200)
+    expect(fixture.store.getUserByUsername('admin')).toBeUndefined()
+    expect(fixture.store.getUserByUsername('Wei.Lu')?.totpEnabled).toBe(false)
   })
 
   it('creates the administrator, shows a scannable QR, and logs in after confirmation', async () => {
@@ -250,7 +277,7 @@ describe('first-run setup wizard', () => {
     const created = await submit(fixture, {
       path: SETUP_CREATE_PATH,
       cookie: csrfPair,
-      fields: { csrf, password: PASSWORD, confirmPassword: PASSWORD },
+      fields: { csrf, username: 'admin', password: PASSWORD, confirmPassword: PASSWORD },
     })
     expect(created.status, created.body).toBe(200)
     // Inline SVG, so the page needs no img-src exception in the CSP.
@@ -307,7 +334,7 @@ describe('first-run setup wizard', () => {
 
     const create = await submit(fixture, {
       path: SETUP_CREATE_PATH,
-      fields: { password: 'a different password', confirmPassword: 'a different password' },
+      fields: { username: 'admin', password: 'a different password', confirmPassword: 'a different password' },
     })
     expect(create.status).toBeGreaterThanOrEqual(303)
     expect(fixture.store.countUsers()).toBe(1)

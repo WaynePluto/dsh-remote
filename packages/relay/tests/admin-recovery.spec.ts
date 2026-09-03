@@ -2,18 +2,20 @@ import { describe, expect, it } from 'vitest'
 import {
   AdminNotFoundError,
   InvalidCredentialsError,
+  UsernamePolicyError,
   createAuthenticationService,
   changeAdminPassword,
   generateTotp,
   initializeAdmin,
   openRelayStore,
   resetAdminTotp,
+  resolveAdminUsername,
   verifyPassword,
   type RelayStore,
 } from '../src/index.js'
 
-const PASSWORD = 'correct horse battery staple'
-const NEXT_PASSWORD = 'another sufficiently long password'
+const PASSWORD = 'Correct horse battery staple 1'
+const NEXT_PASSWORD = 'Another sufficiently long password 2'
 const JWT_SECRET = new Uint8Array(32).fill(0x63)
 
 async function loggedInAdmin(store: RelayStore) {
@@ -107,6 +109,31 @@ describe('administrator recovery commands', () => {
         .rejects.toBeInstanceOf(AdminNotFoundError)
       expect(() => resetAdminTotp({ store, username: 'admin' }))
         .toThrow(AdminNotFoundError)
+      expect(store.countUsers()).toBe(0)
+    } finally {
+      store.close()
+    }
+  })
+
+  it('finds the account to recover without being told its name', async () => {
+    const store = openRelayStore({ path: ':memory:' })
+    try {
+      // The wizard lets the operator rename the account, so the CLI may not
+      // assume `admin`; an empty database has nothing to guess from either.
+      expect(() => resolveAdminUsername(store)).toThrow(AdminNotFoundError)
+      await initializeAdmin({ store, username: 'Wei.Lu', password: PASSWORD })
+      expect(resolveAdminUsername(store)).toBe('Wei.Lu')
+      expect(resolveAdminUsername(store, 'other')).toBe('other')
+    } finally {
+      store.close()
+    }
+  })
+
+  it('refuses to create an account under an unusable name', async () => {
+    const store = openRelayStore({ path: ':memory:' })
+    try {
+      await expect(initializeAdmin({ store, username: 'a b', password: PASSWORD }))
+        .rejects.toBeInstanceOf(UsernamePolicyError)
       expect(store.countUsers()).toBe(0)
     } finally {
       store.close()
