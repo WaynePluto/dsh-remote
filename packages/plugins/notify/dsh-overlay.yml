@@ -1,0 +1,18 @@
+# dsh-remote 的 dsh 插件叠加层，由 launcher 用 `dsh --patch <这个文件>` 传给 dsh。
+#
+# `id` 让更后面的 `--patch` 能按 id 覆盖这一行的 config（补丁层顺序见 docs/02 §9）。
+# 不过这个插件**没有 config**：开关是用户在「设置 → 通知」里点的，存在设置命名空间
+# `dsh-plugin-notify` 里，不走 composition。
+#
+# 双面插件：insert 加载宿主半（dist/index.js），dsh 的客户端模块系统顺着这个路径
+# 找到本包的 package.json，按 `dsh.client` + exports["./client"] 下发 dist/client.js。
+# **dist/client.js 缺失会让 dsh 启动即失败**，不是静默降级。
+#
+# 关于两个瀑布（`approval/request`、`user-questions/request`）上的顺序：本插件在这两个
+# 瀑布上只是**观察者**，注册时用 `prepend: true` 排到最前，进来就 `await next()` 原样
+# 放行。必须排在最前是因为**认领请求的应答者不会调 next()**（浏览器那半就是这样应答的），
+# 排在它后面的监听器根本不会被调用到。这一行插在哪里不影响该结论：prepend 是注册时相对
+# 当时链条的位置，而认领者是在链条末端的应答者。
+- insert:
+    - id: notify
+      name: './dist/index.js'
