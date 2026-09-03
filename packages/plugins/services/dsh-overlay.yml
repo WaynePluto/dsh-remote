@@ -1,0 +1,14 @@
+# dsh-remote 的 dsh 插件叠加层，由 launcher 用 `dsh --patch <这个文件>` 传给 dsh。
+#
+# 形态与兄弟插件相同：`./` 开头的 insert 名字由 dsh 锚定到本文件所在目录再转成 file:// URL，
+# 所以这里只写相对路径（铁律 D17）。
+#
+# 这个插件是**双面**的：insert 加载宿主半（dist/index.js），dsh 的客户端模块系统顺着
+# 这个路径往上找到本包的 package.json，读 `dsh.client` 与 exports["./client"]，把
+# dist/client.js 一起下发。**dist/client.js 缺失会让 dsh 启动即失败**，不是静默降级。
+#
+# 顺序无关：宿主半只注册 5 个工具、1 条 RPC 通道，不挂任何瀑布、不覆盖任何 keyed 槽，
+# 浏览器半只往 list 槽 `conversation.input.dock` 里并列添加一个条目。
+- insert:
+    - id: services
+      name: './dist/index.js'

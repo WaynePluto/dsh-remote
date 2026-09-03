@@ -1,0 +1,18 @@
+# dsh-remote 的 dsh 插件叠加层，由 launcher 用 `dsh --patch <这个文件>` 传给 dsh。
+#
+# 形态与兄弟插件相同：`./` 开头的 insert 名字由 dsh 锚定到本文件所在目录再转成 file:// URL，
+# 所以这里只写相对路径（铁律 D17）。
+#
+# ⚠️ 这里**只有一行**，而不是四行。dsh 自己的 PTY 三件套
+# （`@deepseek-ai/dsh-terminal` / `-terminal-bash` / `-tool-terminal`）不能写成
+# overlay 里的裸包名：实测 dsh 的 loader 把裸名解析到 **profile 目录**
+# （`<DSH_HOME>/profiles/<profile>/`），不是 dsh 的安装位置，也不是本文件所在位置，
+# 于是启动即 `ERR_MODULE_NOT_FOUND`。三件套改由本插件的宿主半用 `ctx.plugin()` 挂载，
+# 它们是本包的**普通依赖**，由 Node 从本包解析（详见 src/index.ts 的模块注释）。
+#
+# 这个插件是**双面**的：insert 加载宿主半（dist/index.js），dsh 的客户端模块系统顺着
+# 这个路径往上找到本包的 package.json，读 `dsh.client` 与 exports["./client"]，把
+# dist/client.js 一起下发。**dist/client.js 缺失会让 dsh 启动即失败**，不是静默降级。
+- insert:
+    - id: terminal
+      name: './dist/index.js'

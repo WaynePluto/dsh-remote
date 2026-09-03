@@ -1,0 +1,13 @@
+{
+  // The browser half is checked in its own program on purpose: both halves of
+  // dsh's connection package merge a `ctx.connection` into cordis's Context —
+  // the Host registry in one, the browser caller in the other — and one program
+  // holding both would see them collide.
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM"],
+    "types": []
+  },
+  "include": ["src/client/**/*.ts", "src/client/**/*.tsx", "src/shared.ts"]
+}
