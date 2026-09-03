@@ -1,0 +1,12 @@
+# dsh-remote 的 dsh 插件叠加层，由 launcher 用 `dsh --patch <这个文件>` 传给 dsh。
+#
+# 形态与 remote-privileged 相同（见那个包的同名文件）：`./` 开头的 insert 名字由 dsh
+# 锚定到本文件所在目录再转成 file:// URL，所以这里只写相对路径，包解压到哪里都成立。
+#
+# 这个插件是**双面**的：insert 加载的是宿主半（dist/index.js），而 dsh 的客户端模块
+# 系统会顺着这个文件路径往上找到本包的 package.json，读 `dsh.client` 与
+# exports["./client"]，把 dist/client.js 作为浏览器插件一起下发
+# （packages/client/modules/src/index.ts 的 locatePkgJson / clientExportOf）。
+# 因此 **dist/client.js 缺失会让 dsh 启动即失败**，不是静默降级。
+- insert:
+    - name: './dist/index.js'
