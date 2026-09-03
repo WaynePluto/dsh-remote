@@ -1,0 +1,24 @@
+# dsh-remote 的 dsh 插件叠加层，由 launcher 用 `dsh --patch <这个文件>` 传给 dsh。
+#
+# 形态与 models-catalog / copilot-auth / remote-privileged 相同：`./` 开头的 insert
+# 名字由 dsh 锚定到本文件所在目录再转成 file:// URL，所以这里只写相对路径（铁律 D17）。
+#
+# 这个插件是**双面**的：insert 加载宿主半（dist/index.js），dsh 的客户端模块系统顺着
+# 这个路径往上找到本包的 package.json，读 `dsh.client` 与 exports["./client"]，把
+# dist/client.js 一起下发。**dist/client.js 缺失会让 dsh 启动即失败**，不是静默降级。
+#
+# `id` 不是装饰：dsh 的补丁层顺序是
+#   bundle 层 → profile 的 cordis.patch.yml → DSH_HOME 级 patch → `--patch` 叠加层
+# （dsh 源码 apps/cli/src/profile-boot.ts 的 allPatches）。`--patch` 在最后，所以本行插入之后
+# 只有**再后面的 `--patch`** 能按 id 覆盖它的 config；没有 id 就谁也改不了。
+#
+# 关于 `agent/request-error` 瀑布上的顺序：本插件与 dsh 自带的 `llm-retry` 都挂在这个瀑布上，
+# 但**顺序不是本插件的正确性前提**。它的监听器一进来就先 `await next()`：
+#   · 排在 llm-retry 之后（实际情况，bundle 层先加载）→ next() 只剩默认值，llm-retry 已经
+#     用尽预算或判定不可重试才会轮到我们；
+#   · 万一排在它之前 → next() 会把 llm-retry 跑完，它要重试就返回 {kind:'retry'}，我们原样放行，
+#     只有它放弃时才轮到问用户。
+# 两种顺序下「自动重试优先、问人兜底」都成立，所以这一行的位置可以随便挪。
+- insert:
+    - id: turn-retry
+      name: './dist/index.js'
