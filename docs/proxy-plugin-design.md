@@ -1,8 +1,24 @@
-# dsh-remote Proxy Plugin 设计（延期实现）
+# dsh-remote Proxy Plugin 设计
 
-> 状态：**设计已确认，暂不实现。** 当前主线先完成 M1 隧道；开发期由 launcher 的环境变量代理 bootstrap 临时解决 Node `fetch()` 不走公司代理的问题。
+> 状态：**已实现**（`packages/plugins/proxy`），且 launcher 的临时代理 bootstrap **已删除**——
+> 本文第 5 行「避免两套代理配置来源」的约束现已满足：**代理只有「设置 → 代理」这一个事实源**。
 >
-> 正式插件完成后，必须删除 launcher 的临时代理 bootstrap 及其环境变量读取逻辑，避免出现两套代理配置来源。
+> 删除前它造成过一次真实故障：插件把 bootstrap 装的环境代理当成「原始 dispatcher」，
+> 关闭代理后请求照走代理、页面却标注「直连」（经过见 docs/05-roadmap.md）。
+> 插件侧同时改成「关闭 = 装一个全新的直连 `Agent`」，两侧都不再依赖环境变量。
+>
+> ⚠️ **运行前提**：dsh 现在不会从环境变量拿到任何代理。在需要代理才能出网的机器上，
+> 必须先在「设置 → 代理」里配好并打开开关，否则模型请求会失败。
+
+## 0. 实现与本设计的偏离（已发生，按现行铁律）
+
+| 本文 | 实现 | 原因 |
+|---|---|---|
+| namespace `dsh-remote-proxy`，字段 `proxyUrl` / `noProxy` | namespace **`dsh-plugin-proxy`**，字段 `url` / `bypass` | **用户拍板**：命名空间统一用包名 `dsh-plugin-<名字>`，全项目一致（`dsh-plugin-models-catalog`、`dsh-plugin-copilot-auth` 同步改名，见 AGENTS.md）；字段名在该命名空间内已无歧义，保持不变 |
+| 界面放 `settings.general.item`（第 3.3 节） | 独立的 `settings.section` 页面（设置 → 代理） | **用户明确要求**「设置弹窗里加一个新的代理页面」，用户指示优先 |
+| 包名 `@dsh-remote/plugin-proxy`，走 profile bundle + `cordis.patch.yml`（第 2、4、7 节） | `@dsh-remote/dsh-plugin-proxy`，走 `dsh-overlay.yml` + launcher `--patch` | AGENTS.md 铁律 10b / D17 是**更新的决策**，本文这几节已过时 |
+| 拒绝 URL userinfo | 已实现 | ✅ |
+| 核实 `EnvHttpProxyAgent` 显式传参后不读环境变量 | 已核实（`opts.httpProxy ?? process.env…`），每个字段显式传、含空串 | ✅ |
 
 ## 1. 目标与边界
 
