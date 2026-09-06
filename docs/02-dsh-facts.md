@@ -1531,6 +1531,129 @@ PSReadLine 还让它**越用越坏**：每条命令都会被写进用户真正�
 `label` 传**thunk** 才能跟随语言切换而不用重新注册。
 现成范本是 `ui-trajectory`（`src/client/index.ts:77-106`），加一个 tab 约 20 行，**不用碰 dsh 源码**。
 
+## 16. 技能目录与「已加载」：两者都能在进程内读到（skills-inspector 插件的依据）
+
+> 核实于 `git 4e84901e64` / tag `dsh-v0.1.2-alpha.4`。
+
+### 16.1 `ctx.skills` 是一个分层注册表，`list()` / `snapshot()` 直接可读
+
+`packages/skill/skill/src/index.ts` 的 `SkillRegistry`：
+
+| 方法 | 作用 |
+|---|---|
+| `list(options)` | 返回排好序的 `SkillSummary[]`（:472） |
+| `snapshot(options)` | 同上，**外加 `complete`**：有 provider 中途失败时为 false（:483） |
+| `get(name, options)` | 加载完整 `SkillDefinition`，**含 `content` 与 `path`**（:502） |
+
+`options` 是 `SkillViewOptions`：`{ cwd?, scope?, signal? }`（:118）。
+
+⚠️ **优先用 `snapshot()` 而不是 `list()`**：provider 失败时 `list()` 只是安静地少几个技能
+（失败被 `logger.warn` 吞掉，:609），页面会显示成「技能凭空消失」。`complete: false` 才让
+UI 有机会如实说明「这份列表可能不全」。
+
+### 16.2 ⚠️ scope 必须传 `ctx.agents.get(sessionId)`——与 §15.3 同一个坑
+
+分层规则与工具注册表完全一致（:347-357）：**global 层 + scope 链**，近的覆盖远的。
+agent preset 挂的技能 provider 落在**每会话层**，所以不传 `scope` 只读得到全局层。
+
+实测（`scripts/skills-inspector-check.mjs`）：对一个没有活 agent 的 sessionId 查询，
+**全局层技能数为 0**——项目的 `.agents/skills` 一个都读不到。
+
+dsh 自己的 `skill` 工具就是这么查的：
+
+```ts
+// packages/skill/tool-skill/src/index.ts:133
+const lookup = { cwd: exec.agent?.session.header.cwd, signal: exec.signal, scope: exec.agent }
+```
+
+`cwd` 同样不能省：项目级技能根是 `cwd` 解析出来的（下一条）。
+
+### 16.3 「全局还是项目级」有权威答案：`SkillSummary.source`
+
+不需要按路径猜。`skill-filesystem/src/index.ts:246-258` 写死了根目录与来源桶，
+**rank 越小优先级越高**（同名技能谁赢）：
+
+| `source` | 根目录 | 层级 |
+|---|---|---|
+| `project-dsh` | `<projectRoot>/.dsh/skills` | 项目 |
+| `project-agents` | `<projectRoot>/.agents/skills` | 项目 |
+| `custom` | 配置指定的目录 | — |
+| `user-dsh` | `<dshHome>/skills` | 全局 |
+| `user-agents` | `<agentsHome>/skills` | 全局 |
+| `bundled` | dsh 自带 | 内置 |
+| `runtime` | `ctx.skills.register()` 注册的 | 插件 |
+
+⚠️ `SkillSource` 是**开放联合**（`… | (string & {})`，:40）：第三方 provider 可以给出
+任意字符串，消费方不能穷举断言，必须有「未知来源」兜底。
+
+### 16.4 ⚠️ `list()` 投影掉了 `path`，精确文件路径只有 `get()` 给
+
+- `SkillCandidate` 有 `path`（:81），`skill-filesystem` 填的是
+  `<技能目录>/SKILL.md` 或单文件 `.md`（:725,742）。
+- 但 `toSummary()`（:771）**只抄 7 个字段**，`path` 不在其中 —— `list()` 的结果拿不到文件。
+- `SkillSummary` 上只有 `resourceBase: { kind: 'directory', path }`，那是技能**目录**。
+- `get()` 返回的 `SkillDefinition` 才带 `path`（:91），**代价是连带读进整个正文**。
+
+实测确认（冒烟脚本对着真注册表验）：
+
+```
+list() → resourceBase.path = D:\dev\dsh-remote\.agents\skills\dsh-source
+get()  → path              = D:\dev\dsh-remote\.agents\skills\dsh-source\SKILL.md
+```
+
+所以「点击某个技能打开它的本地文件」必须是**点击时**才调 `get()` 的独立操作，
+不能在列出列表时批量取路径。
+
+### 16.5 ⚠️⚠️「agent 已加载了哪些技能」可以精确回放，且覆盖整个会话历史
+
+dsh 有且只有**两条**把技能正文注入上下文的路径，**两条都留下持久化会话事件**：
+
+| 路径 | 事件 | 技能名在哪 | 出处 |
+|---|---|---|---|
+| 模型自己加载 | `tool/call`，`data.name === 'skill'` | `data.arguments` 里 | `tool-skill/src/index.ts:127-156` |
+| 用户 `/技能名` | `user/message`，`source.kind === 'skill-invocation'` | `source.name` | 同文件 `:177-204` |
+
+两个事件类型都在 `KNOWN_SESSION_EVENT_TYPES` 里（`session/src/known-event-types.ts:66,72`），
+`session.snapshotEvents()` 给出整段不可变日志 —— **dsh 重启后统计依然准确**。
+
+⚠️ 再强调一次 §13.2 那个混淆点：它说的是「插件不能 **append** 自己的**新事件类型**」，
+与「能不能 **读** dsh 自己的事件」是两码事。**读完全可以。**
+
+#### ⚠️ `tool/call.arguments` 是模型原样产出的**未解析字符串**
+
+```ts
+// session/src/types.ts:302-306
+// `name` with the raw `arguments` JSON string exactly as the model produced it (unparsed)
+'tool/call': { turn, step, callId, name: string, arguments: string }
+```
+
+所以取技能名必须把 `JSON.parse` 包在 try 里：模型完全可能吐出半截 JSON，
+一条畸形历史记录**不应该**让整个视图崩成错误页。
+
+#### 失败的加载不算「已加载」
+
+`tool/call` 记录的是**意图**。技能名写错或技能已不可用时 `execute` 抛错（:136,143），
+正文从未进入上下文。所以模型路径要等配对的 `tool/result` **没有 `error`** 才计数
+（callId 配对规则同 §15.4）。用户路径没有这一说：注入发生在 `agent/pre-step`，
+注入了就是进了上下文。
+
+⚠️ 但**尚未配对**的 call 要算（正在进行的这一轮：call 已落盘、result 还没有）。
+不算的话，刚加载完的技能会先从「已加载」里消失再出现，看起来像 bug。
+
+### 16.6 「打开本机路径」dsh 已经做好了，不要自己 spawn
+
+`packages/api/session-controller/src/index.ts`：
+
+- `canOpenWorkspacePath()`（:262）——能力探测；
+- `openWorkspacePath({ path })`（:274）——交给宿主机桌面打开。
+
+浏览器半用 `ctx.remote.session.*` 调，需要 `inject: ['remote', 'remote.session']`
+（范本：`client/ui-deliverables/src/client/index.ts:34,48`；`ui-chat/src/client/apply.ts:124`）。
+
+⚠️ **它打开的是宿主机的桌面**。对本项目的主场景（手机远程）完全不可见，
+所以 UI 必须先探测、能开才显示按钮，并且无论如何都要把路径本身显示成可复制文本 ——
+否则就是做了一个在手机上点了没反应的按钮。
+
 
 > dsh 的 Web 面就是「静态资源 + `POST /api/<service>/<method>` + 一条下行 WebSocket」，
 > 外加一道基于 `Host` 头的 rebinding 防御，以及 0.1.2 新增的、只能用启动 token 换取的 cookie 认证。

@@ -1,0 +1,16 @@
+# dsh-remote 的 dsh 插件叠加层，由 launcher 用 `dsh --patch <这个文件>` 传给 dsh。
+#
+# 形态与 tools-inspector 相同：`./` 开头的 insert 名字由 dsh 锚定到本文件所在目录
+# 再转成 file:// URL，所以这里只写相对路径（铁律 D17，见 docs/01 §D17）。
+#
+# 两半都有实际行为：
+# - 宿主半 dist/index.js：读 `ctx.skills.list({ cwd, scope: agent })` 得到本会话可见的技能，
+#   再回放会话日志数出「哪些已经加载进上下文」，经私有 RPC 通道 `/skills-inspector` 交给页面。
+# - 浏览器半 dist/client.js：往 `conversation.view` 这个 list 槽注册一个「技能」tab。
+#
+# ⚠️ dist/client.js 缺失会让 dsh 的 web UI 整个起不来（FAILED fiber），不是静默降级。
+#
+# 顺序无关：只往 list 槽追加一个条目，tab 位置由 register 的 `order` 决定，与行序无关。
+- insert:
+    - id: skills-inspector
+      name: './dist/index.js'

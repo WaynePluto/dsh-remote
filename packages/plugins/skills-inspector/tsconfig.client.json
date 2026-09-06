@@ -1,0 +1,15 @@
+{
+  // 浏览器半单独一个 program，和本仓库其他两半插件一致：dsh 若干包的宿主半与浏览器半
+  // 往 cordis 的 `Context` 上合并的是不同形状，放进同一个 program 会互相打架。
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM"],
+    "types": []
+  },
+  "include": [
+    "src/client/**/*.ts",
+    "src/client/**/*.tsx",
+    "src/shared.ts"
+  ]
+}

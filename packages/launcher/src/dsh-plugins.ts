@@ -92,6 +92,16 @@ export const DSH_PLUGIN_PACKAGES = [
     name: '@dsh-remote/dsh-plugin-tools-inspector',
     artifacts: [['dist', 'index.js'], ['dist', 'client.js']],
   },
+  {
+    // Host half + browser half. Order-insensitive, and deliberately a READ-ONLY
+    // observer: it registers no skill, no tool, no waterfall, and only reads
+    // `ctx.skills.snapshot()/get()` plus the session's own durable event log.
+    // Its one seat is an entry in the LIST slot `conversation.view` — the same
+    // slot dsh's own trajectory tab and our tools-inspector use — so it adds a
+    //「技能」tab to the session header without colliding with anything.
+    name: '@dsh-remote/dsh-plugin-skills-inspector',
+    artifacts: [['dist', 'index.js'], ['dist', 'client.js']],
+  },
 ] as const satisfies readonly { name: string, artifacts: readonly (readonly string[])[] }[]
 
 /** Every plugin package name, for banners and diagnostics. */

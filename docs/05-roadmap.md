@@ -1315,6 +1315,66 @@
 
 ---
 
+## 技能状态视图（skills-inspector 插件）
+
+> 用户需求：「在会话头部的视图切换栏增加一个『技能』，让用户看到当前会话一共有哪些技能、
+> agent 已经加载了哪些、技能是全局还是项目级，点击技能可以打开该技能的本地文件。」
+> 与 tools-inspector 不同的是：这次用户问的四个问题**全部**都有精确答案，
+> 事实链记进 [02-dsh-facts.md](02-dsh-facts.md) §16。
+
+- [x] ⚠️⚠️ **先查清了「已加载」到底能不能精确回答，结论是能，而且覆盖整个会话历史**。
+      dsh 有且只有两条把技能正文注入上下文的路径，**两条都留下持久化会话事件**：
+      ① 模型自己加载 → `tool/call`，`data.name === 'skill'`，技能名在 `data.arguments`
+      （`tool-skill/src/index.ts:127-156`）；
+      ② 用户 `/技能名` → `agent/pre-step` 注入一条 `user/message`，
+      `source.kind === 'skill-invocation'`、`source.name` 就是技能名（同文件 `:177-204`）。
+      两个类型都在 `KNOWN_SESSION_EVENT_TYPES` 里，`snapshotEvents()` 给出整段不可变日志 ——
+      **dsh 重启后依然准确**。这次一开始就吸取了 tools-inspector 的教训，没有再走内存累加
+- [x] **「全局还是项目级」有权威答案**：`SkillSummary.source` 七个来源桶
+      （project-dsh / project-agents / custom / user-dsh / user-agents / bundled / runtime），
+      每个对应 `skill-filesystem/src/index.ts:246-258` 一个写死的根目录，**不需要按路径猜**。
+      ⚠️ `SkillSource` 是**开放联合**（`… | (string & {})`），必须有「未知来源」兜底
+- [x] ⚠️ **`ctx.skills` 的 scope 必须传 `ctx.agents.get(sessionId)`**——与 tools-inspector
+      同一个坑（§15.3）。实测对一个没有活 agent 的会话查询，**技能数为 0**，
+      项目的 `.agents/skills` 一个都读不到。`cwd` 同样不能省（项目级技能根由它解析）
+- [x] ⚠️ **用 `snapshot()` 而不是 `list()`**：前者多给一个 `complete`，
+      provider 中途失败时为 false。`list()` 只会安静地少几个技能（失败被 `logger.warn` 吞掉），
+      页面会显示成「技能凭空消失」；有了 `complete` 才能如实提示「这份列表可能不全」
+- [x] ⚠️ **`list()` 拿不到文件路径**：`toSummary()` 只抄 7 个字段，`path` 不在其中；
+      `SkillSummary` 上只有 `resourceBase`（技能**目录**）。精确的 `SKILL.md` 只有
+      `skills.get()` 给，而那会**连带把整个正文读进内存** —— 所以拆成独立的 `locate` 端点，
+      **只在用户点开某一行时调一次**，绝不在列表里批量取
+- [x] ⚠️ **`tool/call.arguments` 是模型原样产出的未解析字符串**（dsh 注释原话），
+      取技能名必须把 `JSON.parse` 包在 try 里：一条畸形历史记录不该让整个 tab 崩成错误页。
+      单测有专门用例钉住这条
+- [x] **「打开本地文件」用 dsh 自己的 Remote**：`session.canOpenWorkspacePath()` +
+      `openWorkspacePath({ path })`（`api/session-controller/src/index.ts:262,274`），
+      浏览器半 `inject: ['remote', 'remote.session']`。**不自己 spawn** ——
+      自己 spawn 就绕过了沙箱，而这件事 dsh 已经做好了。
+      ⚠️ 它打开的是**宿主机**桌面，对手机远程完全不可见，所以**先探测、能开才显示按钮**，
+      路径本身无论如何都显示成可复制的等宽文本
+- [x] 新建插件包 `packages/plugins/skills-inspector`（`@dsh-remote/dsh-plugin-skills-inspector`），**双半**
+- [x] **座位是 `conversation.view`（list 槽，order 30）**，排在 chat(0) / trajectory(10) /
+      工具(20) 之后。⚠️ `label` 仍必须传 **thunk**
+- [x] **用户拍板两条**：①「已加载」取**全历史回放**口径（可回放、重启后准确，
+      与工具页一致；另一种「当前上下文里仍在场」的口径因 dsh 会压缩历史而算不准）；
+      ② **不加「/加载」快捷按钮**，保持只读观察窗口的约定
+- [x] **它是只读观察窗口**：不注册技能、不注册技能来源、不注册工具、不 restrict、不 guard。
+      冒烟脚本显式断言这几条
+- [x] **界面**：与「工具」tab 共用一套视觉语言；「已加载」独立成第一组（按最近加载倒序），
+      未加载的**按来源分组**（组标题 =「中文人话 + 灰色真实路径」，一次讲完概念与磁盘位置）；
+      加载方式用「模型 / 用户」两字标注不用图标；状态靠字形 `●`/`○` 不靠颜色；
+      「仅用户可调用」（`disable-model-invocation` 技能）单独挂一个微标
+- [x] 单元测试 **27 项**（回放两条路径、失败不算、未配对要算、畸形 JSON、分组、排序、过滤）；
+      冒烟 **42 项全过**，其中一段**直接对着真的技能注册表**验
+      `list()` 无 `path` / `get()` 有 `SKILL.md` 的链路 ——
+      那条链路一旦被上游改掉，页面会安静退化成「这个技能没有本地文件」，
+      单测与 HTTP 冒烟都看不出来
+- [x] **用户实机验证（已通过）**：重启 dsh 后会话头部切换栏出现「技能」tab，
+      技能列表、来源分组、已加载状态均正常。用户确认满意
+
+---
+
 ## 进度记录
 
 | 里程碑 | 状态 | 完成日期 | 备注 |
@@ -1332,3 +1392,4 @@
 |---|---|
 | remote-privileged / proxy / copilot-auth / models-catalog / turn-retry / exec-process / notify / services / terminal | 已完成并经用户实机验证 |
 | tools-inspector（工具状态视图） | 已完成并经用户实机验证 |
+| skills-inspector（技能状态视图） | 已完成并经用户实机验证 |

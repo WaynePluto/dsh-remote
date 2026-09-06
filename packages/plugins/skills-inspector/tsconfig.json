@@ -1,0 +1,13 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": [
+    "src/index.ts",
+    "src/shared.ts",
+    "src/loaded.ts",
+    "tests/**/*.ts",
+    "tsdown.config.ts"
+  ]
+}
