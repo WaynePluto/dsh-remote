@@ -140,6 +140,17 @@ export function stopService(cwd: string, name: string, deps: ManagerDeps = {}): 
 export interface StartRequest {
   name: string
   command: string
+  /**
+   * The project directory that owns the registry and the log — always the
+   * session's project directory, never the command's.
+   *
+   * ⚠️ Keeping this separate from {@link cwd} is what makes a service started
+   * with a custom working directory still visible to `service_list` and to the
+   * panel: both of those only know the session's directory. Collapsing the two
+   * produces a service that is demonstrably running and reported as absent.
+   */
+  root: string
+  /** Working directory the command runs in; may differ from {@link root}. */
   cwd: string
   port?: number
   readyLog?: string
@@ -171,20 +182,32 @@ export async function startService(request: StartRequest, deps: ManagerDeps = {}
   if (!isValidName(request.name)) {
     return { ok: false, message: `服务名 ${request.name} 不合法：只允许字母、数字、点、下划线和连字符，且不超过 64 字符` }
   }
-  const registryCwd = request.cwd
-  const live = refresh(registryCwd, deps)
+  const registryRoot = request.root
+  const live = refresh(registryRoot, deps)
   if (find(live, request.name) !== undefined) {
     return { ok: false, message: `${request.name} 已在运行；要换命令请先 service_stop，或用 service_restart` }
   }
 
-  const record = startProcess({
-    name: request.name,
-    command: request.command,
-    cwd: request.cwd,
-    ...request.port === undefined ? {} : { port: request.port },
-    ...request.shell === undefined ? {} : { shell: request.shell },
-  })
-  writeRegistry(registryCwd, [...live.map(entry => entry.record), record])
+  // The Windows pid handoff can fail (the launcher never reported, or the
+  // command could not be spawned at all). That is a failed START, not an
+  // exception for a tool call to propagate — the caller wants a sentence.
+  let record
+  try {
+    record = await startProcess({
+      name: request.name,
+      command: request.command,
+      root: registryRoot,
+      cwd: request.cwd,
+      ...request.port === undefined ? {} : { port: request.port },
+      ...request.shell === undefined ? {} : { shell: request.shell },
+    })
+  } catch (error: unknown) {
+    return {
+      ok: false,
+      message: `${request.name} 没能启动：${error instanceof Error ? error.message : String(error)}`,
+    }
+  }
+  writeRegistry(registryRoot, [...live.map(entry => entry.record), record])
 
   const timeoutMs = Math.min(request.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS, MAX_READY_TIMEOUT_MS)
   const outcome = await waitForReady(record, {
@@ -196,8 +219,8 @@ export async function startService(request: StartRequest, deps: ManagerDeps = {}
 
   if (outcome === 'exited') {
     writeRegistry(
-      registryCwd,
-      readRegistry(registryCwd).services.filter(item => item.name !== request.name),
+      registryRoot,
+      readRegistry(registryRoot).services.filter(item => item.name !== request.name),
     )
     return {
       ok: false,
@@ -223,22 +246,22 @@ export async function startService(request: StartRequest, deps: ManagerDeps = {}
  * Replaying the STORED command rather than asking for one again is what makes
  * this safe to put behind a panel button: the user pressing 重启 cannot
  * accidentally change what runs.
- * @param cwd - the project directory.
+ * @param root - the project directory owning the registry.
  * @param name - the service to restart.
  * @param readyTimeoutMs - optional readiness deadline.
  * @param deps - injected probes.
  * @returns whether it came back up, and the sentence to show.
  */
 export async function restartService(
-  cwd: string,
+  root: string,
   name: string,
   readyTimeoutMs?: number,
   deps: ManagerDeps = {},
 ): Promise<ServiceActionResult> {
-  const previous = find(refresh(cwd, deps), name)?.record
+  const previous = find(refresh(root, deps), name)?.record
   if (previous === undefined) return { ok: false, message: `没有名为 ${name} 的运行中服务` }
 
-  const stopped = stopService(cwd, name, deps)
+  const stopped = stopService(root, name, deps)
   // A refusal to kill must abort the restart: starting a second copy while the
   // first may still hold the port is strictly worse than doing nothing.
   if (!stopped.ok) return { ok: false, message: `重启中止：${stopped.message}` }
@@ -246,6 +269,9 @@ export async function restartService(
   const started = await startService({
     name: previous.name,
     command: previous.command,
+    root,
+    // The command's own directory is replayed from the record, so a service
+    // started in a sub-package comes back in that sub-package.
     cwd: previous.cwd,
     ...previous.port === undefined ? {} : { port: previous.port },
     ...previous.shell === undefined ? {} : { shell: previous.shell },

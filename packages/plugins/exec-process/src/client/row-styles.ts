@@ -67,6 +67,10 @@ export function rowStylesheet(): string {
   line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
 }
 
+.${ROW_CLASS}[data-open] {
+  background: var(--dsw-specific-tip, var(--dsw-alias-bg-base, #fff));
+}
+
 .${ROW_CLASS}:hover {
   border-color: var(--dsw-alias-border-l3, rgba(128, 128, 128, 0.36));
   color: var(--dsw-alias-label-primary, #111827);
@@ -89,22 +93,28 @@ export function rowStylesheet(): string {
  * opaque and hover may move the border and the text but never the background.
  */
 
-.${ROW_CLASS}__label,
-.${ROW_CLASS}__status,
-.${ROW_CLASS}__failures {
+.${ROW_CLASS}__label {
   flex: 0 0 auto;
   white-space: nowrap;
 }
 
-.${ROW_CLASS}__failures {
-  color: var(--dsw-alias-state-error-primary, #dc2626);
+/* Keep the complete count summary at its intrinsic width on an ordinary row.
+   It may shrink only when the fixed label, summary and trailing indicators are
+   themselves wider than the row; min-width:0 then prevents narrow viewports
+   from overflowing and gives that exceptional case an ellipsis. */
+.${ROW_CLASS}__status {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* The only field allowed to lose characters: what the agent did last has no
-   length bound, and it is the least important of the four. Counting fields
-   never truncate. */
+/* The action starts at a zero flex basis and grows into whatever remains after
+   the fixed label and intrinsic-width summary. It is therefore the first and,
+   in everyday layouts, only field that loses characters. */
 .${ROW_CLASS}__action {
-  flex: 100 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -1,23 +1,16 @@
 /**
- * The Host half against fakes of the dsh services it uses (`agents`,
- * `sessionProjections`, `connection`, `userQuestions`, `sessionController`).
- *
- * Two behaviours are worth the fakes. The first is the live interception: this
- * plugin sits DOWNSTREAM of dsh's own `llm-retry`, so what it must get right is
- * delegating first, staying out of an `always` policy's way, and translating a
- * human answer into the loop's `{kind:'retry'}` vocabulary. The second is the
- * post-mortem path's guards — busy, subagent, cold, nothing-failed — because
- * each of them is a way to drive a session the user did not ask to drive.
+ * Host tests for the durable projection, RPC guards, and post-turn retry notice.
+ * The queue cases are load-bearing: a refused retry must not call followup(),
+ * mutate the inbox, or wake an older queued user message.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import {
-  apply, BAD_PAYLOAD_CODE, Config, dispatch, GIVE_UP_LABEL, NOTICE_MESSAGE_LIMIT, QUESTION_ID,
-  RETRY_LABEL, retryNoticeSummary, retryNoticeText, retrySession, SELF_NAMESPACE,
+  apply, BAD_PAYLOAD_CODE, dispatch, NOTICE_MESSAGE_LIMIT,
+  retryNoticeSummary, retryNoticeText, retrySession, SELF_NAMESPACE,
   UNKNOWN_ENDPOINT_CODE,
 } from '../src/index.js'
-import type { Config as ConfigType } from '../src/index.js'
 import type { FailedTurnView, StoppedTurnView, TurnRetryState } from '../src/shared.js'
 
 /** A pending failure, as the projection would report it. */
@@ -28,10 +21,12 @@ const PENDING: FailedTurnView = {
 /** A turn the user stopped, as the projection would report it. */
 const STOPPED: StoppedTurnView = { kind: 'stopped', turn: 5, cause: 'user' }
 
+interface FakeInboxMessage { id: string; source: { kind: string } }
 interface FakeAgent {
   id: string
   status: 'idle' | 'running'
   session: object
+  inbox: { nextTurn: FakeInboxMessage[]; nextStep: FakeInboxMessage[] }
   followup: ReturnType<typeof vi.fn>
 }
 
@@ -41,6 +36,7 @@ function fakeAgent(overrides: Partial<FakeAgent> = {}): FakeAgent {
     id: 's1',
     status: 'idle',
     session: { id: 's1' },
+    inbox: { nextTurn: [], nextStep: [] },
     followup: vi.fn(),
     ...overrides,
   }
@@ -51,9 +47,6 @@ interface CtxOptions {
   /** Agents `roots()` reports; defaults to the single agent. */
   roots?: FakeAgent[]
   projection?: TurnRetryState
-  /** Answer the pending question with these labels, or throw when absent. */
-  answer?: string[]
-  userQuestions?: false
   sessionController?: (id: string) => Promise<{ agent: FakeAgent } | { error: { message: string } }>
 }
 
@@ -70,7 +63,6 @@ interface Built {
   ctx: Context
   listeners: Map<string, (payload: unknown, next: () => Promise<unknown>) => Promise<unknown>>
   registered: RegisteredProjection[]
-  asked: unknown[]
   handled: Map<string, (endpoint: string, payload: unknown) => Promise<unknown>>
 }
 
@@ -80,23 +72,9 @@ function fakeCtx(options: CtxOptions = {}): Built {
   const roots = options.roots ?? [agent]
   const listeners = new Map<string, (payload: unknown, next: () => Promise<unknown>) => Promise<unknown>>()
   const registered: RegisteredProjection[] = []
-  const asked: unknown[] = []
   const handled = new Map<string, (endpoint: string, payload: unknown) => Promise<unknown>>()
 
   const services: Record<string, unknown> = {
-    userQuestions: options.userQuestions === false
-      ? undefined
-      : {
-        ask: (request: { questions: { id: string }[] }) => {
-          asked.push(request)
-          if (options.answer === undefined) {
-            return Promise.reject(new Error('no user-questions answerer accepted the request'))
-          }
-          return Promise.resolve({
-            answers: [{ id: request.questions[0]?.id ?? QUESTION_ID, selected: options.answer }],
-          })
-        },
-      },
     sessionController: options.sessionController === undefined
       ? undefined
       : { resolveAgent: options.sessionController },
@@ -133,21 +111,13 @@ function fakeCtx(options: CtxOptions = {}): Built {
     get: (name: string) => services[name],
   } as unknown as Context
 
-  return { ctx, listeners, registered, asked, handled }
-}
-
-/** Config with the schema's defaults applied, as cordis would hand it over. */
-function config(overrides: Partial<ConfigType> = {}): ConfigType {
-  // The empty document is exactly what a composition that configures nothing
-  // supplies; the cast is only because schemastery types its constructor by
-  // the output shape, not the input document.
-  return { ...new Config({} as ConfigType), ...overrides }
+  return { ctx, listeners, registered, handled }
 }
 
 describe('apply', () => {
   it('registers the projection as a wire unit', () => {
     const built = fakeCtx()
-    apply(built.ctx, config())
+    apply(built.ctx)
     expect(built.registered).toHaveLength(1)
     expect(built.registered[0]).toMatchObject({ key: 'turnRetry', stateVersion: 2 })
     // Without a `wire` the value never reaches the page and the banner is dead.
@@ -156,7 +126,7 @@ describe('apply', () => {
 
   it('serves its channel', () => {
     const built = fakeCtx()
-    apply(built.ctx, config())
+    apply(built.ctx)
     expect([...built.handled.keys()]).toEqual(['/turn-retry'])
   })
 
@@ -165,103 +135,14 @@ describe('apply', () => {
     // variant it does not accept is not a missing banner but a throw on the
     // publication path, and only a real session would ever hit it.
     const built = fakeCtx()
-    apply(built.ctx, config())
+    apply(built.ctx)
     expect(built.registered[0]?.stateSchema?.parse(state)).toEqual(state)
   })
 
-  it('does not touch the request-error waterfall when asking is off', () => {
+  it('does not register a live request-error prompt', () => {
     const built = fakeCtx()
-    apply(built.ctx, config({ ask: false }))
+    apply(built.ctx)
     expect(built.listeners.has('agent/request-error')).toBe(false)
-  })
-})
-
-/** Drive the registered waterfall listener once. */
-async function fire(built: Built, request: Record<string, unknown>, downstream: unknown = undefined) {
-  const listener = built.listeners.get('agent/request-error')
-  if (listener === undefined) throw new Error('listener was not registered')
-  return await listener(request, () => Promise.resolve(downstream))
-}
-
-describe('the live interception', () => {
-  const failure = { code: 'TIMEOUT', message: 'connect ETIMEDOUT' }
-
-  function payload(built: Built, extra: Record<string, unknown> = {}) {
-    return {
-      agent: (built.ctx as unknown as { agents: { roots: () => unknown[] } }).agents.roots()[0],
-      turn: 1,
-      step: 1,
-      provider: 'deepseek',
-      failure,
-      retryPolicy: { mode: 'normal', maxRetries: 5 },
-      signal: new AbortController().signal,
-      ...extra,
-    }
-  }
-
-  it('honours a downstream decision without asking anyone', async () => {
-    // This is also the order-insensitivity proof: when dsh's own llm-retry is
-    // registered AFTER this plugin, `next()` is what runs its backoff, and its
-    // `{kind:'retry'}` must pass straight through instead of being second-
-    // guessed with a question.
-    const built = fakeCtx({ answer: [RETRY_LABEL] })
-    apply(built.ctx, config())
-    await expect(fire(built, payload(built), { kind: 'retry' })).resolves.toEqual({ kind: 'retry' })
-    expect(built.asked).toHaveLength(0)
-  })
-
-  it('retries when the human says so', async () => {
-    const built = fakeCtx({ answer: [RETRY_LABEL] })
-    apply(built.ctx, config())
-    await expect(fire(built, payload(built))).resolves.toEqual({ kind: 'retry' })
-    expect(built.asked).toHaveLength(1)
-  })
-
-  it('lets the turn fail when the human says so', async () => {
-    const built = fakeCtx({ answer: [GIVE_UP_LABEL] })
-    apply(built.ctx, config())
-    await expect(fire(built, payload(built))).resolves.toBeUndefined()
-  })
-
-  it('lets the turn fail when nobody is there to answer', async () => {
-    // No `answer` makes the fake reject the way dsh does with NO_PROVIDER.
-    const built = fakeCtx()
-    apply(built.ctx, config())
-    await expect(fire(built, payload(built))).resolves.toBeUndefined()
-  })
-
-  it('lets the turn fail when the composition has no user-questions seam', async () => {
-    const built = fakeCtx({ userQuestions: false })
-    apply(built.ctx, config())
-    await expect(fire(built, payload(built))).resolves.toBeUndefined()
-    expect(built.asked).toHaveLength(0)
-  })
-
-  it('stays out of the way of an unbounded provider policy', async () => {
-    // `always` calls next() BEFORE its own backoff, so asking here would put a
-    // human decision ahead of every automatic attempt.
-    const built = fakeCtx({ answer: [RETRY_LABEL] })
-    apply(built.ctx, config())
-    await expect(fire(built, payload(built, { retryPolicy: { mode: 'always' } }))).resolves.toBeUndefined()
-    expect(built.asked).toHaveLength(0)
-  })
-
-  it('does not ask once the turn is already cancelled', async () => {
-    const built = fakeCtx({ answer: [RETRY_LABEL] })
-    apply(built.ctx, config())
-    const aborted = new AbortController()
-    aborted.abort()
-    await expect(fire(built, payload(built, { signal: aborted.signal }))).resolves.toBeUndefined()
-    expect(built.asked).toHaveLength(0)
-  })
-
-  it('offers exactly the two labels it understands', async () => {
-    const built = fakeCtx({ answer: [RETRY_LABEL] })
-    apply(built.ctx, config())
-    await fire(built, payload(built))
-    const request = built.asked[0] as { questions: { id: string; options: { label: string }[] }[] }
-    expect(request.questions[0]?.id).toBe(QUESTION_ID)
-    expect(request.questions[0]?.options.map(option => option.label)).toEqual([RETRY_LABEL, GIVE_UP_LABEL])
   })
 })
 
@@ -295,6 +176,35 @@ describe('retrySession', () => {
     expect(message.source.summary).toBe(retryNoticeSummary(STOPPED))
   })
 
+  it('does not wake or mutate an existing queued user message', async () => {
+    const queued = { id: 'queued-1', source: { kind: 'user' } }
+    const inbox = { nextTurn: [queued], nextStep: [] }
+    const agent = fakeAgent({ inbox })
+    const built = fakeCtx({ agent, projection: PENDING })
+    await expect(retrySession(built.ctx, 's1'))
+      .resolves.toEqual({ started: false, reason: 'pending-input' })
+    expect(agent.followup).not.toHaveBeenCalled()
+    expect(inbox).toEqual({ nextTurn: [queued], nextStep: [] })
+  })
+
+  it('allows pending steering because it is not an ordinary queued turn', async () => {
+    const steering = { id: 'steer-1', source: { kind: 'user' } }
+    const agent = fakeAgent({ inbox: { nextTurn: [], nextStep: [steering] } })
+    const built = fakeCtx({ agent, projection: PENDING })
+    await expect(retrySession(built.ctx, 's1')).resolves.toEqual({ started: true })
+    expect(agent.followup).toHaveBeenCalledTimes(1)
+    expect(agent.inbox.nextStep).toEqual([steering])
+  })
+
+  it('allows plugin context waiting for the next step', async () => {
+    const context = { id: 'context-1', source: { kind: 'plugin' } }
+    const agent = fakeAgent({ inbox: { nextTurn: [], nextStep: [context] } })
+    const built = fakeCtx({ agent, projection: PENDING })
+    await expect(retrySession(built.ctx, 's1')).resolves.toEqual({ started: true })
+    expect(agent.followup).toHaveBeenCalledTimes(1)
+    expect(agent.inbox.nextStep).toEqual([context])
+  })
+
   it('refuses when the projection says nothing is pending', async () => {
     const agent = fakeAgent()
     const built = fakeCtx({ agent, projection: null })
@@ -314,6 +224,16 @@ describe('retrySession', () => {
     const built = fakeCtx({ agent, roots: [], projection: PENDING })
     await expect(retrySession(built.ctx, 's1')).resolves.toEqual({ started: false, reason: 'subagent' })
     expect(agent.followup).not.toHaveBeenCalled()
+  })
+
+  it('keeps queued input parked after resolving a cold session', async () => {
+    const queued = { id: 'cold-queued', source: { kind: 'user' } }
+    const cold = fakeAgent({ id: 'cold', inbox: { nextTurn: [queued], nextStep: [] } })
+    const built = fakeCtx({ roots: [cold], projection: PENDING,
+      sessionController: () => Promise.resolve({ agent: cold }) })
+    await expect(retrySession(built.ctx, 'cold'))
+      .resolves.toEqual({ started: false, reason: 'pending-input' })
+    expect(cold.followup).not.toHaveBeenCalled()
   })
 
   it('wakes a cold session through the Session Controller', async () => {
@@ -375,6 +295,15 @@ describe('dispatch', () => {
       const result = await dispatch(built.ctx, 'retry', payload)
       expect(result).toMatchObject({ ok: false, error: { code: BAD_PAYLOAD_CODE } })
     })
+
+  it('returns the pending-input refusal through the channel', async () => {
+    const queued = { id: 'queued-rpc', source: { kind: 'user' } }
+    const agent = fakeAgent({ inbox: { nextTurn: [queued], nextStep: [] } })
+    const queuedCtx = fakeCtx({ agent, projection: PENDING })
+    await expect(dispatch(queuedCtx.ctx, 'retry', { sessionId: 's1' }))
+      .resolves.toEqual({ ok: true, value: { started: false, reason: 'pending-input' } })
+    expect(agent.followup).not.toHaveBeenCalled()
+  })
 
   it('answers the happy path with the retry result', async () => {
     await expect(dispatch(built.ctx, 'retry', { sessionId: 's1' }))

@@ -228,6 +228,17 @@ export function segmentEndSeq(
   return next
 }
 
+/** Whether this segment can no longer receive process rows. */
+export function segmentEnded(
+  nodes: readonly ExecNodeView[],
+  selfAnchorSeq: number,
+  answerAnchorSeq: number | null,
+  turnClosed: boolean,
+): boolean {
+  return answerAnchorSeq !== null || turnClosed || nodes.some(node =>
+    EXEC_PROCESS_KINDS.has(node.kind) && node.anchorSeq > selfAnchorSeq)
+}
+
 /**
  * Select the folded rows of one segment and summarize them.
  *

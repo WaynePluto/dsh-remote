@@ -6,7 +6,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createFoldStore, foldKey } from '../src/client/fold-store.js'
 import { en, fill, zh } from '../src/client/locales.js'
-import { summaryFields } from '../src/client/ExecProcessRow.js'
+import { ExecProcessTail, summaryFields } from '../src/client/ExecProcessRow.js'
 import { ROW_CLASS, rowStylesheet, installRowStyles, type StyleHost } from '../src/client/row-styles.js'
 import type { ExecProcessStats } from '../src/client/stats.js'
 
@@ -60,7 +60,7 @@ describe('copy', () => {
   })
 
   it('fills placeholders and leaves unknown ones written', () => {
-    expect(fill(zh.thinking, { count: 12 })).toBe('思考 12 次')
+    expect(fill(zh.thinking, { count: 12 })).toBe('思考12次')
     expect(fill('{a}/{b}', { a: 1 })).toBe('1/{b}')
   })
 })
@@ -91,18 +91,17 @@ describe('summaryFields', () => {
       }),
       translate,
     )
-    expect(fields.status).toBe('思考 12 次 · 工具调用 34 次')
-    expect(fields.failures).toBe('失败 2')
-    expect(fields.action).toBe('最近 read')
+    expect(fields.status).toBe('思考12次·工具34次·失败2')
+    expect(fields.action).toBe('最近read')
     expect(fields.running).toBe(false)
   })
 
   it('says nothing about failures when there were none', () => {
-    expect(summaryFields(stats({ toolCallCount: 1 }), translate).failures).toBe('')
+    expect(summaryFields(stats({ toolCallCount: 1 }), translate).status).toBe('工具1次')
   })
 
   it('drops a count that is zero instead of writing 0', () => {
-    expect(summaryFields(stats({ toolCallCount: 3 }), translate).status).toBe('工具调用 3 次')
+    expect(summaryFields(stats({ toolCallCount: 3 }), translate).status).toBe('工具3次')
   })
 
   it('reports thinking when the turn never called a tool', () => {
@@ -110,7 +109,7 @@ describe('summaryFields', () => {
       stats({ reasoningCount: 2, lastAction: { kind: 'thinking', running: false } }),
       translate,
     )
-    expect(fields.action).toBe('最近 思考')
+    expect(fields.action).toBe('最近思考')
   })
 
   it('says 进行中 after the tool name while it is still running', () => {
@@ -120,7 +119,7 @@ describe('summaryFields', () => {
       stats({ toolCallCount: 3, lastAction: { kind: 'tool', name: 'pwsh', running: true } }),
       translate,
     )
-    expect(fields.action).toBe('pwsh 进行中')
+    expect(fields.action).toBe('pwsh进行中')
     expect(fields.running).toBe(true)
   })
 
@@ -131,6 +130,29 @@ describe('summaryFields', () => {
     )
     expect(fields.action).toBe('思考中')
     expect(fields.running).toBe(true)
+  })
+})
+
+describe('ended summary', () => {
+  it('hides the entire action area after the segment or turn ends', () => {
+    const fields = summaryFields(
+      stats({ toolCallCount: 1, lastAction: { kind: 'tool', name: 'read', running: true } }),
+      translate,
+      true,
+    )
+    expect(fields.action).toBe('')
+    expect(fields.running).toBe(false)
+  })
+})
+
+describe('summary tail', () => {
+  it('puts the running dot immediately before the chevron', () => {
+    const tail = ExecProcessTail({ fields: { status: '工具1次', action: 'pwsh进行中', running: true } })
+    const children = (tail.props as { children: Array<false | { props: { className?: string } }> })
+      .children.filter((child): child is { props: { className?: string } } => child !== false)
+    expect(children.map(child => child.props.className)).toEqual([
+      `${ROW_CLASS}__action`, `${ROW_CLASS}__dot`, `${ROW_CLASS}__chevron`,
+    ])
   })
 })
 
@@ -158,6 +180,7 @@ describe('row chrome', () => {
     const css = rowStylesheet()
     expect(css).toMatch(/\.dshx-exec-process:hover \{[^}]*border-color/u)
     expect(css).not.toMatch(/\.dshx-exec-process:hover \{[^}]*background/u)
+    expect(css).toMatch(/\.dshx-exec-process\[data-open\] \{[^}]*background: var\(--dsw-specific-tip, var\(--dsw-alias-bg-base, #fff\)\)/u)
   })
 
   it('centres the running dot by flex rather than by vertical-align', () => {
@@ -192,15 +215,30 @@ describe('row chrome', () => {
     // A misspelled --dsw-* does not fail, it silently uses the fallback
     // (docs/02 §8.6), so both halves are asserted here.
     for (const [, name] of rowStylesheet().matchAll(/var\((--dsw-[a-z0-9-]+),/gu)) {
-      expect(name).toMatch(/^--dsw-(alias|font|static)-/u)
+      expect(name).toMatch(/^--dsw-(alias|font|static|specific)-/u)
     }
     expect(rowStylesheet()).not.toMatch(/var\(--dsw-[a-z0-9-]+\)/u)
   })
 
-  it('lets only the last-action field truncate', () => {
-    expect(rowStylesheet()).toContain(`.${ROW_CLASS}__action`)
-    expect(rowStylesheet()).toMatch(/__action \{[^}]*text-overflow: ellipsis/u)
-    expect(rowStylesheet()).toMatch(/__status,\n\.[\w-]+__failures \{[^}]*flex: 0 0 auto/u)
+  it('keeps failures the same colour as the ordinary summary', () => {
+    expect(rowStylesheet()).not.toContain('__failures')
+    expect(rowStylesheet()).not.toContain('--dsw-alias-state-error-primary')
+  })
+
+  it('protects desktop status but lets an overwide summary shrink before the row overflows', () => {
+    const css = rowStylesheet()
+    // An auto status basis reserves its complete count width first. The action
+    // starts at zero and grows into the remainder, so it is the everyday
+    // ellipsis target instead of squeezing a normal desktop summary.
+    expect(css).toMatch(/__status \{[^}]*flex: 0 1 auto/u)
+    expect(css).toMatch(/__action \{[^}]*flex: 1 1 0;[^}]*text-overflow: ellipsis/u)
+    // At 320px the fixed summary can itself exceed the row. min-width:0 is the
+    // emergency escape hatch: status ellipsizes instead of forcing horizontal
+    // overflow, while the label, running dot and chevron stay fixed.
+    expect(css).toMatch(/__status \{[^}]*min-width: 0;[^}]*overflow: hidden;[^}]*text-overflow: ellipsis/u)
+    expect(css).toMatch(/__label \{[^}]*flex: 0 0 auto/u)
+    expect(css).toMatch(/__dot \{[^}]*flex: none/u)
+    expect(css).toMatch(/__chevron \{[^}]*flex: none/u)
   })
 
   it('installs and removes one sheet', () => {

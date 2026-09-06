@@ -11,7 +11,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  BAD_PAYLOAD_CODE, Config, INTERNAL_CODE, MAX_SEND_LENGTH, NOTES,
+  BAD_PAYLOAD_CODE, Config, INTERNAL_CODE, INTERACTIVE_TERMINAL_GUIDANCE, INTERACTIVE_TERMINAL_OPEN_DESCRIPTION,
+  MAX_SEND_LENGTH, NOTES, UPSTREAM_TERMINAL_TOOL_NAMES, apply, applyInteractiveTerminalTools, interactiveTerminalTools,
   PWSH_READLINE_SETUP, UNKNOWN_ENDPOINT_CODE, backendConfig, dispatch, installStartupRetry, isSendActive,
   pwshShellArgs, resetInFlight, resolveDialect, sendToTerminal, snapshot, toView,
 } from '../src/index.js'
@@ -421,5 +422,74 @@ describe('dispatch: interrupt', () => {
     const { ctx } = fakeContext({ sessions: [running], signalThrows: new Error('session is closing') })
     const result = await dispatch(ctx, 'interrupt', { sessionId: 's', terminalId: 'pty-1' }, config)
     expect((result as { value: unknown }).value).toStrictEqual({ ok: false, message: 'session is closing' })
+  })
+})
+describe('interactive terminal tool wrapper', () => {
+  function recordingContext() {
+    const tools: { name: string, description?: string }[] = []
+    const sections: { name: string, text: string }[] = []
+    const ctx = {
+      terminals: {},
+      tools: { register: (tool: { name: string, description?: string }) => { tools.push(tool) } },
+      systemPrompt: {
+        getSectionOrder: () => 10,
+        section: (section: { name: string, text: string }) => { sections.push(section) },
+      },
+    } as unknown as Context
+    return { ctx, tools, sections }
+  }
+  it('publishes exactly the six interactive names and no raw terminal names', () => {
+    const { ctx, tools, sections } = recordingContext()
+    applyInteractiveTerminalTools(ctx)
+    expect(tools.map(tool => tool.name)).toStrictEqual(
+      UPSTREAM_TERMINAL_TOOL_NAMES.map(name => `interactive_${name}`),
+    )
+    expect(tools.some(tool => UPSTREAM_TERMINAL_TOOL_NAMES.includes(tool.name as never))).toBe(false)
+    const send = tools.find(tool => tool.name === 'interactive_terminal_send') as Record<string, unknown>
+    expect(JSON.stringify(send.parameters)).toContain('interactive_terminal_open')
+    expect(JSON.stringify(send.parameters)).toContain('interactive_terminal_list')
+    expect(typeof send.execute).toBe('function')
+    expect(send.output).toBeDefined()
+    expect(tools.every(tool => tool.description?.toLowerCase().includes('interactive terminal') === true)).toBe(true)
+    expect(sections).toHaveLength(1)
+  })
+  it('replaces the prompt and open description with the strict one-shot prohibition', () => {
+    const { ctx, tools, sections } = recordingContext()
+    applyInteractiveTerminalTools(ctx)
+    expect(sections[0]?.text).toBe(INTERACTIVE_TERMINAL_GUIDANCE)
+    expect(sections[0]?.text).toMatch(/Git, builds, tests, and scripts/)
+    expect(sections[0]?.text).toMatch(/always use pwsh or bash/)
+    expect(sections[0]?.text).toMatch(/long time is not by itself a reason/)
+    expect(sections[0]?.text).toContain('run_in_background')
+    const open = tools.find(tool => tool.name === 'interactive_terminal_open')
+    expect(open?.description).toBe(INTERACTIVE_TERMINAL_OPEN_DESCRIPTION)
+    expect(open?.description).toMatch(/Never use this for ordinary one-shot commands/)
+    expect(open?.description).toContain('run_in_background')
+  })
+  it.each([
+    ['missing', UPSTREAM_TERMINAL_TOOL_NAMES.slice(0, -1)],
+    ['duplicate', [...UPSTREAM_TERMINAL_TOOL_NAMES.slice(0, -1), 'terminal_open']],
+    ['unknown', [...UPSTREAM_TERMINAL_TOOL_NAMES, 'terminal_surprise']],
+  ])('fails closed on %s registrations before anything leaks', (_case, names) => {
+    const { ctx, tools, sections } = recordingContext()
+    const upstream = (facade: Context) => {
+      (facade as unknown as { systemPrompt: { section: (value: unknown) => void } }).systemPrompt.section({ name: 'tool:pty', order: 10, text: 'upstream' })
+      for (const name of names) (facade as unknown as { tools: { register: (value: unknown) => void } }).tools.register({ name, description: name } as never)
+    }
+    expect(() => { applyInteractiveTerminalTools(ctx, {}, upstream) }).toThrow(/rejected registrations/)
+    expect(tools).toHaveLength(0)
+    expect(sections).toHaveLength(0)
+  })
+  it('preserves upstream inject and Config and is what the main plugin mounts', () => {
+    expect(interactiveTerminalTools.inject).toBeDefined()
+    expect(interactiveTerminalTools.Config).toBeDefined()
+    const plugins: unknown[] = []
+    const ctx = {
+      plugin: (plugin: unknown) => { plugins.push(plugin) },
+      connection: { rpc: { handle: () => () => {} } },
+      effect: () => {},
+    } as unknown as Context
+    apply(ctx, resolved({ mountBackend: false, mountTools: true }))
+    expect(plugins).toStrictEqual([interactiveTerminalTools])
   })
 })

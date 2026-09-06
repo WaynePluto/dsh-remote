@@ -4,9 +4,9 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { FLOW_KEY_ATTRIBUTE } from '../src/client/hidden-rows.js'
+import { FLOW_KEY_ATTRIBUTE, flowKeySelector, THINK_SELECTOR } from '../src/client/hidden-rows.js'
 import {
-  createStickyPushController, findScrollport, pushOffset, stickyCss,
+  createStickyPushController, findScrollport, pushOffset, segmentContentEndSelector, stickyCss,
   PUSH_PROPERTY_PREFIX, PUSH_STYLE_MARKER,
   type AncestorElement, type StickyPushHost, type StickyPushView, type TrackedButton,
 } from '../src/client/sticky-push.js'
@@ -33,6 +33,8 @@ interface Harness {
   button: TrackedButton
   css: () => string | null
   properties: Map<string, string>
+  /** Selectors used to find the content end. */
+  queries: string[]
   scrollListeners: () => number
   resizeListeners: () => number
   /** Fire every pending animation frame callback. */
@@ -51,6 +53,7 @@ function harness(flowKey: string | null = 'turn3:exec'): Harness {
   const port: Box = { top: 0, height: 800 }
   const rowPresent = { value: true }
   const properties = new Map<string, string>()
+  const queries: string[] = []
   const frames: (() => void)[] = []
   let scrollListeners = 0
   let resizeListeners = 0
@@ -95,7 +98,10 @@ function harness(flowKey: string | null = 'turn3:exec'): Harness {
         removeProperty: (name: string) => { properties.delete(name) },
       },
     },
-    querySelector: () => (rowPresent.value ? { getBoundingClientRect: () => rect(content) } : null),
+    querySelector: (selector: string) => {
+      queries.push(selector)
+      return rowPresent.value ? { getBoundingClientRect: () => rect(content) } : null
+    },
     defaultView: view,
   } as unknown as StickyPushHost
 
@@ -108,12 +114,31 @@ function harness(flowKey: string | null = 'turn3:exec'): Harness {
     button: { closest: () => (flowKey === null ? null : wrapper) },
     css: () => element.textContent,
     properties,
+    queries,
     scrollListeners: () => scrollListeners,
     resizeListeners: () => resizeListeners,
     flush: () => { for (const frame of frames.splice(0)) frame() },
     attached: () => element.attached,
   }
 }
+
+describe('segmentContentEndSelector', () => {
+  it('measures the framed parent when the segment contains only inline reasoning', () => {
+    expect(segmentContentEndSelector([], ['answer']))
+      .toBe(`${flowKeySelector('answer')} div:has(> ${THINK_SELECTOR})`)
+  })
+
+  it('prefers the framed reasoning parent over a member row when both are present', () => {
+    const selector = segmentContentEndSelector(['tool'], ['answer'])
+    expect(selector).toBe(`${flowKeySelector('answer')} div:has(> ${THINK_SELECTOR})`)
+    expect(selector).not.toBe(flowKeySelector('tool'))
+  })
+
+  it('falls back to the last member row when there is no inline reasoning', () => {
+    expect(segmentContentEndSelector(['first', 'last'], []))
+      .toBe(flowKeySelector('last'))
+  })
+})
 
 describe('pushOffset', () => {
   it('does not push while the segment still has rows under the header', () => {
@@ -172,7 +197,7 @@ describe('stickyCss', () => {
 
   it('keeps a stuck row opaque and above its neighbours', () => {
     const css = stickyCss([{ flowKey: 'k', property: '--p' }])
-    expect(css).toContain('background: var(--dsw-alias-bg-base, #fff)')
+    expect(css).toContain('background: var(--dsw-specific-tip, var(--dsw-alias-bg-base, #fff))')
     expect(css).toContain('z-index: 3')
   })
 
@@ -259,6 +284,16 @@ describe('createStickyPushController', () => {
     const controller = createStickyPushController(test.host)
     controller.track(test.button, 'last-row')
     expect(controller.css()).toBe('')
+    controller.dispose()
+  })
+
+  it('measures the framed reasoning parent instead of its fixed-height root', () => {
+    const test = harness()
+    const controller = createStickyPushController(test.host)
+    const selector = segmentContentEndSelector(['tool'], ['answer'])
+    controller.track(test.button, selector)
+    test.flush()
+    expect(test.queries.at(-1)).toBe(`${flowKeySelector('answer')} div:has(> ${THINK_SELECTOR})`)
     controller.dispose()
   })
 

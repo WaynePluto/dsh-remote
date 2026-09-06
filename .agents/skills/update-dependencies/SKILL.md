@@ -155,7 +155,7 @@ pnpm test
 node scripts/m0-fence-check.mjs --token <dsh 启动行里的 token>   # Host/Origin 围栏 + dsh 自带认证
 node scripts/copilot-auth-check.mjs                            # 两个插件的宿主半 + 浏览器半仍被 dsh 装载
 node scripts/proxy-check.mjs                                   # 代理插件：设置命名空间仍注册，写入的接受/拒绝仍如预期
-node scripts/turn-retry-check.mjs                              # 失败重试插件：projection 注册 + 瀑布签名 + RPC 通道
+node scripts/turn-retry-check.mjs                              # 失败重试插件：projection 注册 + RPC 通道 + 单一重试栏
 pnpm dev                             # 起 relay + connector + dsh，浏览器走一遍登录 → 发消息 → 流式输出
 ```
 
@@ -176,13 +176,11 @@ pnpm dev                             # 起 relay + connector + dsh，浏览器�
 3. 凭据记录仍是 `llm-pi-ai/github-copilot` + `{kind:'grant', payload:<pi-ai 凭据>}`，且 pi-ai 内置目录里
    还有 `github-copilot`（docs/02 §7.1）。同时把 `packages/plugins/copilot-auth` 的 `@earendil-works/pi-ai`
    版本跟 dsh 依赖的那个对齐。
-4. `turn-retry` 依赖的四样东西还在（docs/02 §10）：`agent/request-error` 瀑布的 payload 与
-   `RequestErrorAction`、`TurnEndReasonMap` 的 `error` 分支、`ctx.sessionProjections.register` 的
-   `wire` 契约、槽 `conversation.input.dock` 与 `ctx.userQuestions.ask` 的形状。
-   **`turn-retry-check.mjs` 里「dsh 正常启动」这一条分量特别重**：projection 注册被拒或瀑布签名对不上
-   都会让 fiber FAILED，dsh 根本走不到打印地址那一步。
-   同时把这个包的 `@deepseek-ai/dsh-llm`（它是**运行时** value import，在 `dependencies` 里）
-   版本跟 dsh 对齐。
+4. `turn-retry` 依赖的几样东西还在（docs/02 §10）：`TurnEndReasonMap` 的失败/停止分支、
+   `ctx.sessionProjections.register` 的 `wire` 契约、`Agent.inbox.nextTurn`、
+   `followup()` 的追加与唤醒语义，以及槽 `conversation.input.dock`。升级后必须重跑排队消息回归：
+   存在 `nextTurn` 排队消息时，`pending-input` 不得调用 `followup()`，也不得改写 inbox。
+   同时把运行时依赖 `@deepseek-ai/dsh-llm` 与 dsh 对齐。
 
 ### 7. 整理 dsh 新能力吸收建议
 

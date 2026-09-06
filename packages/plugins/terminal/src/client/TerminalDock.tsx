@@ -23,7 +23,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent } from 'react'
-import { terminalLabel } from '../shared.js'
+import { foldPoll, terminalLabel } from '../shared.js'
 import type {
   TerminalReadResultView, TerminalSendResultView, TerminalView, TerminalsSnapshot,
 } from '../shared.js'
@@ -42,6 +42,17 @@ const EAGER_WINDOW_MS = 4000
 /** The fast cadence used inside {@link EAGER_WINDOW_MS}. */
 const EAGER_POLL_MS = 400
 
+/**
+ * How many consecutive "could not answer" polls it takes to clear the panel.
+ *
+ * At {@link LIST_POLL_MS} this is a few seconds of the Host having no agent to
+ * look in, which is long enough to ride out a session remount and short enough
+ * that a genuinely dead conversation does not keep a stale panel.
+ *
+ * The decision itself lives in `../shared.ts` as {@link foldPoll}: it is pure,
+ * it is the one piece of state machinery in this component that can lose a
+ * user's typed draft, and it deserves a test that needs no DOM.
+ */
 /** What this plugin injects into its own registration. */
 export interface TerminalDockInjected {
   /** Ask the Host which terminals this conversation's agent owns. */
@@ -258,6 +269,8 @@ export function TerminalPanel({ sessionId, actions, t }: TerminalPanelProps) {
   const readRef = useRef(actions?.onRead)
   readRef.current = actions?.onRead
   const revisionRef = useRef<string | undefined>(undefined)
+  /** Consecutive polls that could not answer; see {@link loadList}. */
+  const blindPolls = useRef(0)
 
   const terminals: readonly TerminalView[] = useMemo(() => snapshot?.terminals ?? [], [snapshot])
 
@@ -265,7 +278,12 @@ export function TerminalPanel({ sessionId, actions, t }: TerminalPanelProps) {
     const fetchList = listRef.current
     if (fetchList === undefined) return
     try {
-      setSnapshot(await fetchList())
+      const next = await fetchList()
+      setSnapshot((previous) => {
+        const folded = foldPoll(previous, next, blindPolls.current)
+        blindPolls.current = folded.blindPolls
+        return folded.snapshot
+      })
     } catch (cause: unknown) {
       setNote({ text: fill(translate('failed'), { message: describe(cause) }), bad: true })
     }
@@ -321,6 +339,7 @@ export function TerminalPanel({ sessionId, actions, t }: TerminalPanelProps) {
     setDraft('')
     setNote(undefined)
     revisionRef.current = undefined
+    blindPolls.current = 0
   }, [sessionId])
 
   // Keep a valid selection without ever silently switching the user away from
@@ -334,6 +353,7 @@ export function TerminalPanel({ sessionId, actions, t }: TerminalPanelProps) {
     setSelected(terminals[terminals.length - 1]?.id)
     setScreen(undefined)
     revisionRef.current = undefined
+    blindPolls.current = 0
   }, [terminals, selected])
 
   // Poll the screen only while the panel is open: a collapsed panel showing one
@@ -478,6 +498,7 @@ export function TerminalPanel({ sessionId, actions, t }: TerminalPanelProps) {
                     setScreen(undefined)
                     setNote(undefined)
                     revisionRef.current = undefined
+    blindPolls.current = 0
                     followRef.current = true
                   }}
                 >

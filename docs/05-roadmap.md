@@ -156,7 +156,6 @@
   - 同机跑 relay + connector + dsh，由另一台局域网机器直接访问 `http://<relay局域网IP>:30809`
   - M1 单机模式配置 `directSlug=pc1`，IP/localhost Host固定路由到该机器；不要求 hosts、域名或 TLS，多机器子域名路由留到公网联调
   - **前置：先完成正式浏览器认证。** 只有“loopback socket + loopback Host”可免登录；局域网 IP访问与未来域名访问走同一登录/session中间件，认证落地前禁止非 loopback bind
-
 ### M1 验收
 
 - [ ] 浏览器通过 relay 能完整使用 dsh：发消息、流式输出、切换会话、打开设置
@@ -329,7 +328,7 @@
       还有 agent 发出的正式消息？我最初的想法是，有正式消息就不在执行过程里，正式消息后面再出来一个新的
       执行过程」）：
       · 新增第二个 `ConversationNodeDefinition`（kind `exec-process-step`），按 `turn:step` 建 Context，
-        在正式消息之后 `+0.2` 处再开一条「执行过程」；没说过正式话的 step 出 `visibility:'hidden'`
+        在正式消息之后 `+0.04` 处再开一条「执行过程」（最初是 `+0.2`，第十轮修正）；没说过正式话的 step 出 `visibility:'hidden'`
         而不是撤回节点（**撤回已物化的节点会被引擎判错**）。折叠成员判定加一条自己的规则：
         **带可见文字的 `assistant-step` 永不折**，哪怕它同时派了工具
       · ⚠️ **「内部滚动条」做不到，已明确回绝**：要折的行是 dsh 自己的**兄弟节点**，
@@ -401,11 +400,32 @@
       · **实机验收**（隔离 dsh + CDP）：吸住时 `top` 相对容器为 0、`position: sticky`、背景不透明；
         推出后 `push = -32px` 且表头完全不可见；反向滚回来重新吸住；两段同开时两条规则两份属性；
         收起第一段后它的规则与属性都消失，只剩第二段的
-- [x] 172 项单元测试，两半 typecheck + 构建通过，全仓库 lint 0 error，`node scripts/exec-process-check.mjs` 全绿
+- [x] **第八轮用户反馈：收敛摘要状态与展开层级**：
+      · 摘要改成紧凑的「思考N次·工具M次·失败K」，没有失败时省略「失败K」，失败计数与其余摘要同色；
+      · segment 或整个 turn 结束后隐藏「最近动作」区，进行中的动作仍显示，呼吸点移到 chevron 左边；
+      · 展开标题背景复用 dsh `TodoPanel` 的 `--dsw-specific-tip`；展开内容由一张按
+        `data-chat-flow-key` 命中的运行时样式表画出连续的 `--dsw-alias-border-l1` 外框，
+        **不移动 React DOM**
+- [x] **第九轮用户反馈：展开后的思考 / 工具调用外框太淡且没有底色**：
+      · 连续 frame 与 inline reasoning 父 wrapper 的描边从 `--dsw-alias-border-l1` 提升到
+        `--dsw-alias-border-l2`，保留中性 fallback，仍用 0.5px 控制视觉重量；
+      · 所有展开 member rows 与 inline reasoning 父 wrapper 增加不透明的 `--dsw-specific-tip` 背景，
+        回退到 `--dsw-alias-bg-base`，深浅主题与 sticky/滚动时都不透底；
+      · 不移动 DOM，不改变连续边框、首尾圆角、sticky 推出或折叠逻辑；单测锁定新 token 与 fallback，
+        并明确禁止 frame 再使用 `border-l1`
+- [x] **第十轮用户反馈：最后一轮最后一条正式消息的分叉按钮仍提示不可用**：
+      · dsh 不只看可见消息，还要求 `turn-tail` 是该 turn 的最后一个 Chat Node；本插件原来的
+        `exec-process-step = formalSeq + 0.2` 排在 dsh 的 `turn-tail = formalSeq + 0.1` 后面，
+        即使该段最终没有内容、组件返回 `null`，节点仍在 Location 索引里，导致 `hasLaterChatNode` 恒为真；
+      · 把段头改到 `+0.04`，严格位于正式消息之后、dsh 的 max-tokens `+0.05` 与 turn-tail `+0.1` 之前，
+        不影响分段，但重新保证 turn-tail 最后、原生分叉可用；
+      · 回归测试锁定 `formal < exec-process-step < max-tokens < turn-tail` 的排序边界
+- [x] 192 项单元测试、两半 typecheck、构建、target oxlint 与范围内 `git diff --check` 全绿
 - [ ] **用户实机验证**：重启 dsh（`pnpm build` + `pnpm dev`）→ 打开一个跑过几轮工具调用的会话 →
-      每条正式消息之间应当只剩一个圆角小框「执行过程 思考 N 次 · 工具调用 M 次 失败 K 最近 xxx」→
-      点开看到原来的思考/工具行、行头吸顶跟着走、**滚过这一段之后表头自己滑走** → 再点收起 →
-      发一条新消息，看运行中是否也是折起的、右侧是否显示「● xxx 进行中」
+      每条正式消息之间应当只剩一个圆角小框「执行过程 思考N次·工具M次」（有失败再显示「·失败K」，
+      已结束段不显示最近动作）→ 点开后标题底色与 todo 面板一致、原来的思考/工具行包在连续细框内，
+      行头吸顶跟着走、**滚过这一段之后表头自己滑走** → 再点收起 →
+      发一条新消息，看运行中是否也是折起的、右侧是否仍显示动作且呼吸点位于 chevron 左边
 
 ## 已完成 · GitHub Copilot 订阅登录插件（`packages/plugins/copilot-auth`）
 
@@ -534,39 +554,19 @@
 > 事实链见 [02-dsh-facts.md](02-dsh-facts.md) §10。
 
 - [x] 新建插件包 `packages/plugins/turn-retry`（`@dsh-remote/dsh-plugin-turn-retry`），**双半**
-- [x] **两个时刻都覆盖**（用户拍板「两者都做」）：
-      ① **这一轮还活着时**：挂 `agent/request-error` 瀑布，用 `ctx.userQuestions` 问一句
-      「自动重试已用尽，是否重新发起？[重试][放弃]」，点重试就返回 `{kind:'retry'}` ——
-      dsh 在**同一 turn、同一 step** 里重跑那次请求（`agent.ts:407` 是一句 `continue`），
-      **不产生多余消息、不丢已完成的工具调用**。
-      ② **这一轮已结束后**：把 `turn/end{kind:'error'}` 折进 session projection `turnRetry`，
-      浏览器半在 `conversation.input.dock`（输入框正上方）画重试横幅。因为是日志投影，
-      **刷新 / 换设备 / 手机睡一小时再回来横幅都还在**
-- [x] **顺序无关**（比原设计更强）：监听器一进来就先 `await next()`，所以无论注册在
-      `llm-retry` 之前还是之后，「自动重试优先、问人兜底」都成立。测试里有一条专门锁这个
-- [x] **事后重试的代价降到最低**：dsh 没有「不追加 user message 就重新推理」的入口（§10.5 三条证据），
-      所以用一条 plugin 溯源 + `form:'notice'` 的短通知，会话里渲染成**一行折叠 context 行**
-      而不是伪造的用户气泡；**刻意不重发原 prompt**（它早就在日志里了）
-- [x] **刻意不碰 `always` 重试策略**：那个策略的意思是「一直恢复下去」，插一个人类决定进去
-      等于把无人值守的恢复变成卡死
-- [x] **询问有超时**（`askTimeoutMs`，默认 10 分钟）：瀑布正拿着 agent 循环，无上限的等待会把
-      「模型请求失败了」变成「这个会话卡死了」。没人应答 / 没有浏览器连着 / 超时 → 返回 `undefined`，
-      dsh 行为与没装本插件时**完全一致**
-- [x] 38 项单元测试（projection fold 13 / 宿主 25），两半 typecheck + 构建通过，lint 0 error
-- [x] 三处产物检查同步加上新插件：`packages/launcher/src/dsh-plugins.ts`、`scripts/pack.mjs`（两张表）；
-      `scripts/dev-stack.mjs` 走 `local-config.mjs` 的目录扫描，无需改动。
-      launcher 的 workspace 依赖也加了一行（绿色包靠它把插件 deploy 进去）
-- [x] **本插件是本仓库第一个运行时 value-import dsh 包的插件**（`createUserMessage`），
-      所以 `@deepseek-ai/dsh-llm` 放在 `dependencies` 而非 `devDependencies` ——
-      `pnpm deploy --prod` 会丢掉 dev 树，而缺失只会在有人按下重试时才暴露
-- [x] 真机冒烟 `node scripts/turn-retry-check.mjs`：临时 DSH_HOME 起一个 dsh，
-      **全部 `--patch` 正常启动**（projection 注册与瀑布签名被接受，没有 FAILED fiber）、
-      `__DSH_BOOT__` 有本插件行、combo bundle 200 且带着槽注册与投影 key、
-      `/turn-retry/retry` 通道带 cookie 时如实拒绝不存在的会话、不带 cookie 401。
-      ⚠️ 这个脚本第一版就栽在「端点在 URL 路径里」上（§10.8），单元测试全绿也发现不了
-- [ ] **用户实机验证**：`pnpm dev` → 制造一次失败（拔网线 / 把代理指到一个黑洞地址）→
-      看到输入框上方出现「上一轮失败了 … [重试]」→ 点它 → 会话继续；
-      以及在场时应当先看到「模型请求失败 … [重试][放弃]」的询问卡片
+- [x] **只保留一个入口**：不再监听 `agent/request-error`，不再调用 `ctx.userQuestions`；
+      自动退避仍完全交给 dsh 自带 `llm-retry`。用户只在 turn 结束后看到输入框上方的持久重试栏。
+- [x] 把 `turn/end{error}` 与可恢复的停止结局折进 session projection `turnRetry`；
+      刷新、换设备或稍后回来仍能看到 `[重试/继续]`。
+- [x] 事后重试使用 plugin 溯源 + `form:'notice'` 的短通知，不重复原 prompt；
+      会话里显示为折叠 context 行，不伪造用户气泡。
+- [x] 删除旧的 `ask` / `askTimeoutMs` 配置、schemastery 依赖与 `dsh-user-questions` 依赖；
+      浏览器横幅也删除「不再提示」，每种结局只剩一个主动作。
+- [x] RPC 仍走 `/turn-retry/retry`，由 dsh 套 Host/Origin 围栏与浏览器认证。
+      `@deepseek-ai/dsh-llm` 继续放在 runtime dependencies，因为按钮点击时要创建 branded message。
+- [x] 投影状态形状未变，`stateVersion` 保持 2。
+- [ ] **用户实机验证**：制造失败后只出现输入框上方横幅，不再弹大询问卡；横幅只有
+      `[重试]` 或 `[继续]`，没有「不再提示」。
 
 ### 第二轮（用户反馈）：长错误装进可滚动的小容器，手动停止后也能接着做
 
@@ -577,7 +577,7 @@
       宽度上限在每张卡自己身上，不声明就铺满整个会话列（比输入框宽 32px、比转录正文宽更多）。
       横幅照抄 dsh 自己 dock 条目的那段几何（`margin:0 auto` + `width: calc(100% - 侧留白×2 -
       dock内缩×4)` + `max-width: calc(卡片上限 - dock内缩×4)`），事实写进 §10.7
-- [x] 高度：横幅改竖排 —— **标题行**（标题 + `[重试/继续]` `[不再提示]`）+ **错误文本自己的滚动容器**
+- [x] 高度：横幅改竖排 —— **标题行**（标题 + 唯一的 `[重试/继续]`）+ **错误文本自己的滚动容器**
       （`max-height:7.5em`、`overflow-y:auto`、`overscroll-behavior:contain`、`pre-wrap` +
       `overflow-wrap:anywhere`），每层都写 `min-width:0`。
       按钮挪到标题行以后，它们的位置不再取决于错误信息有多长
@@ -596,6 +596,21 @@
       冒烟脚本加一条「bundle 里带着 stopped 那半的文案」，`node scripts/turn-retry-check.mjs` 全绿
 - [ ] **用户实机验证**：手动停止一轮 → 输入框上方出现「上一轮被你停止了 …[继续]」→ 点它接着做；
       再制造一次超长错误 → 横幅高度封顶、错误文本在自己的框里滚动、按钮不跑位
+
+### 第三轮（用户反馈）：只保留重试栏，并保护排队消息
+
+> 用户明确取消失败当场的大询问卡，也不需要横幅上的「不再提示」；同时报告点击重试会误发排队消息。
+
+- [x] 删除 `agent/request-error` / `ctx.userQuestions` 整条路径，失败后只显示持久重试栏。
+- [x] 删除「不再提示」按钮及本地 `dismissedTurn` 状态；失败与停止横幅都只剩一个主动作。
+- [x] 查清 bug：`followup` 把 notice 追加到 `nextTurn` 尾部，首步却先领取全部 `nextStep`
+      和 `nextTurn[0]`；失败后已有队列时，点击重试实际先发送旧用户消息。
+- [x] 宿主 fail closed：`nextTurn` 非空时返回 `pending-input`；
+      不调用 `followup`、不改 inbox、不产生新 turn，移除队列后仍可重试；`nextStep` 保持 dsh 原有语义。
+- [x] 50 项单元测试通过，覆盖 nextTurn 拦截、nextStep 放行、冷会话、RPC 返回与单按钮结构；
+      typecheck、构建、`turn-retry-check.mjs` 全绿，bundle 不含「不再提示」。投影形状未变，不 bump `stateVersion`。
+- [ ] **用户实机验证**：失败时先排队一条消息 → 点重试只看到排队提示，队列不减少、消息不进入转录；
+      删除排队消息后再点重试，才开始新的重试 turn。
 
 ## 已完成 · models.dev 模型目录插件（`packages/plugins/models-catalog`）
 
@@ -1078,11 +1093,42 @@
       证明不了注册的是哪五个、schema 转成了什么样。
       客户端产物也在 vm 里跑了一遍，确认只占一个座位、id/order/locale 都对
 - [x] 全仓库 lint **0 error**、typecheck 通过、build 通过、全部测试通过（含既有 600+ 项）
-- [ ] **用户实机验证**：`pnpm dev` → 让 agent `service_start` 起一个前端（例如 `pnpm dev`，带 `port`）
-      → 输入框上方出现「常驻服务」折叠框，展开后是 `名字 :端口 pid 运行时长 命令` +
-      「日志 / 重启 / 停止」三个按钮 → 点日志能看到尾部输出 → 点停止服务真的停掉 →
-      **切换到别的会话再切回来，服务还在**；重启 dsh 后它**仍然在**（这是与 `run_in_background` 的
-      根本差别）。若当前是受限沙箱预设，`service_start` 应当先弹一张审批卡
+
+### 第二轮（用户实机试用）：三个真 bug + 面板打磨
+
+> 用户说「起一个前端让我看看效果」，一用就连爆三个只有真机能发现的问题。
+
+- [x] ⚠️ **bug 1：带 `cwd` 启动的服务成了孤儿**。第一次演示用 `cwd` 把 vite 指到别处，
+      结果 **vite 明明在跑，`service_list` 和面板都说「没有服务」**。根因是注释和实现不一致：
+      注释写着「注册表永远放会话目录」，实现却只传了一个 `cwd`，同时当注册表位置、日志位置和
+      工作目录。于是注册表落在了命令目录，而 list/面板只认会话目录 —— 服务活着但谁也管不到，
+      只能手动 taskkill。改法：拆成 `root`（拥有服务的项目目录，恒为会话目录）与 `cwd`
+      （命令的工作目录），日志跟 `root` 走，重启时从记录里回放 `cwd`
+- [x] ⚠️⚠️ **bug 2：服务活不过 dsh 重启 —— 也就是这个插件的全部卖点是假的**。
+      用户重启 dsh 后服务连同它一起没了。根因：launcher 停 dsh 用 `taskkill /T`，它**按记录的
+      父 pid 递归**杀树，而 Windows 的 `DETACHED_PROCESS` 只解除**控制台**、**不清父 pid**。
+      两条实测约束堵死了单进程解法（孙进程 detach ⇒ pwsh 没 console、日志全空；
+      启动器直接退出 ⇒ 非 detached 的子进程陪葬），最终改成**两级启动器**
+      （L1 起完 L2 就 exit 断链，L2 是 detached 的 node 常驻并托管 pwsh），注册表记 **L2** 的 pid。
+      全程用「假 dsh + `taskkill /T`」探针逐条验证，事实链见 [02-dsh-facts.md](02-dsh-facts.md) §13.8
+- [x] ⚠️ **bug 3（连带发现）：`dsh-remote-web` profile 根本没有 HMR**，所以「改完插件重新构建
+      就生效」是错的 —— 宿主半不重载，浏览器半的 bundle 更是在注册时就被读成不可变快照下发，
+      **连刷新页面都没用**。改完插件必须重启 dsh，改样式也一样（§13.7）
+- [x] 面板按用户反馈打磨四项：① **没有运行中的服务就整个不画**（连「N 个已停止」都不显示）；
+      ② **日志改到屏幕中央的弹窗**（dock 只有几行高，读不了 dev server 的输出）；
+      ③ 标题前加**图标**；④ 背景从 `--dsw-alias-bg-base`（浅色下就是纯白，用户说「太白了」）
+      换成 dsh todo 面板同款的**抬升层** `--dsw-specific-tip`，边框/圆角也对齐它的 0.5px / 12px
+- [x] ②③ 都**向页面借 dsh 自己的东西**而不是自己实现：`Modal` 与 `IconApiOutline14` 来自
+      `@deepseek-ai/dsh-client-ui-primitives`，它在 dsh 的 `PLATFORM_MODULES` 里，
+      所以留成 external、连同已加载的 CSS 一起用，不打进 bundle 变成第二份。
+      冒烟脚本新增两条断言锁住这一点（require 的说明符必须全在模块表里）
+- [x] **70 项单元测试**（新增：跨目录仍可见、活过 `taskkill /T`、两级启动器形状、
+      Windows 走 launcher 交回真 pid），冒烟 **25 项全绿**，全仓库 lint 0 error / 测试全过
+- [ ] **用户实机验证（需重启 dsh 才生效）**：重启后让 agent `service_start` 起一个前端（带 `port`）
+      → 输入框上方出现带图标的「常驻服务」折叠框，底色与 todo 面板一致 →
+      展开是 `名字 :端口 pid 运行时长 命令` + 「日志 / 重启 / 停止」→ 点日志弹出居中弹窗 →
+      点停止后**面板整个消失** → **切换会话再切回来服务还在**，
+      **再重启一次 dsh 它仍然在**（这次才是真的）。受限沙箱预设下 `service_start` 应先弹审批卡
 
 ---
 
@@ -1092,7 +1138,7 @@
 > 指令就不好办了；参考 `D:\dev\pi-agent-chat` 的 `vscode_terminal`，加一个用户可交互的终端
 > （按平台切换 bash 和 pwsh7），让用户能在终端里输入内容」。
 > 核实后发现：**dsh 已经自带了大半**——`ctx.terminals` + `terminal-bash`（真 PTY，
-> `shellDialect` 按平台切 bash/pwsh）+ 六个 `terminal_*` 模型工具，底层 node-pty 的
+> `shellDialect` 按平台切 bash/pwsh）+ 六个上游 `terminal_*` 模型工具，底层 node-pty 的
 > 六平台预编译产物本来就躺在 node_modules 里。事实链见 [02-dsh-facts.md](02-dsh-facts.md) §14。
 
 - [x] ⚠️ **先查清了「dsh 到底缺什么」**，结论是两件事，插件补的就是这两件：
@@ -1109,13 +1155,18 @@
       改成本包的普通 dependencies + 宿主半 `ctx.plugin()`，解析交给 Node，
       绿色包靠 `pnpm deploy --prod` 带进去。工作区是 `nodeLinker: hoisted`，
       全树一份 cordis，`Service` 基类同一性没问题（docs/02 §14.3）
-- [x] **模型侧直接挂 dsh 自带的六个工具**（用户拍板）：零自研代码、行为与官方一致、
-      升级自动跟随；代价是六个 schema + 一段指引常驻在每次请求里，所以做成配置项 `mountTools`
+- [x] **上游实现名保留 `terminal_open/send/read/signal/close/list`，插件只暴露
+      `interactive_terminal_open/send/read/signal/close/list`**。实现是在上游 `apply()` 外包一层
+      fail-closed wrapper：只接受预期六次注册；缺少、重复或未知注册时整组失败，绝不泄漏裸
+      `terminal_*`。代价仍是六个 schema + 一段指引常驻，所以保留配置项 `mountTools`
+- [x] **严格用途约束**：只有交互式 stdin 或终端状态必须跨调用保留时才用
+      `interactive_terminal_*`；普通一次性命令（Git、构建、测试、脚本等）一律用 `pwsh` / `bash`，
+      运行时间长本身不是理由，需要时用 `run_in_background`
 - [x] **人类那半**：`conversation.input.dock`（order 15，在服务面板 10 与 dsh 队列 20 之间）
       加一个可折叠面板 —— 终端画面 + 输入框 + 中断。会话没开过终端时**整个不出现**
 - [x] ⚠️ **安全边界（用户拍板）：面板只能往模型已经开好的终端里打字，不能自己开终端**。
       通道只有 `list` / `read` / `send` / `interrupt` 四个端点，**没有 `open` / `close`** ——
-      造一个 shell 是「凭空多出一份能力」，只能走 turn 里的 `terminal_open`，那里有转录也有审批栈。
+      造一个 shell 是「凭空多出一份能力」，只能走 turn 里的 `interactive_terminal_open`，那里有转录也有审批栈。
       与 `services` 插件「面板刻意没有启动按钮」是同一条取舍；冒烟脚本里有两条专门锁死这一点
 - [x] 顺带查实**不需要再自建沙箱门**（与 `services` 插件不同）：`terminal-bash` 在
       `danger-full-access` 以外的每种模式下都先 `ctx.sandbox.confine()` 再启动 shell，
@@ -1136,11 +1187,11 @@
 - [x] 再补一道 `installStartupRetry`：给**每次**开终端一个独立超时（`startupTimeoutMs`，20 秒）
       并允许重试（`startupAttempts`，3 次）。理由是 `terminal-bash` 用同一个 `timeoutMs`
       兜住「一次发送」和「整个启动」，300 秒的发送预算会让一次失败的开终端挂 5 分钟。
-      ⚠️ 它是打在**本插件自己挂载的那个 registry 实例**上的补丁 —— `terminal_open` 直接调
+      ⚠️ 它是打在**本插件自己挂载的那个 registry 实例**上的补丁 —— 上游实现的 `terminal_open` 直接调
       `spawn`，dsh 没留下拦截接缝；补丁挂在本插件 fiber 上，卸载即还原，且**绝不越过调用方
       自己的 abort**
 - [x] ⚠️ **一次发送可能被拒，而草稿绝不能被清掉**：`ctx.terminals` 同一会话只允许一次发送，
-      第二次**同步抛** `SEND_ACTIVE`。模型那次 `terminal_send` 还在结算时，你敲的密码会撞上它。
+      第二次**同步抛** `SEND_ACTIVE`。模型那次 `interactive_terminal_send`（内部调用上游 `terminal_send`）还在结算时，你敲的密码会撞上它。
       宿主侧因此会**等**（`sendWaitMs`，默认 10 秒，250ms 一试）——模型那次发送在输出静默约
       3 秒后结算，而「停在提示符上等输入」恰好就是这种状态。等不到就返回 `busy: true`，
       页面**保留已输入内容**：一个刚吞掉密码的输入框自己清空，是这个组件唯一不能有的失败方式
@@ -1148,19 +1199,39 @@
       projection 无从折起；而插件又不能 append 自己的事件类型（docs/02 §13.3）。
       轮询按手机 + relay 这条链路调过：列表 5 秒、**画面 1.5 秒且只在展开时**、
       画面带 `revision` 没变化就只回一个短字符串、页面不可见全停、刚发送后 4 秒内加密到 400ms
-- [x] **52 项测试**，其中 `tests/live.spec.ts` 是唯一真起 PTY 的文件，跑的正是本插件的全部主张：
+- [x] **测试覆盖**：其中 `tests/live.spec.ts` 是唯一真起 PTY 的文件，跑的正是本插件的全部主张：
       模型发一条 `Read-Host` / `read -p` → 发送在**命令还等着输入时**就返回
       （`stdin_read` / `inferred_idle`）→ 由本插件的 `sendToTerminal` 把 `hunter2` 送进去 →
       scrollback 里读到 `GOT:[hunter2]`；另有一条真的制造 `SEND_ACTIVE` 并验证「短窗口被拒 +
       等够了就送达」
 - [x] 三处产物检查同步加上新插件：`packages/launcher/src/dsh-plugins.ts`、`scripts/pack.mjs`（两张表）；
       `scripts/dev-stack.mjs` 走 `local-config.mjs` 的目录扫描，无需改动。launcher 的 workspace 依赖也加了一行
-- [x] 真机冒烟 `node scripts/terminal-check.mjs` **25 项全绿**。它比部分兄弟插件多做一步
-      「把宿主产物 import 进来跑一遍 `apply()`」，理由在这里格外硬：**六个工具是 dsh 的、
+- [x] 真机冒烟 `node scripts/terminal-check.mjs` 通过。它比部分兄弟插件多做一步
+      「把宿主产物 import 进来跑一遍 `apply()`」，理由在这里格外硬：**六个实现来自 dsh、插件只允许暴露改名后的六个工具、
       三个包是本插件挂上去的**，而 dsh 没有把工具表暴露成任何 `/api` 方法 ——
-      「dsh 能启动」证明不了挂进去的是哪三个、模型最后看见的是哪六个
-- [ ] **用户实机验证**：`pnpm build` + `pnpm dev` → 让 agent 开一个终端
-      （例如「用 terminal_open 开一个终端，然后在里面跑一条会问我密码的命令」）→
+      「dsh 能启动」证明不了挂进去的是哪三个、模型是否只看见 `interactive_terminal_*`、看不见裸 `terminal_*`
+- [x] **真实浏览器里的活体验收**（隔离 dsh + 临时 home + CDP 驱动的真 Chrome；脚手架在被 git
+      忽略的 `.dev/`，含一个只在验收时挂载的探针 —— 因为面板**刻意没有**开终端的能力）。
+      走通的是完整一条线：面板出现 → 默认折叠 → 展开看到真 shell 输出 → 往输入框打字 → 回车 →
+      **在终端画面里读回自己打的那串** → 输入框被清空 → 深浅两套主题下 computed 值不同
+      （浅 `rgb(255,255,255)` / 深 `rgb(21,21,23)`）→ 页面零未捕获报错。**连跑六次全绿**
+- [x] ⚠️ 这轮验收逼出了**两个只在页面上才成立的缺陷**，都已修：
+      · **`--dsw-font-mono` 从来没被 dsh 定义过**。名字是对的（AGENTS.md 也一直这么写），
+        但在真页面里 `getPropertyValue('--dsw-font-mono')` 返回**空串**；回头对源码发现
+        全 `packages/client/**` **引用四处、定义零处**，连 dsh 自己都一直在吃兜底
+        （`ui-jobs` 那处甚至没写兜底，等于什么都没设）。所以兜底才是真正渲染的值 ——
+        已改成 dsh 自己那条完整栈 `ui-monospace, SFMono-Regular, Menlo, monospace`
+        （只写 `ui-monospace, monospace` 在 Windows 上直接落到浏览器默认 fixed 字体）。
+        **教训**：§8.6 那套「名字有没有写错」的检查查不出这一类，只有在真页面里问一句
+        `getPropertyValue()` 才知道。记进 docs/02 §8.6b
+      · ⚠️⚠️ **一次「答不上来」的轮询会把整个面板卸载掉，连用户正在打的草稿一起丢**。
+        二十次验收里出现一次：`unavailable: 'no-agent'`（会话重挂的一瞬间 agent 不在）
+        被当成了「没有终端」。这正是本插件反复强调的那个失败（绝不能自己清空输入框），
+        只是换了个入口。修法是把这个判断提成 `src/shared.ts` 里的纯函数 `foldPoll`：
+        **只认确定的答案** —— 模型关掉终端时面板立刻消失，而连续三次答不上来才清空；
+        另配 6 项单元测试。**教训**：把「会丢用户输入」的状态机留在组件里，就没人测得了它
+- [ ] **用户实机验证**：`pnpm build` + `pnpm dev`（⚠️ 必须重启 dsh，刷新页面没用）→
+      让 agent 开一个终端（例如「用 interactive_terminal_open 开一个终端，然后在里面跑一条会问我密码的命令」）→
       输入框上方出现「交互终端」折叠框，展开后是终端画面 + 输入框 →
       命令停在提示上时**你自己输入并回车**，看到它继续往下跑 →
       再试一次「中断」按钮 → 切到别的会话再切回来，面板跟着会话走

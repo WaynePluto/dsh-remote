@@ -76,8 +76,9 @@ dsh 的 web profile 挂的是**会真正约束的** shell 执行器
 
 ## 面板为什么是轮询的
 
-`conversation.input.dock` 是 list 槽，本插件在里面并列加一个可折叠条目（order 10，
-在 dsh 自己的 todo=0 与队列=20 之间）。数据走**轮询**，不是 session projection。
+`conversation.input.dock`（**输入区停靠区**，dsh 自己的说法是「Full-width entries above the
+composer card」）是 list 槽，本插件在里面并列加一个可折叠条目（order 10，在 dsh 自己的
+todo=0 与队列=20 之间）。数据走**轮询**，不是 session projection。
 两个独立的理由，缺一条都不足以推翻，两条叠加则完全堵死：
 
 1. **插件不能往会话日志里写自己的事件类型。** `Session.append()` 没有 `ignorable` 参数
@@ -95,6 +96,24 @@ dsh 的 web profile 挂的是**会真正约束的** shell 执行器
 ⚠️ 运行时长用的是 **host 的时钟**（`ServicesSnapshot.now`）：页面渲染
 `snapshot.now - startedAt + (本地现在 - 收到时刻)`，把一次绝对的宿主测量和一次纯本地的
 流逝测量拼起来，**从不跨两台机器做减法** —— 睡了一觉的手机时钟差几分钟是常态。
+
+### 面板的三条呈现规则
+
+- **没有运行中的服务就整个不画**（连「N 个已停止」都不显示）。dock 夹在转录和输入框之间，
+  放在那里的东西每一轮都在占用户的竖直空间，一个「没有东西在跑」的框没有挣到这个位置。
+  服务死了要看日志，走 `service_logs` 工具。
+- **日志开在 dsh 自己的 `Modal` 里**，不是行下面。dock 只有几行高，塞不下一个 dev server 的输出。
+  `Modal` 来自 `@deepseek-ai/dsh-client-ui-primitives` —— 它在 dsh 的 `PLATFORM_MODULES` 里，
+  所以是**向页面借的**（连同它已经加载的 CSS），不是打进 bundle 的第二份；遮罩、模糊、
+  Esc 关闭、body portal 全都跟着来，也就不会被 dock 的 `overflow: hidden` 裁掉。
+- **弹窗宽度是量出来的，高度是固定的**。宽度取会话消息宽度的 80%（见下）；高度是
+  `min(60vh, calc(100vh - 240px))`。⚠️ **固定高度而不是 `max-height`**：用最大值时框会随内容长，
+  弹窗先以「正在读取日志…」的小尺寸打开、日志一到就跳一下；路径行同理（加载时不存在、
+  到达后凭空多一行），所以它**恒定渲染并预留高度**。而那个 `min()` 不是装饰 ——
+  `.root` 是 `position: fixed` + 居中、`.dialog` 又没有 `max-height`，视口低于约 555px 时
+  裸 `60vh` 会让卡片**上下都被裁掉、且顶部点不到**（没有东西可滚）。
+- **标题前的图标同样是借的**：`IconApiOutline14`（一个圆角方框里的 `>` 和 `_`，
+  正好就是「一条常驻 shell 命令」），与 dsh todo 面板的 14px 图标同一套语汇、同一个尺寸。
 
 ---
 
@@ -116,10 +135,12 @@ dsh 的 web profile 挂的是**会真正约束的** shell 执行器
 
 ---
 
-## Windows 上那一层 node 启动器
+## Windows 上那两级 node 启动器
 
-`shellInvocation()` 在 Windows 上返回的是「用 node 起一个薄启动器，再由它去起真正的 shell」。
-看着绕，但三条实测结论把其他路都堵死了：
+`shellInvocation()` 在 Windows 上返回的是「node 起 L1 → L1 起 L2 → L2 起真正的 shell」。
+看着离谱，但每一层都是被实测逼出来的。
+
+### 第一层原因：detached 起不来 pwsh，所以需要一个 node 中转
 
 1. Node 的 `shell: true` 与 `detached: true` 在 Windows 上**不兼容**：命令不执行、输出全丢，
    退出码却是 0。
@@ -128,8 +149,32 @@ dsh 的 web profile 挂的是**会真正约束的** shell 执行器
 3. `cmd.exe` 在 detached 下能执行命令，但**不把子进程的 stdout/stderr 转发到继承的文件句柄**，
    日志永远是空的 —— 而日志是这个插件存在的意义。
 
-node 本身在 detached 下一切正常，所以用它做一层启动器，真正的 shell 就变回一个 stdio 正常的
-普通子进程。启动器随子进程退出，所以它的存活就代表服务的存活。
+### ⚠️⚠️ 第二层原因：`detached` 挡不住 `taskkill /T`（第一版就栽在这里）
+
+第一版只有一级启动器，这份 README 当时写着「活过 dsh 重启」—— **那是假的**：
+用户实机重启一次 dsh，服务就连同它一起没了，日志里 vite 正常启动、没有任何报错就消失。
+
+- launcher 停 dsh 用的是 `taskkill /pid <dsh> /T /F`（`packages/launcher/src/supervisor.ts:76`）。
+- `/T` 是**按记录的父 pid 递归**杀树，而 `DETACHED_PROCESS` 只解除**控制台**、**不清父 pid**。
+  所以「detached 的服务」在进程表里仍然是 dsh 的直接子进程，`/T` 一路走下来照杀不误。
+
+两条实测约束把所有单进程解法都堵死了：**孙进程不能 detach**（回到上面第 2 条，日志全空）、
+**启动器又不能直接退出**（Windows 上非 detached 的子进程活不过父进程退出 —— Node 文档对
+`detached` 的措辞正是「makes it possible for the child process to continue running after the
+parent exits」）。于是：
+
+```
+dsh → L1(node, detached, 起完 L2 立刻 exit) → L2(node, detached, 常驻) → pwsh(普通子进程)
+```
+
+- **L1 退出** ⇒ L2 的父 pid 指向一个已经不存在的进程 ⇒ 从 dsh 出发的 `/T` 枚举不到它。
+- **L2 是 node**，不需要 console，所以 detach 它没有代价；pwsh 作为 L2 的普通子进程仍有 console。
+- 注册表记的是 **L2 的 pid**（L2 经 sidecar 文件交回）：L2 在 shell 退出时才退出，
+  所以「L2 活着」就等于「服务活着」，`killTree(L2)` 也正好带走 shell 及其全部后代。
+  ⚠️ **不能记 L1 的 pid** —— 它几毫秒后就没了，`identify()` 会一律报 `gone`。
+
+`tests/live.spec.ts` 里有一条专门锁这个：起一个子进程、由它启动服务，再对**这个子进程**
+`taskkill /T /F`，然后断言服务仍然存活且仍被注册表认得。
 
 ### ⚠️ `-NoProfile` 是必需的，不是讲究
 

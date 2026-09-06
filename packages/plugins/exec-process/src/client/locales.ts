@@ -31,16 +31,16 @@ export type ExecProcessKey = keyof typeof en
 /** Simplified Chinese copy. */
 export const zh: Record<ExecProcessKey, string> = {
   label: '执行过程',
-  thinking: '思考 {count} 次',
-  tools: '工具调用 {count} 次',
-  failures: '失败 {count}',
-  lastTool: '最近 {name}',
-  lastThinking: '最近 思考',
-  // 「进行中」跟在名字后面，因为它是谓语（「pwsh 进行中」），而「最近」是状语
-  // （「最近的是 read」）—— 两个词各自待在中文里该待的位置，不为了对齐而拧着写。
-  runningTool: '{name} 进行中',
+  thinking: '思考{count}次',
+  tools: '工具{count}次',
+  failures: '失败{count}',
+  lastTool: '最近{name}',
+  lastThinking: '最近思考',
+  // 「进行中」跟在名字后面（「pwsh进行中」），「最近」直接贴动作名
+  // （「最近read」）；这两段由布局间距与计数摘要分开。
+  runningTool: '{name}进行中',
   runningThinking: '思考中',
-  separator: ' · ',
+  separator: '·',
   expand: '展开这一轮的执行过程',
   collapse: '收起这一轮的执行过程',
 }

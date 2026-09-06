@@ -1,6 +1,8 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { isPidAlive, readRegistry } from '../src/core.js'
 import { logsOf, refresh, snapshot, startService, stopService } from '../src/manager.js'
@@ -65,6 +67,7 @@ describe('a real detached service', () => {
     const started = await startService({
       name: 'probe',
       command: stayAlive('SERVICE-UP'),
+      root,
       cwd: root,
       readyLog: 'SERVICE-UP',
       readyTimeoutMs: 30_000,
@@ -114,11 +117,13 @@ describe('a real detached service', () => {
   it('refuses a duplicate name instead of starting a second copy', async () => {
     const root = project()
     const first = await startService({
-      name: 'dup', command: stayAlive('UP'), cwd: root, readyLog: 'UP', readyTimeoutMs: 30_000,
+      name: 'dup', command: stayAlive('UP'), root, cwd: root, readyLog: 'UP', readyTimeoutMs: 30_000,
     })
     expect(first.ok).toBe(true)
     try {
-      const second = await startService({ name: 'dup', command: stayAlive('UP'), cwd: root, readyTimeoutMs: 1000 })
+      const second = await startService({
+        name: 'dup', command: stayAlive('UP'), root, cwd: root, readyTimeoutMs: 1000,
+      })
       expect(second.ok).toBe(false)
       expect(second.message).toContain('已在运行')
       // Still exactly one row, and it is the original pid.
@@ -129,11 +134,109 @@ describe('a real detached service', () => {
     }
   }, 90_000)
 
+  it('stays visible in the owning project when the command runs somewhere else', async () => {
+    // The regression this locks was found by actually using the plugin: a
+    // service started with its own `cwd` wrote its registry next to the
+    // COMMAND, so `service_list` (which only knows the session's directory)
+    // reported "no services" while vite was demonstrably serving requests.
+    const root = project()
+    const elsewhere = project()
+
+    const started = await startService({
+      name: 'remote-cwd',
+      command: stayAlive('UP'),
+      root,
+      cwd: elsewhere,
+      readyLog: 'UP',
+      readyTimeoutMs: 30_000,
+    })
+    try {
+      expect(started.ok).toBe(true)
+      // Visible from the OWNING project…
+      expect(snapshot(root).services.map(s => s.name)).toEqual(['remote-cwd'])
+      expect(logsOf(root, 'remote-cwd').tail).toContain('UP')
+      // …and the working directory is still honoured and remembered.
+      expect(started.record?.cwd).toBe(elsewhere)
+      // …while the command's own directory stays clean: no stray registry, no
+      // stray log directory to strand a service in.
+      expect(readRegistry(elsewhere).services).toEqual([])
+      expect(existsSync(join(elsewhere, '.agents'))).toBe(false)
+    } finally {
+      stopService(root, 'remote-cwd')
+    }
+  }, 90_000)
+
+  it('survives a taskkill /T of the process that started it', async () => {
+    // THE headline promise, and the one that was silently false. Stopping dsh
+    // is literally `taskkill /pid <dsh> /T /F`
+    // (`packages/launcher/src/supervisor.ts:76`), and on Windows
+    // `detached: true` does NOT clear the recorded parent pid that `/T` walks —
+    // so a merely-detached service died on every dsh restart. This test starts
+    // a service from a CHILD process and then tree-kills that child, which is
+    // exactly what the launcher does to dsh.
+    const root = project()
+    const parentFile = join(root, 'parent.mts')
+    const managerUrl = pathToFileURL(join(import.meta.dirname, '..', 'src', 'manager.ts')).href
+    writeFileSync(parentFile, [
+      `import { startService } from ${JSON.stringify(managerUrl)}`,
+      `const command = ${JSON.stringify(stayAlive('UP'))}`,
+      `const started = await startService({ name: 'orphan', command,`,
+      `  root: ${JSON.stringify(root)}, cwd: ${JSON.stringify(root)},`,
+      `  readyLog: 'UP', readyTimeoutMs: 30000 })`,
+      `console.log('SERVICE_PID=' + started.record.pid)`,
+      `setInterval(() => {}, 1000)`,
+    ].join('\n'), 'utf8')
+
+    // `tsx`, not `--experimental-strip-types`: this package's sources import
+    // each other with `.js` specifiers, which only a resolving loader maps back
+    // onto the `.ts` files. (Getting this wrong makes the child print nothing,
+    // which looks exactly like the feature failing.)
+    const parent = spawn(process.execPath, ['--import', 'tsx', parentFile], {
+      cwd: join(import.meta.dirname, '..'),
+      stdio: ['ignore', 'pipe', 'inherit'],
+    })
+    let servicePid = 0
+    try {
+      servicePid = await new Promise<number>((resolve, reject) => {
+        let out = ''
+        const timer = setTimeout(() => { reject(new Error(`no service pid:\n${out}`)) }, 60_000)
+        parent.stdout.on('data', (chunk: Buffer) => {
+          out += String(chunk)
+          const match = /SERVICE_PID=(\d+)/u.exec(out)
+          if (match === null) return
+          clearTimeout(timer)
+          resolve(Number(match[1]))
+        })
+      })
+      expect(isPidAlive(servicePid)).toBe(true)
+
+      // Exactly how the launcher stops dsh.
+      if (process.platform === 'win32') {
+        spawnSync('taskkill', ['/pid', String(parent.pid), '/T', '/F'], { stdio: 'ignore' })
+      } else {
+        parent.kill('SIGKILL')
+      }
+      for (let attempt = 0; attempt < 30 && isPidAlive(parent.pid as number); attempt++) {
+        await new Promise<void>((resolve) => { setTimeout(resolve, 100) })
+      }
+      expect(isPidAlive(parent.pid as number)).toBe(false)
+      // Give the OS the same grace a real tree kill would have had.
+      await new Promise<void>((resolve) => { setTimeout(resolve, 1500) })
+
+      expect(isPidAlive(servicePid)).toBe(true)
+      // …and it is still the registry's service, not an unrecognised stray.
+      expect(snapshot(root).services.map(item => item.name)).toEqual(['orphan'])
+    } finally {
+      if (servicePid > 0) stopService(root, 'orphan')
+    }
+  }, 120_000)
+
   it('reports a command that dies immediately and leaves no phantom row', async () => {
     const root = project()
     const result = await startService({
       name: 'crash',
       command: nodeCommand("console.error('BOOM');process.exit(3)"),
+      root,
       cwd: root,
       readyLog: 'never-appears',
       readyTimeoutMs: 30_000,

@@ -8,7 +8,7 @@
  *     `-terminal-bash` / `-tool-terminal`）。它们解析不到、版本对不上、或者
  *     `terminals` 服务被别处抢先注册，都是**启动即 fiber FAILED**，单元测试全绿也
  *     看不见。所以「dsh 打印出带 token 的地址」这一条在这里分量最重。
- *   · **六个 `terminal_*` 工具来自 dsh，不是本仓库写的**，而 dsh 没有把工具表暴露成
+ *   · **六个上游 `terminal_*` 工具来自 dsh；本插件只改名为 `interactive_terminal_*`，不重写执行逻辑**，而 dsh 没有把工具表暴露成
  *     任何 `/api` 方法。要确认它们真的进了模型看得见的那张表，只能把宿主产物 import
  *     进来跑一遍 `apply()`，看 `ctx.tools.register` 到底收到了什么。
  *
@@ -35,10 +35,14 @@ const BASE = `http://${AUTHORITY}`
 /** 独立的 home：不碰用户正在用的 ~/.dsh，也不和正在跑的 dsh 抢会话文件。 */
 const HOME = join(DEV_DIRECTORY, 'terminal-check-home')
 
-/** dsh 自己的六个终端工具，全部应当出现在模型的工具表里。 */
-const TOOL_NAMES = [
+/** dsh 上游六个原名；wrapper 必须确保它们不出现在模型工具表。 */
+const UPSTREAM_TOOL_NAMES = [
   'terminal_open', 'terminal_send', 'terminal_read',
   'terminal_signal', 'terminal_close', 'terminal_list',
+]
+const TOOL_NAMES = [
+  'interactive_terminal_open', 'interactive_terminal_send', 'interactive_terminal_read',
+  'interactive_terminal_signal', 'interactive_terminal_close', 'interactive_terminal_list',
 ]
 
 /** 本插件通道上的全部端点。 */
@@ -144,16 +148,17 @@ async function callChannel(method, payload, cookie) {
 /**
  * 在本进程里加载**宿主构建产物**，跑一遍 `apply()`，看它到底挂了什么。
  *
- * 为什么必须做这一步：本插件自己一个模型工具都没写，六个 `terminal_*` 全部来自
+ * 为什么必须做这一步：本插件自己一个执行逻辑都没写，六个上游 `terminal_*` 全部来自
  * `@deepseek-ai/dsh-tool-terminal`，而**这三个包是本插件用 `ctx.plugin()` 挂进去的**。
  * 「dsh 能启动」只证明没抛错，证明不了挂的是哪三个、工具表里最后有哪六个。
- * @returns {Promise<{ tools: object[], channels: string[], plugins: unknown[], disposers: number, module: object }>}
+ * @returns {Promise<{ tools: object[], sections: object[], channels: string[], plugins: unknown[], disposers: number, module: object }>}
  */
 async function inspectHostBundle() {
   const entry = join(ROOT, 'packages', 'plugins', 'terminal', 'dist', 'index.js')
   const module = await import(pathToFileURL(entry).href)
 
   const tools = []
+  const sections = []
   const channels = []
   const plugins = []
   const mountFailures = []
@@ -172,7 +177,7 @@ async function inspectHostBundle() {
     tools: { register: (definition) => { tools.push(definition); return noop } },
     connection: { rpc: { handle: (channel) => { channels.push(channel); return noop } } },
     agents: { get: () => undefined },
-    systemPrompt: { section: () => noop, getSectionOrder: () => 0 },
+    systemPrompt: { section: (definition) => { sections.push(definition); return noop }, getSectionOrder: () => 0 },
     terminals: { registerBackend: () => noop, listBackends: () => [], list: () => [] },
     jobs: undefined,
     effect: (run) => {
@@ -202,7 +207,7 @@ async function inspectHostBundle() {
     },
   })
   module.apply(makeCtx(), new module.Config({}))
-  return { tools, channels, plugins, disposers, mountFailures, module }
+  return { tools, sections, channels, plugins, disposers, mountFailures, module }
 }
 
 /**
@@ -251,10 +256,20 @@ async function main() {
   const artifact = await inspectHostBundle()
   const registered = artifact.tools.map(tool => tool.name)
   const missing = TOOL_NAMES.filter(tool => !registered.includes(tool))
-  check(missing.length === 0, '宿主产物的 apply() 让 dsh 的六个 terminal_* 工具进了工具表',
+  const leaked = UPSTREAM_TOOL_NAMES.filter(tool => registered.includes(tool))
+  const open = artifact.tools.find(tool => tool.name === 'interactive_terminal_open')
+  const guidance = artifact.sections.find(section => section.name === 'tool:pty')?.text ?? ''
+  check(missing.length === 0 && leaked.length === 0 && registered.length === TOOL_NAMES.length, '宿主产物只暴露六个 interactive_terminal_* 工具',
     missing.length === 0
       ? `实际：${registered.join('、')}`
       : `缺 ${missing.join('、')}${artifact.mountFailures.length === 0 ? '' : `；挂载失败：${artifact.mountFailures.join(' | ')}`}`)
+  check(leaked.length === 0, '没有泄漏任何上游 terminal_* 别名', leaked.join('、'))
+  check(open?.description?.includes('ordinary one-shot commands') === true
+    && open.description.includes('pwsh') && open.description.includes('run_in_background'),
+  'interactive_terminal_open 自身描述禁止普通一次性命令')
+  check(guidance.includes('interactive_terminal_*') && guidance.includes('one-shot commands')
+    && guidance.includes('run_in_background'), 'PTY 系统指引明确交互终端边界')
+
   check(artifact.plugins.length === 3, '挂载了三个 dsh 包（registry / backend / tools）',
     `共 ${artifact.plugins.length} 个`)
   check(artifact.channels.includes('/terminal'), '宿主产物挂上了 /terminal 通道',
@@ -330,7 +345,7 @@ async function main() {
     )
 
     // 面板刻意没有 open / close 端点：造一个 shell 是「凭空多出一份能力」，
-    // 只能走 turn 里的 terminal_open，那里有转录也有审批栈。
+    // 只能走 turn 里的 interactive_terminal_open（包装上游 terminal_open），那里有转录也有审批栈。
     for (const forbidden of ['open', 'close']) {
       const attempt = await callChannel(forbidden, { sessionId: 'x', terminalId: 'pty-1' }, cookie)
       check(

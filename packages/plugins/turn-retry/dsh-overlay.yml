@@ -12,13 +12,8 @@
 # （dsh 源码 apps/cli/src/profile-boot.ts 的 allPatches）。`--patch` 在最后，所以本行插入之后
 # 只有**再后面的 `--patch`** 能按 id 覆盖它的 config；没有 id 就谁也改不了。
 #
-# 关于 `agent/request-error` 瀑布上的顺序：本插件与 dsh 自带的 `llm-retry` 都挂在这个瀑布上，
-# 但**顺序不是本插件的正确性前提**。它的监听器一进来就先 `await next()`：
-#   · 排在 llm-retry 之后（实际情况，bundle 层先加载）→ next() 只剩默认值，llm-retry 已经
-#     用尽预算或判定不可重试才会轮到我们；
-#   · 万一排在它之前 → next() 会把 llm-retry 跑完，它要重试就返回 {kind:'retry'}，我们原样放行，
-#     只有它放弃时才轮到问用户。
-# 两种顺序下「自动重试优先、问人兜底」都成立，所以这一行的位置可以随便挪。
+# 本插件只注册持久的 turn projection 和重试 RPC；失败当场不弹 userQuestions。
+# 自动重试仍完全由 dsh 自带的 llm-retry 负责。
 - insert:
     - id: turn-retry
       name: './dist/index.js'

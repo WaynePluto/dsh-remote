@@ -8,8 +8,13 @@ const ID = '@dsh-remote/dsh-plugin-services'
  * (`packages/client/web/src/platform.ts` → `PLATFORM_MODULES`). Only these may
  * stay imports in the browser bundle; anything else must be inlined or the
  * loader throws at boot.
+ *
+ * `@deepseek-ai/dsh-client-ui-primitives` is on that list, which is what lets
+ * this plugin use dsh's own `Modal` and icon set instead of reimplementing
+ * them: the page hands over the exact components — and their already-loaded
+ * CSS — rather than a second copy that would drift from dsh's own panels.
  */
-const MODULE_TABLE = ['react', 'react/jsx-runtime']
+const MODULE_TABLE = ['react', 'react/jsx-runtime', '@deepseek-ai/dsh-client-ui-primitives']
 
 export default defineConfig([
   // Host half: the module dsh-overlay.yml inserts.

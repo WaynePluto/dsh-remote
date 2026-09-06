@@ -303,34 +303,78 @@ export function reportedIdentity(identity: Identity): ServiceIdentity {
 export interface StartOptions {
   name: string
   command: string
+  /**
+   * The project directory that OWNS this service: where its registry row and
+   * its log file live. Always the session's project directory.
+   *
+   * Separate from {@link cwd} on purpose. A service may legitimately run
+   * somewhere else (a sub-package, a sibling checkout), but if the registry
+   * followed the command's directory then one project would have as many
+   * service lists as it had working directories — and `service_list`, which
+   * only knows the session's directory, would report "no services" while the
+   * service was demonstrably running. That is not hypothetical: it is exactly
+   * what happened the first time this plugin was pointed at a `cwd` of its own.
+   */
+  root: string
+  /** Working directory the command itself runs in; defaults to {@link root}. */
   cwd: string
   port?: number
   shell?: string
 }
 
 /**
- * Spawn one service, detached, with both streams redirected into its log.
+ * Spawn one service so that it outlives this process, and report the pid that
+ * actually holds the work.
  *
- * `detached: true` is required, not an optimisation: a child that stays in the
- * process tree dies with dsh, and outliving dsh is the entire point.
+ * ⚠️ ON WINDOWS, `detached: true` IS NOT ENOUGH — this is the single most
+ * important fact in this file, and it was found by actually restarting dsh.
+ * `DETACHED_PROCESS` detaches the CONSOLE; it does **not** clear the child's
+ * recorded parent pid. `taskkill /T` builds its tree by walking exactly that
+ * field, and stopping dsh is literally
+ * `taskkill /pid <dsh> /T /F` (`packages/launcher/src/supervisor.ts:76`,
+ * `scripts/dev-stack.mjs:136`). So a merely-detached service was a direct child
+ * of dsh and died on every dsh restart — the exact promise this plugin exists
+ * to make.
+ *
+ * Two measured constraints then close off every one-process fix:
+ *
+ * - The shell cannot be detached: with no console, **pwsh exits instantly and
+ *   writes nothing**, so the log stays empty.
+ * - A launcher cannot simply exit: on Windows a non-detached child does not
+ *   survive its parent's exit, so the shell dies with it.
+ *
+ * Hence two launcher stages (see {@link WINDOWS_STAGE1}, {@link WINDOWS_STAGE2}):
+ * stage 1 starts stage 2 detached and exits, breaking the parent chain; stage 2
+ * is `node` (which does not need a console), stays alive, and hosts the shell as
+ * an ordinary child so the shell keeps one. The recorded pid is STAGE 2's,
+ * because stage 2 exits exactly when the shell does — its liveness is the
+ * service's liveness, and `killTree` on it removes the shell and everything the
+ * shell started.
+ *
+ * (POSIX needs none of this: `detached` there performs a real `setsid()`, and
+ * dsh is stopped with a plain signal to its own pid rather than a tree kill.)
  *
  * stdout and stderr share ONE file descriptor so their interleaving is the real
  * order of events. Splitting them into two files loses "which line came before
  * the error", which is the single most useful fact when a server fails to come
- * up.
+ * up. The handles reach the shell because each stage inherits them in turn.
  * @param options - name, command, directory, and optional port/shell.
  * @returns the registry row describing the spawned process.
- * @throws Error When the platform returns no pid.
+ * @throws Error When no usable pid could be obtained.
  */
-export function startProcess(options: StartOptions): ServiceRecord {
-  const logFile = logPath(options.cwd, options.name)
+export async function startProcess(options: StartOptions): Promise<ServiceRecord> {
+  // The log belongs to the OWNING project, not to wherever the command runs —
+  // `listLogNames` and `service_logs` both look under the owning project, so a
+  // log written next to the command would be unreadable by either.
+  const logFile = logPath(options.root, options.name)
   fs.mkdirSync(path.dirname(logFile), { recursive: true })
   // Truncate rather than append: each run owns its log, so the readiness probe
   // and the tail both describe THIS attempt and not the last one.
   const fd = fs.openSync(logFile, 'w')
   const invocation = shellInvocation(options.command, options.shell)
+  const pidFile = `${logFile}.${String(process.pid)}.pid`
   try {
-    const child = spawn(invocation.file, invocation.args, {
+    const child = spawn(invocation.file, [...invocation.args, ...invocation.viaLauncher ? [pidFile] : []], {
       cwd: options.cwd,
       detached: true,
       stdio: ['ignore', fd, fd],
@@ -341,11 +385,12 @@ export function startProcess(options: StartOptions): ServiceRecord {
     })
     child.unref()
     if (child.pid === undefined) throw new Error('spawn returned no pid')
+    const pid = invocation.viaLauncher ? await readLaunchedPid(pidFile) : child.pid
     return {
       name: options.name,
       command: options.command,
       cwd: options.cwd,
-      pid: child.pid,
+      pid,
       startedAt: Date.now(),
       logFile,
       ...options.port === undefined ? {} : { port: options.port },
@@ -363,23 +408,107 @@ export interface ShellInvocation {
   args: string[]
   /** The shell the command really runs in — i.e. which dialect it must be written in. */
   shell: string
+  /**
+   * Whether {@link file} is the throwaway launcher rather than the service.
+   *
+   * When true the caller must append a sidecar path to {@link args} and read
+   * the real pid back from it, because `child.pid` is a process that exits
+   * within milliseconds.
+   */
+  viaLauncher: boolean
 }
 
 /**
- * The Windows launcher: a detached `node` that re-spawns the real command as an
- * ordinary child, so the child gets a normal stdio setup.
+ * How long to wait for the launcher to report the real pid.
  *
- * argv[1] is a JSON blob describing the spawn: `f` the executable (or the whole
- * command line in shell mode), `a` its argument vector, and `s` whether to let
- * Node's `shell: true` interpret `f`. JSON rather than positional arguments
- * because the argument vector is variable-length and contains quotes; Node
- * applies the standard Windows CRT quoting when it spawns this launcher, and
- * `JSON.parse` undoes it exactly.
+ * Generous because it covers process creation on a loaded machine, and cheap
+ * because the normal case resolves on the first or second poll.
  */
-const WINDOWS_LAUNCHER =
-  'const{spawn}=require("child_process");'
+const PID_HANDOFF_TIMEOUT_MS = 15_000
+
+/**
+ * Read the pid stage 2 recorded for itself, then delete the sidecar.
+ *
+ * The handoff is a file rather than stdout because stdout is the service's log
+ * and must contain only the service's own output. It is needed at all because
+ * `child.pid` here is stage 1, which exits within milliseconds and would make
+ * every later `identify()` report `gone`.
+ * @param pidFile - path stage 2 writes.
+ * @returns the hosting process's pid.
+ * @throws Error When no usable pid was reported in time.
+ */
+async function readLaunchedPid(pidFile: string): Promise<number> {
+  const deadline = Date.now() + PID_HANDOFF_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    try {
+      const raw = fs.readFileSync(pidFile, 'utf8').trim()
+      if (raw !== '') {
+        fs.rmSync(pidFile, { force: true })
+        const pid = Number(raw)
+        if (Number.isInteger(pid) && pid > 0) return pid
+        throw new Error('service launcher reported no usable pid')
+      }
+    } catch (error: unknown) {
+      // A missing file is the normal "not yet" case; anything else is real.
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+    await delay(20)
+  }
+  fs.rmSync(pidFile, { force: true })
+  throw new Error('timed out waiting for the service launcher to report its pid')
+}
+
+/**
+ * Windows launcher, stage 2: the process that HOSTS the service.
+ *
+ * It records its own pid, starts the real shell as an ORDINARY (non-detached)
+ * child, and lives exactly as long as that shell does. Both halves of that are
+ * forced:
+ *
+ * - The shell must NOT be detached. `DETACHED_PROCESS` leaves it without a
+ *   console, and **pwsh needs a console**: measured, it exits instantly and
+ *   writes nothing, so the log — the entire point of this plugin — stays empty.
+ * - Stage 2 must therefore STAY ALIVE, because on Windows a non-detached child
+ *   does not survive its parent's exit (Node documents `detached` as what
+ *   "makes it possible for the child process to continue running after the
+ *   parent exits", and measurement agrees: the shell died the instant an
+ *   exiting launcher was tried).
+ *
+ * It reports ITS OWN pid rather than the shell's, which is what makes the
+ * registry honest: stage 2 exits when the shell exits, so its liveness IS the
+ * service's liveness, and `killTree` on it takes down the shell and everything
+ * the shell started.
+ *
+ * argv[1] is the spawn plan as JSON; argv[2] is the sidecar path.
+ */
+const WINDOWS_STAGE2 =
+  'const{spawn}=require("child_process"),fs=require("fs");'
   + 'const s=JSON.parse(process.argv[1]);'
-  + 'spawn(s.f,s.a,{...(s.s?{shell:true}:{}),stdio:["ignore","inherit","inherit"],windowsHide:true});'
+  + 'fs.writeFileSync(process.argv[2],String(process.pid));'
+  + 'const c=spawn(s.f,s.a,{...(s.s?{shell:true}:{}),'
+  + 'stdio:["ignore","inherit","inherit"],windowsHide:true});'
+  + 'c.on("exit",()=>process.exit(0));'
+
+/**
+ * Windows launcher, stage 1: the process that BREAKS THE CHAIN.
+ *
+ * It starts stage 2 detached and then exits immediately. That exit is the whole
+ * reason this stage exists: dsh is stopped with `taskkill /pid <dsh> /T /F`
+ * (`packages/launcher/src/supervisor.ts:76`), and `/T` builds its tree by
+ * walking recorded parent pids. Once stage 1 is gone, stage 2's parent is a pid
+ * that no longer exists, so the walk from dsh cannot reach it — while stage 2,
+ * being detached, survives stage 1 perfectly well.
+ *
+ * Stage 2 is `node`, which — unlike pwsh — does not care about having no
+ * console, so detaching it costs nothing.
+ *
+ * argv[1] is stage 2's source, argv[2] the plan JSON, argv[3] the sidecar path.
+ */
+const WINDOWS_STAGE1 =
+  'const{spawn}=require("child_process");'
+  + 'const c=spawn(process.execPath,["-e",process.argv[1],process.argv[2],process.argv[3]],'
+  + '{detached:true,stdio:["ignore","inherit","inherit"],windowsHide:true});'
+  + 'c.unref();process.exit(0);'
 
 /**
  * UTF-8 output pinning prepended to every PowerShell command, copied from dsh's
@@ -441,15 +570,16 @@ export const ENV_OVERRIDES: Readonly<Record<string, string>> = {
  *
  * `node` itself behaves correctly detached: it runs, it writes to inherited
  * descriptors, and it outlives its parent. As a thin launcher it turns the real
- * shell back into an ordinary child with working stdio. It exits when its child
- * does, so its liveness IS the service's liveness, and {@link killTree} removes
- * both together.
+ * shell back into an ordinary child with working stdio — and then it exits, so
+ * that the service is orphaned rather than parented to dsh (see
+ * {@link startProcess} for why that matters).
  *
  * POSIX has none of these problems and keeps native `sh -c` plus process-group
- * semantics, with no extra process in between.
+ * semantics, with no extra process in between: there `detached` performs a real
+ * `setsid()`, so the service is already outside any tree walk.
  * @param command - the command line to run.
  * @param shell - an explicit shell executable, when the caller wants one.
- * @returns the executable, arguments, and the dialect the command will see.
+ * @returns the executable, arguments, the dialect, and whether a launcher is in play.
  */
 export function shellInvocation(command: string, shell?: string): ShellInvocation {
   if (process.platform === 'win32') {
@@ -466,12 +596,15 @@ export function shellInvocation(command: string, shell?: string): ShellInvocatio
         }
     return {
       file: process.execPath,
-      args: ['-e', WINDOWS_LAUNCHER, JSON.stringify(plan)],
+      // argv for stage 1: its own source, then stage 2's source and the plan.
+      // `startProcess` appends the sidecar path as the last element.
+      args: ['-e', WINDOWS_STAGE1, WINDOWS_STAGE2, JSON.stringify(plan)],
       shell: resolved ?? process.env['ComSpec'] ?? 'cmd.exe',
+      viaLauncher: true,
     }
   }
   const resolved = shell ?? '/bin/sh'
-  return { file: resolved, args: ['-c', command], shell: resolved }
+  return { file: resolved, args: ['-c', command], shell: resolved, viaLauncher: false }
 }
 
 /**

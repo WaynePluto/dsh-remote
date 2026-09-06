@@ -166,11 +166,12 @@ export const execProcessDefinition: ConversationNodeDefinition<ExecProcessState>
 /**
  * How far after a formal message the next segment's header sits.
  *
- * Strictly between the formal message's own row and the first `tool/call` it
- * dispatched (tool events always carry a larger seq), and clear of dsh's own
- * `finalizedFollowup` offset of 0.1 at the same base seq.
+ * Strictly after the formal message but before dsh's own synthetic follow-ups:
+ * max-tokens sits at +0.05 and turn-tail at +0.1. Turn-tail must remain the
+ * Turn's last Chat node or dsh disables its branch action, even when this
+ * presentation-only node ultimately renders no row.
  */
-export const EXEC_RESUME_SEQ_OFFSET = 0.2
+export const EXEC_RESUME_SEQ_OFFSET = 0.04
 
 /** State of one agent step: whether it spoke to the reader, and where. */
 interface ExecStepState {

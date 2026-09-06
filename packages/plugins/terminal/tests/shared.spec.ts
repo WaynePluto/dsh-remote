@@ -20,7 +20,7 @@ describe('channel identity', () => {
   it('serves exactly four endpoints, and neither open nor close', () => {
     expect([...ENDPOINTS]).toStrictEqual(['list', 'read', 'send', 'interrupt'])
     // The panel deliberately cannot manufacture a shell; that stays with the
-    // `terminal_open` tool, inside the turn. Locking it here so a future
+    // `interactive_terminal_open` tool, inside the turn. Locking it here so a future
     // convenience endpoint has to argue with a failing test first.
     expect(isTerminalEndpoint('open')).toBe(false)
     expect(isTerminalEndpoint('close')).toBe(false)

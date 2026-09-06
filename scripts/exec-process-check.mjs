@@ -182,7 +182,11 @@ async function main() {
     'dsh 自己的 turn-process 是用非默认 priority 影子覆盖的（同 priority 会抛错并带走整个 web UI）',
     JSON.stringify(shadow),
   )
-  check(bundleReport.disposers >= 4, '产物里每个副作用都挂在 ctx.effect 上', `${bundleReport.disposers} 个可撤销副作用`)
+  check(
+    bundleReport.disposers >= 5,
+    '产物里的 apply() 至少登记了 5 个可撤销副作用（含 frame controller）',
+    `${bundleReport.disposers} 个可撤销副作用`,
+  )
 
   prepareHome()
   const { child, token } = await startDsh()
@@ -209,6 +213,12 @@ async function main() {
       // 吸顶整条规则是运行时按行生成的：常量没进产物，等于表头永远吸不住，也永远收不掉。
       check(body.includes('--dshx-exec-process-push-'), 'bundle 里带着吸顶推出所依赖的自定义属性前缀')
       check(body.includes('position: sticky'), 'bundle 里带着吸顶规则本身')
+      check(body.includes('--dsw-specific-tip'), 'bundle 里包含展开标题背景 token --dsw-specific-tip')
+      check(body.includes('--dsw-alias-border-l2'), 'bundle 里包含更强 frame 边框 token --dsw-alias-border-l2')
+      check(
+        body.includes('data-dsh-plugin-exec-process-frame'),
+        'bundle 里包含展开内容外框样式表标记 data-dsh-plugin-exec-process-frame',
+      )
     }
   } finally {
     if (process.platform === 'win32') {

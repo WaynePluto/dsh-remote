@@ -49,7 +49,7 @@
  * @module @dsh-remote/dsh-plugin-exec-process/client/sticky-push
  */
 
-import { FLOW_KEY_ATTRIBUTE, flowKeySelector } from './hidden-rows.js'
+import { FLOW_KEY_ATTRIBUTE, flowKeySelector, THINK_SELECTOR } from './hidden-rows.js'
 
 /** Marker attribute set on this module's own `<style>`, for diagnostics. */
 export const PUSH_STYLE_MARKER = 'data-dsh-plugin-exec-process-sticky'
@@ -66,7 +66,7 @@ export interface PushGeometry {
   scrollportTop: number
   /** Height of the header row. */
   headerHeight: number
-  /** Bottom edge of the last row this header folds; `null` when it is gone. */
+  /** Bottom edge of the segment's last expanded content; `null` when it is gone. */
   contentBottom: number | null
 }
 
@@ -96,6 +96,33 @@ export interface StickyEntry {
 }
 
 /**
+ * Select the real bottom edge of one expanded segment.
+ *
+ * Inline reasoning belongs to the segment even though its formal-answer row
+ * does not. When it exists, measuring the answer wrapper would keep the header
+ * pinned for the whole answer. The fixed-height thinking root is not the real
+ * framed extent either: its parent carries the frame padding and border. Measure
+ * that same `div:has(> [data-variant="think"])` wrapper as segment-frame so the
+ * sticky header releases at the visible frame's bottom edge. Without inline
+ * reasoning, the last member row is the segment end.
+ *
+ * @param memberKeys - whole rows owned by the segment, in flow order.
+ * @param reasoningOnlyKeys - formal rows whose nested thinking belongs to it.
+ * @returns a selector for the last expanded box, or undefined for no content.
+ */
+export function segmentContentEndSelector(
+  memberKeys: readonly string[],
+  reasoningOnlyKeys: readonly string[],
+): string | undefined {
+  const reasoningKey = reasoningOnlyKeys.at(-1)
+  if (reasoningKey !== undefined) {
+    return `${flowKeySelector(reasoningKey)} div:has(> ${THINK_SELECTOR})`
+  }
+  const memberKey = memberKeys.at(-1)
+  return memberKey === undefined ? undefined : flowKeySelector(memberKey)
+}
+
+/**
  * Build the stylesheet text for the headers currently sticking.
  *
  * `z-index` and an opaque background belong to the same rule as the sticking
@@ -111,7 +138,7 @@ export function stickyCss(entries: readonly StickyEntry[]): string {
   position: sticky;
   top: var(${entry.property}, 0px);
   z-index: 3;
-  background: var(--dsw-alias-bg-base, #fff);
+  background: var(--dsw-specific-tip, var(--dsw-alias-bg-base, #fff));
 }`)
     .join('\n\n')
 }
@@ -182,11 +209,11 @@ export interface StickyPushController {
   /**
    * Stick one header for as long as the caller keeps it.
    * @param button - the header button; its wrapper is what actually sticks.
-   * @param lastRowKey - `data-chat-flow-key` of the last row it folds; without
-   * one the header sticks and is never released.
+   * @param contentEndSelector - selector of the segment's last expanded box;
+   * without one the header sticks and is never released.
    * @returns a disposer removing the rule and its property.
    */
-  track(button: TrackedButton, lastRowKey: string | undefined): () => void
+  track(button: TrackedButton, contentEndSelector: string | undefined): () => void
   /** Recompute every offset now, outside the frame loop. */
   measure(): void
   /** @returns the CSS currently installed; for tests and diagnostics. */
@@ -199,7 +226,7 @@ export interface StickyPushController {
 interface Entry extends StickyEntry {
   readonly wrapper: AncestorElement
   readonly scrollport: AncestorElement | null
-  readonly lastRowSelector: string | null
+  readonly contentEndSelector: string | null
   readonly detach: () => void
   offset: number
 }
@@ -265,11 +292,11 @@ export function createStickyPushController(host: StickyPushHost | undefined): St
       // as the reader pages, and a stale node measures a box that is no longer
       // on screen. One attribute selector against a handful of open headers is
       // far cheaper than being wrong.
-      const row = entry.lastRowSelector === null ? null : host.querySelector(entry.lastRowSelector)
+      const contentEnd = entry.contentEndSelector === null ? null : host.querySelector(entry.contentEndSelector)
       const offset = pushOffset({
         scrollportTop: entry.scrollport === null ? 0 : entry.scrollport.getBoundingClientRect().top,
         headerHeight: entry.wrapper.getBoundingClientRect().height,
-        contentBottom: row === null ? null : row.getBoundingClientRect().bottom,
+        contentBottom: contentEnd === null ? null : contentEnd.getBoundingClientRect().bottom,
       })
       if (offset === entry.offset) continue
       entry.offset = offset
@@ -302,7 +329,7 @@ export function createStickyPushController(host: StickyPushHost | undefined): St
   }
 
   return {
-    track(button, lastRowKey) {
+    track(button, contentEndSelector) {
       const wrapper = button.closest(`[${FLOW_KEY_ATTRIBUTE}]`)
       const flowKey = wrapper?.getAttribute(FLOW_KEY_ATTRIBUTE) ?? null
       // No wrapper means dsh renamed the attribute or moved the seat. The
@@ -320,7 +347,7 @@ export function createStickyPushController(host: StickyPushHost | undefined): St
         property: `${PUSH_PROPERTY_PREFIX}${id}`,
         wrapper,
         scrollport,
-        lastRowSelector: lastRowKey === undefined ? null : flowKeySelector(lastRowKey),
+        contentEndSelector: contentEndSelector ?? null,
         detach: () => { scrollport?.removeEventListener('scroll', onScroll) },
         offset: 0,
       })

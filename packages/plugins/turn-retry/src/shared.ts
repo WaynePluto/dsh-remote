@@ -189,7 +189,7 @@ export interface RetryResult {
   /** Whether a retry turn was actually started. */
   started: boolean
   /** Present when `started` is false: why the retry was refused. */
-  reason?: 'not-failed' | 'busy' | 'no-agent' | 'subagent'
+  reason?: 'not-failed' | 'busy' | 'pending-input' | 'no-agent' | 'subagent'
 }
 
 /** Failure code this channel reports for an unknown endpoint. */

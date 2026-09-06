@@ -8,7 +8,7 @@
  * 本插件比兄弟插件多两条只有真机能验的东西：
  *   · 它往 dsh 的 session-projection 注册表里加了一个 key（`turnRetry`）。注册被拒
  *     （比如 stateVersion 冲突、schema 不合法）会让整个 fiber FAILED，而不是少个横幅。
- *   · 它在 `agent/request-error` 瀑布上挂了监听器。签名对不上同样是启动即失败。
+ *   · 它只保留事后 projection + RPC；浏览器 bundle 不应再带“不再提示”。
  * 所以「dsh 正常启动并打印带 token 的地址」这一条在这里的分量比别处更重。
  *
  * 升级 dsh 后跑一次：
@@ -133,9 +133,9 @@ async function main() {
   prepareHome()
   const { child, token } = await startDsh()
   try {
-    // 这一条最重：projection 注册被拒或瀑布签名对不上，都会让 fiber FAILED，
+    // 这一条最重：projection 注册或 RPC 通道挂载被拒，都会让 fiber FAILED，
     // dsh 就永远走不到打印地址这一步。
-    check(true, 'dsh 带全部 --patch 正常启动（projection 注册与瀑布监听都被接受）')
+    check(true, 'dsh 带全部 --patch 正常启动（projection 注册与 RPC 通道被接受）')
 
     const exchange = await fetch(`${BASE}/?token=${token}`, { redirect: 'manual', headers: browserHeaders() })
     const cookie = (exchange.headers.getSetCookie?.() ?? []).map(entry => entry.split(';')[0]).join('; ')
@@ -157,6 +157,7 @@ async function main() {
       // 两半必须对同一个和类型说话：宿主折出 `kind:'stopped'`，浏览器半要有对应的文案分支，
       // 否则「手动停止之后接着做」这半功能会安静地渲染成一个空标题。
       check(body.includes('stoppedTitle'), 'bundle 里带着「上一轮被停止」那一半的文案')
+      check(!body.includes('不再提示'), 'bundle 不再包含「不再提示」按钮文案')
     }
 
     // 通道活着：一个不存在的会话应当被守卫挡下并如实说明原因，而不是 404 或 500。

@@ -34,7 +34,7 @@
  *
  * WHAT THIS PLUGIN DELIBERATELY DOES NOT DO. It has no `open` and no `close`
  * endpoint: the panel can steer a terminal the user can already see, but it
- * cannot manufacture a shell. Creating one stays with `terminal_open`, inside
+ * cannot manufacture a shell. Creating one stays with model-facing `interactive_terminal_open`, inside
  * the turn, with the transcript and the approval stack around it. Note also
  * that — unlike this repository's `services` plugin — no extra sandbox gate is
  * needed here: `terminal-bash` runs its shell through `ctx.sandbox.confine()`
@@ -107,7 +107,7 @@ export interface Config {
    */
   mountBackend: boolean
   /**
-   * Whether to mount dsh's six `terminal_*` model tools.
+   * Whether to expose dsh's six upstream `terminal_*` model tools.
    *
    * They are the only way a terminal gets created, so turning this off makes
    * the panel permanently empty. It is a knob because those six schemas plus a
@@ -176,6 +176,108 @@ export const Config: zs<Config> = zs.object({
   sendWaitMs: zs.natural().default(10_000),
 })
 
+export const UPSTREAM_TERMINAL_TOOL_NAMES = [
+  'terminal_open', 'terminal_send', 'terminal_read',
+  'terminal_signal', 'terminal_close', 'terminal_list',
+] as const
+export const INTERACTIVE_TERMINAL_TOOL_NAMES = [
+  'interactive_terminal_open', 'interactive_terminal_send', 'interactive_terminal_read',
+  'interactive_terminal_signal', 'interactive_terminal_close', 'interactive_terminal_list',
+] as const
+export const INTERACTIVE_TERMINAL_GUIDANCE =
+  'Use interactive_terminal_* only when work requires interactive stdin or the same terminal state must persist across calls. '
+  + 'For ordinary one-shot commands—including Git, builds, tests, and scripts—always use pwsh or bash instead. '
+  + 'A command taking a long time is not by itself a reason to use an interactive terminal; use pwsh/bash with run_in_background when needed. Track every terminal session id '
+  + 'and close sessions that no longer matter. An inferred_idle or timeout result does not prove the foreground command exited.'
+export const INTERACTIVE_TERMINAL_OPEN_DESCRIPTION =
+  'Create an owner-isolated interactive terminal only when work requires interactive stdin or the same terminal state must '
+  + 'persist across calls. Never use this for ordinary one-shot commands, including Git, builds, tests, or scripts; use pwsh '
+  + 'or bash for those, with run_in_background when needed. A command taking a long time is not by itself a reason to open an interactive terminal.'
+interface CapturedTool { name: string, description?: string, [key: string]: unknown }
+interface CapturedSection { name: string, order: number, text?: string, [key: string]: unknown }
+type UpstreamTerminalApply = (ctx: Context, config?: toolTerminal.Config) => void
+function rewriteTerminalNames(text: string): string {
+  let rewritten = text
+  UPSTREAM_TERMINAL_TOOL_NAMES.forEach((toolName, index) => {
+    rewritten = rewritten.replaceAll(toolName, INTERACTIVE_TERMINAL_TOOL_NAMES[index]!)
+  })
+  return rewritten
+}
+function rewriteSchemaDescriptions(value: unknown): unknown {
+  if (typeof value === 'string') return rewriteTerminalNames(value)
+  if (Array.isArray(value)) return value.map(rewriteSchemaDescriptions)
+  if (typeof value !== 'object' || value === null || Object.getPrototypeOf(value) !== Object.prototype) return value
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, rewriteSchemaDescriptions(entry)]))
+}
+
+/** Collect, validate, rename, and only then publish upstream terminal tools. */
+export function applyInteractiveTerminalTools(
+  ctx: Context,
+  config: toolTerminal.Config = {},
+  upstreamApply: UpstreamTerminalApply = toolTerminal.apply,
+): void {
+  const services = ctx as unknown as { tools: { register: (tool: CapturedTool) => unknown }; systemPrompt: { section: (section: CapturedSection) => unknown } }
+  const tools: CapturedTool[] = []
+  const sections: CapturedSection[] = []
+  const facadeService = (service: object, property: string, replacement: (...args: never[]) => unknown): object =>
+    new Proxy(service, {
+      get(target, key) {
+        if (key === property) return replacement
+        const value = Reflect.get(target, key, target) as unknown
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+  const toolFacade = facadeService(
+    services.tools, 'register',
+    ((tool: CapturedTool) => { tools.push(tool) }) as (...args: never[]) => unknown,
+  )
+  const promptFacade = facadeService(
+    services.systemPrompt, 'section',
+    ((section: CapturedSection) => { sections.push(section) }) as (...args: never[]) => unknown,
+  )
+  const facade = new Proxy(ctx, {
+    get(target, key) {
+      if (key === 'tools') return toolFacade
+      if (key === 'systemPrompt') return promptFacade
+      const value = Reflect.get(target, key, target) as unknown
+      return typeof value === 'function' ? value.bind(target) : value
+    },
+  })
+  upstreamApply(facade, config)
+  const expected = new Set<string>(UPSTREAM_TERMINAL_TOOL_NAMES)
+  const counts = new Map<string, number>()
+  for (const tool of tools) counts.set(tool.name, (counts.get(tool.name) ?? 0) + 1)
+  const missing = UPSTREAM_TERMINAL_TOOL_NAMES.filter(toolName => !counts.has(toolName))
+  const duplicate = [...counts].filter(([, count]) => count > 1).map(([toolName]) => toolName)
+  const unknown = [...counts.keys()].filter(toolName => !expected.has(toolName))
+  if (tools.length !== UPSTREAM_TERMINAL_TOOL_NAMES.length || missing.length || duplicate.length || unknown.length) {
+    throw new Error(
+      `tool-terminal wrapper rejected registrations: missing=[${missing.join(', ')}], `
+      + `duplicate=[${duplicate.join(', ')}], unknown=[${unknown.join(', ')}]`,
+    )
+  }
+  if (sections.length !== 1 || sections[0]?.name !== 'tool:pty') {
+    throw new Error('tool-terminal wrapper rejected prompt sections: expected exactly one tool:pty section')
+  }
+  services.systemPrompt.section({ ...sections[0], text: INTERACTIVE_TERMINAL_GUIDANCE })
+  for (const tool of tools) {
+    const index = UPSTREAM_TERMINAL_TOOL_NAMES.indexOf(tool.name as never)
+    services.tools.register({
+      ...tool,
+      name: INTERACTIVE_TERMINAL_TOOL_NAMES[index]!,
+      description: tool.name === 'terminal_open'
+        ? INTERACTIVE_TERMINAL_OPEN_DESCRIPTION
+        : 'Interactive terminal operation. ' + rewriteTerminalNames(tool.description ?? ''),
+      ...tool.parameters === undefined ? {} : { parameters: rewriteSchemaDescriptions(tool.parameters) },
+    } as never)
+  }
+}
+export const interactiveTerminalTools = {
+  name: 'dsh-remote-tool-terminal',
+  inject: toolTerminal.inject,
+  Config: toolTerminal.Config,
+  apply: applyInteractiveTerminalTools,
+}
 /** How often a waiting send retries while the session is busy, in ms. */
 const RETRY_INTERVAL_MS = 250
 
@@ -243,7 +345,7 @@ export function pwshShellArgs(): string[] {
 }
 
 /**
- * Give every `terminal_open` a bounded deadline and a second chance.
+ * Give every model-facing `interactive_terminal_open` (upstream `terminal_open`) a bounded deadline and a second chance.
  *
  * ⚠️ WHY THIS EXISTS, and why it is a patch on a service instance rather than
  * something nicer. Opening a pwsh PTY fails intermittently — measured on this
@@ -258,7 +360,7 @@ export function pwshShellArgs(): string[] {
  * misordered stays that way until the deadline.
  *
  * A failed open is not degraded service, it is no terminal at all, and dsh's
- * `ctx.terminals` offers no seam to intercept one — `terminal_open` calls
+ * `ctx.terminals` offers no seam to intercept one — the upstream `terminal_open` implementation calls
  * `spawn` directly. So this wraps the `spawn` of the registry THIS PLUGIN
  * mounted, in this plugin's own fiber, and restores it on teardown. It changes
  * no behaviour except adding a deadline and a retry: a caller's own abort
@@ -607,7 +709,7 @@ export function apply(ctx: Context, config: Config): void {
       scope.effect(() => installStartupRetry(scope, config), 'terminal: startup retry')
     })
   }
-  if (config.mountTools) ctx.plugin(toolTerminal)
+  if (config.mountTools) ctx.plugin(interactiveTerminalTools)
 
   const dispose = ctx.connection.rpc.handle(
     CHANNEL,

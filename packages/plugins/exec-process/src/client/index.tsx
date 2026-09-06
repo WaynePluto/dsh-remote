@@ -74,12 +74,14 @@ import { createFoldStore, type FoldStore } from './fold-store.js'
 import { createCollapsedRowsController, type CollapsedRowsController } from './hidden-rows.js'
 import { en, zh, type ExecProcessKey } from './locales.js'
 import { installRowStyles } from './row-styles.js'
+import { createSegmentFrameController, type SegmentFrameController } from './segment-frame.js'
 import { createStickyPushController, type StickyPushController } from './sticky-push.js'
 
 export { ExecProcessRow, summaryFields } from './ExecProcessRow.js'
 export { execProcessStats, segmentEndSeq, isFormalMessage, EMPTY_STATS, INDEPENDENT_KINDS } from './stats.js'
 export { collapsedRowsCss, createCollapsedRowsController } from './hidden-rows.js'
 export { createStickyPushController, pushOffset, stickyCss, findScrollport } from './sticky-push.js'
+export { createSegmentFrameController, segmentFrameCss } from './segment-frame.js'
 export { createFoldStore, foldKey } from './fold-store.js'
 export { execProcessDefinition, execProcessStepDefinition } from './definition.js'
 export type { ExecProcessChatData } from './definition.js'
@@ -101,6 +103,8 @@ export interface ExecProcessInjected {
   foldStore: FoldStore
   /** The stylesheet collapsing folded rows. */
   collapsed: CollapsedRowsController
+  /** The stylesheet framing the dsh-owned rows of expanded segments. */
+  frame: SegmentFrameController
   /** The stylesheet sticking an open header to the top, and releasing it. */
   stickyPush: StickyPushController
 }
@@ -128,12 +132,13 @@ export type ExecProcessSeatProps =
  * @returns the row for this segment.
  */
 export function ExecProcessSeat({
-  node, useTurnData, useChat, sessionId, foldStore, collapsed, stickyPush, t,
+  node, useTurnData, useChat, sessionId, foldStore, collapsed, frame, stickyPush, t,
 }: ExecProcessSeatProps) {
   const turn = node.data.turn
   const spec = useTurnData('turn-process')
   const turnNodeKeys = useChat(s => s.locations.getTurn(turn))
   const nodes = useChat(s => s.nodes)
+  const turnClosed = useChat(s => s.timeline.turns.get(turn)?.status === 'closed')
   return (
     <ExecProcessRow
       turn={turn}
@@ -148,9 +153,11 @@ export function ExecProcessSeat({
       // line", which is what a disclosure promises.
       processStartSeq={Math.max(spec?.processStartSeq ?? 0, node.anchorSeq)}
       selfAnchorSeq={node.anchorSeq}
+      turnClosed={turnClosed}
       answerAnchorSeq={spec?.answerAnchorSeq ?? null}
       foldStore={foldStore}
       collapsed={collapsed}
+      frame={frame}
       stickyPush={stickyPush}
       t={t}
     />
@@ -225,14 +232,16 @@ export function apply(ctx: Context): void {
 
   const foldStore = createFoldStore()
   const collapsed = createCollapsedRowsController(host)
+  const frame = createSegmentFrameController(host)
   const stickyPush = createStickyPushController(host)
   ctx.effect(() => () => {
     stickyPush.dispose()
+    frame.dispose()
     collapsed.dispose()
     foldStore.reset()
   }, 'exec-process: fold state')
 
-  const seat = (): ExecProcessInjected => ({ foldStore, collapsed, stickyPush })
+  const seat = (): ExecProcessInjected => ({ foldStore, collapsed, frame, stickyPush })
 
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',

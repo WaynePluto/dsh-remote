@@ -1,7 +1,7 @@
 /**
  * The「执行过程」row itself.
  *
- * One line per segment: `执行过程 思考 12 次 · 工具调用 34 次 · 失败 2 · 最近 read`,
+ * One line per segment: `执行过程 思考12次·工具34次·失败2 最近read`,
  * with a chevron, collapsed by default. Clicking it collapses or expands every
  * process row of that segment.
  *
@@ -27,8 +27,9 @@ import type { CollapsedRowsController } from './hidden-rows.js'
 import { foldKey, type FoldStore } from './fold-store.js'
 import { en, fill, type ExecProcessKey } from './locales.js'
 import { ROW_CLASS } from './row-styles.js'
-import type { StickyPushController } from './sticky-push.js'
-import { execProcessStats, segmentEndSeq, EMPTY_STATS, type ExecNodeView, type ExecProcessStats } from './stats.js'
+import type { SegmentFrameController } from './segment-frame.js'
+import { segmentContentEndSelector, type StickyPushController } from './sticky-push.js'
+import { execProcessStats, segmentEnded, segmentEndSeq, EMPTY_STATS, type ExecNodeView, type ExecProcessStats } from './stats.js'
 
 /** dsh's own `ic_ds_chevron_down_outline_14`, inlined. */
 const CHEVRON = 'M11.8486 5.5L11.4238 5.92383L8.69727 8.65137C8.44157 8.90706 8.21562 9.13382 8.01172 9.29785C7.79912 9.46883 7.55595 9.61756 7.25 9.66602C7.08435 9.69222 6.91565 9.69222 6.75 9.66602C6.44405 9.61756 6.20088 9.46883 5.98828 9.29785C5.78438 9.13382 5.55843 8.90706 5.30273 8.65137L2.57617 5.92383L2.15137 5.5L3 4.65137L3.42383 5.07617L6.15137 7.80273C6.42595 8.07732 6.59876 8.24849 6.74023 8.3623C6.87291 8.46904 6.92272 8.47813 6.9375 8.48047C6.97895 8.48703 7.02105 8.48703 7.0625 8.48047C7.07728 8.47813 7.12709 8.46904 7.25977 8.3623C7.40124 8.24849 7.57405 8.07732 7.84863 7.80273L10.5762 5.07617L11 4.65137L11.8486 5.5Z'
@@ -54,12 +55,16 @@ export interface ExecProcessRowProps {
   processStartSeq: number
   /** This row's own anchor; the segment it owns starts here. */
   selfAnchorSeq: number
+  /** Whether dsh's real Turn timeline says this turn is closed. */
+  turnClosed: boolean
   /** Finalized answer boundary; null while the turn runs or when it never answered. */
   answerAnchorSeq: number | null
   /** Shared fold state; absent before the registration binds. */
   foldStore?: FoldStore | undefined
   /** Shared collapse stylesheet; absent before the registration binds. */
   collapsed?: CollapsedRowsController | undefined
+  /** Shared expanded-segment frame controller. */
+  frame?: SegmentFrameController | undefined
   /** Shared sticky-header controller; absent before the registration binds. */
   stickyPush?: StickyPushController | undefined
   /** Locale seat bound to this plugin's namespace. */
@@ -72,17 +77,19 @@ const NO_KEYS: readonly string[] = []
  * Assemble the row's summary fields.
  * @param stats - the fold's counts.
  * @param translate - bound translate function.
- * @returns status text, failure text, last-action text, and whether that
- * action is still happening.
+ * @param ended - whether the segment or its owning turn has ended.
+ * @returns count summary, optional live/recent action, and running state.
  */
 export function summaryFields(
   stats: ExecProcessStats,
   translate: (key: ExecProcessKey, params?: Record<string, unknown>) => string,
-): { status: string; failures: string; action: string; running: boolean } {
+  ended = false,
+): { status: string; action: string; running: boolean } {
   const parts: string[] = []
   if (stats.reasoningCount > 0) parts.push(translate('thinking', { count: stats.reasoningCount }))
   if (stats.toolCallCount > 0) parts.push(translate('tools', { count: stats.toolCallCount }))
-  const last = stats.lastAction
+  if (stats.failureCount > 0) parts.push(translate('failures', { count: stats.failureCount }))
+  const last = ended ? null : stats.lastAction
   const action = last === null
     ? ''
     : last.kind === 'tool'
@@ -90,10 +97,28 @@ export function summaryFields(
       : translate(last.running ? 'runningThinking' : 'lastThinking')
   return {
     status: parts.join(translate('separator')),
-    failures: stats.failureCount > 0 ? translate('failures', { count: stats.failureCount }) : '',
     action,
     running: last?.running === true,
   }
+}
+
+export type SummaryFields = ReturnType<typeof summaryFields>
+
+/** Render the truncatable action, running dot, and chevron in visual order. */
+export function ExecProcessTail({ fields }: { fields: SummaryFields }) {
+  return (
+    <>
+      {fields.action !== '' && (
+        <span className={`${ROW_CLASS}__action`} data-running={fields.running || undefined}>
+          {fields.action}
+        </span>
+      )}
+      {fields.running && <span className={`${ROW_CLASS}__dot`} aria-hidden />}
+      <svg className={`${ROW_CLASS}__chevron`} width={14} height={14} viewBox="0 0 14 14" fill="none" aria-hidden>
+        <path d={CHEVRON} fill="currentColor" />
+      </svg>
+    </>
+  )
 }
 
 /**
@@ -103,7 +128,7 @@ export function summaryFields(
  */
 export function ExecProcessRow({
   turn, sessionId, turnNodeKeys, nodes,
-  processStartSeq, selfAnchorSeq, answerAnchorSeq, foldStore, collapsed, stickyPush, t,
+  processStartSeq, selfAnchorSeq, turnClosed, answerAnchorSeq, foldStore, collapsed, frame, stickyPush, t,
 }: ExecProcessRowProps) {
   const translate = useCallback(
     (key: ExecProcessKey, params?: Record<string, unknown>): string =>
@@ -114,20 +139,21 @@ export function ExecProcessRow({
   // Recomputed only when the turn's node set or this segment's bounds move.
   // Every other publication — a streamed token in a later turn, a scroll — must
   // not walk sixty nodes again.
-  const stats = useMemo(() => {
+  const calculation = useMemo(() => {
     const views: ExecNodeView[] = []
     for (const key of turnNodeKeys) {
       const node = nodes.get(key)
       if (node !== undefined) views.push(node)
     }
-    // A segment ends where the next one begins: the header row that a mid-turn
-    // formal message opened, the finalized answer for the last segment, or
-    // nowhere at all while the turn is still producing rows.
     const endSeq = segmentEndSeq(views, selfAnchorSeq, answerAnchorSeq)
     const startSeq = Math.max(processStartSeq, selfAnchorSeq)
     const computed = execProcessStats(views, { startSeq, endSeq })
-    return computed === EMPTY_STATS ? null : computed
-  }, [turnNodeKeys, nodes, processStartSeq, selfAnchorSeq, answerAnchorSeq])
+    return {
+      stats: computed === EMPTY_STATS ? null : computed,
+      ended: segmentEnded(views, selfAnchorSeq, answerAnchorSeq, turnClosed),
+    }
+  }, [turnNodeKeys, nodes, processStartSeq, selfAnchorSeq, answerAnchorSeq, turnClosed])
+  const stats = calculation.stats
 
   // Keyed by segment, not by turn: a turn now has as many folds as it has
   // formal messages, and opening one must not open the rest.
@@ -141,30 +167,46 @@ export function ExecProcessRow({
 
   const memberKeys = stats?.memberKeys ?? NO_KEYS
   const reasoningKeys = stats?.reasoningOnlyKeys ?? NO_KEYS
+  // Publish every state update without clearing first. Streaming produces fresh
+  // arrays every frame; keeping cleanup separate lets each controller's
+  // sameEntry check turn unchanged publications into true no-ops.
   useEffect(() => {
     if (collapsed === undefined) return
     if (open) collapsed.set(key, NO_KEYS, NO_KEYS)
     else collapsed.set(key, memberKeys, reasoningKeys)
-    // Unmounting must reveal the rows again: this row is the only thing that
-    // can undo the fold, so a fold that outlived it would be a transcript the
-    // reader cannot open.
-    return () => { collapsed.clear(key) }
   }, [collapsed, key, open, memberKeys, reasoningKeys])
+
+  useEffect(() => {
+    if (collapsed === undefined) return
+    // Unmounting or changing controller/key must reveal the old rows again.
+    return () => { collapsed.clear(key) }
+  }, [collapsed, key])
+
+  useEffect(() => {
+    if (frame === undefined) return
+    if (open) frame.set(key, memberKeys, reasoningKeys)
+    else frame.clear(key)
+  }, [frame, key, open, memberKeys, reasoningKeys])
+
+  useEffect(() => {
+    if (frame === undefined) return
+    return () => { frame.clear(key) }
+  }, [frame, key])
 
   // Only an OPEN header follows the reader, and only for as long as its own
   // rows are still under it. Registered after the fold effect above so the
   // first measurement reads the layout that effect just produced.
   const buttonRef = useRef<HTMLButtonElement | null>(null)
-  const lastRowKey = memberKeys.length === 0 ? undefined : memberKeys[memberKeys.length - 1]
+  const contentEndSelector = segmentContentEndSelector(memberKeys, reasoningKeys)
   useEffect(() => {
     if (stickyPush === undefined || !open) return
     const button = buttonRef.current
     if (button === null) return
-    return stickyPush.track(button, lastRowKey)
-  }, [stickyPush, open, lastRowKey])
+    return stickyPush.track(button, contentEndSelector)
+  }, [stickyPush, open, contentEndSelector])
 
   if (stats === null) return null
-  const fields = summaryFields(stats, translate)
+  const fields = summaryFields(stats, translate, calculation.ended)
   return (
     <button
       ref={buttonRef}
@@ -185,23 +227,7 @@ export function ExecProcessRow({
     >
       <span className={`${ROW_CLASS}__label`}>{translate('label')}</span>
       {fields.status !== '' && <span className={`${ROW_CLASS}__status`}>{fields.status}</span>}
-      {fields.failures !== '' && <span className={`${ROW_CLASS}__failures`}>{fields.failures}</span>}
-      {fields.running && <span className={`${ROW_CLASS}__dot`} aria-hidden />}
-      {fields.action !== '' && (
-        <span className={`${ROW_CLASS}__action`} data-running={fields.running || undefined}>
-          {fields.action}
-        </span>
-      )}
-      <svg
-        className={`${ROW_CLASS}__chevron`}
-        width={14}
-        height={14}
-        viewBox="0 0 14 14"
-        fill="none"
-        aria-hidden
-      >
-        <path d={CHEVRON} fill="currentColor" />
-      </svg>
+      <ExecProcessTail fields={fields} />
     </button>
   )
 }

@@ -179,14 +179,14 @@ describe('shell selection', () => {
     expect(invocation.args[0]).toBe('-e')
     // The launcher plan is JSON, so a variable-length argv with quotes in it
     // survives Windows command-line quoting intact.
-    const plan = JSON.parse(invocation.args[2] as string) as { f: string; a: string[]; s: boolean }
+    const plan = JSON.parse(invocation.args[3] as string) as { f: string; a: string[]; s: boolean }
     expect(plan.a.at(-1)).toContain('pnpm dev')
   })
 
   it('passes -NoProfile, so a user PowerShell profile cannot pollute a service log', () => {
     if (process.platform !== 'win32') return
     const invocation = shellInvocation('pnpm dev')
-    const plan = JSON.parse(invocation.args[2] as string) as { f: string; a: string[]; s: boolean }
+    const plan = JSON.parse(invocation.args[3] as string) as { f: string; a: string[]; s: boolean }
     // The exact flags dsh's own pwsh executor uses.
     expect(plan.s).toBe(false)
     expect(plan.a.slice(0, 4)).toEqual(['-NoLogo', '-NoProfile', '-NonInteractive', '-Command'])
@@ -201,7 +201,31 @@ describe('shell selection', () => {
 
   it('uses a plain sh -c on POSIX, with no extra process in between', () => {
     if (process.platform === 'win32') return
-    expect(shellInvocation('pnpm dev')).toEqual({ file: '/bin/sh', args: ['-c', 'pnpm dev'], shell: '/bin/sh' })
+    expect(shellInvocation('pnpm dev')).toEqual({
+      file: '/bin/sh', args: ['-c', 'pnpm dev'], shell: '/bin/sh', viaLauncher: false,
+    })
+  })
+
+  it('marks the Windows path as launcher-mediated, so the caller reads the real pid back', () => {
+    if (process.platform !== 'win32') return
+    // `child.pid` there is the launcher, which exits within milliseconds; using
+    // it would make every later identify() report `gone`.
+    expect(shellInvocation('pnpm dev').viaLauncher).toBe(true)
+  })
+
+  it('makes stage 1 break the parent chain and stage 2 host the shell', () => {
+    if (process.platform !== 'win32') return
+    const invocation = shellInvocation('pnpm dev')
+    const [stage1, stage2] = [invocation.args[1] as string, invocation.args[2] as string]
+    // Stage 1 is the whole `taskkill /T` fix: start stage 2 detached, then go
+    // away so dsh is no longer a live ancestor.
+    expect(stage1).toContain('detached:true')
+    expect(stage1).toContain('process.exit(0)')
+    // Stage 2 must NOT detach the shell — pwsh without a console exits silently
+    // — and must report its own pid and outlive nothing.
+    expect(stage2).toContain('writeFileSync')
+    expect(stage2).toContain('String(process.pid)')
+    expect(stage2).not.toContain('detached:true')
   })
 
   it('turns off colour, so ANSI escapes never reach the log or the panel', () => {

@@ -172,10 +172,16 @@ async function inspectHostBundle() {
 /**
  * 在 vm 里加载**浏览器构建产物**，跑一遍 `apply()`，看它到底占了哪个座位。
  *
- * shim 只提供加载器和模块表里那两个允许留成 import 的说明符。插件如果偷偷依赖了别的
+ * shim 只提供加载器和模块表里那几个允许留成 import 的说明符。插件如果偷偷依赖了别的
  * 全局或别的模块，这里就会当场炸开 —— 那正是页面上会发生的事，只是这里炸得早、也看得见。
  * `apply()` 本身不渲染 React，只注册文案和座位，所以 shim 不需要真的 React。
- * @returns {{ seats: {name?: string, id?: string, order?: number, locale?: string}[], namespaces: string[] }}
+ *
+ * ⚠️ `@deepseek-ai/dsh-client-ui-primitives` 是本插件**故意**留成外部的：它在 dsh 的
+ * `PLATFORM_MODULES` 里（`packages/client/web/src/platform.ts`），页面会把 `Modal` 和
+ * 图标连同它们**已经加载的 CSS** 一起交给我们，好过自己再实现一套、并且和 dsh 自己的
+ * 面板慢慢走偏。代价是：它哪天从那张表里消失，页面会在加载本插件时抛错 ——
+ * 所以下面显式断言「要的东西恰好都在表里」。
+ * @returns {{ seats: object[], namespaces: string[], externals: string[] }}
  */
 function inspectClientBundle() {
   const bundle = join(ROOT, 'packages', 'plugins', 'services', 'dist', 'client.js')
@@ -186,11 +192,19 @@ function inspectClientBundle() {
   runInContext(source, createContext(sandbox), { filename: bundle })
   if (loaded === null) throw new Error('bundle 没有调用 window.__ModuleLoader__.load')
   if (loaded.id !== PACKAGE_ID) throw new Error(`bundle 自称 ${loaded.id}，应当是 ${PACKAGE_ID}`)
+  const externals = []
   const exports = loaded.factory((id) => {
+    externals.push(id)
     if (id === 'react') {
       return { useState: noop, useEffect: noop, useCallback: noop, useMemo: noop, useRef: () => ({}), createElement: noop }
     }
     if (id === 'react/jsx-runtime') return { jsx: noop, jsxs: noop, Fragment: noop }
+    if (id === '@deepseek-ai/dsh-client-ui-primitives') {
+      return {
+        Modal: noop, IconApiOutline14: noop,
+        IconChevronUpOutline14: noop, IconChevronDownOutline14: noop,
+      }
+    }
     throw new Error(`bundle 要求页面模块表之外的模块：${id}`)
   })
 
@@ -206,7 +220,7 @@ function inspectClientBundle() {
     get: () => undefined,
   }
   exports.apply(ctx)
-  return { seats, namespaces }
+  return { seats, namespaces, externals: [...new Set(externals)] }
 }
 
 async function main() {
@@ -248,6 +262,17 @@ async function main() {
   check(typeof seat?.order === 'number', '声明了 order，不靠注册先后决定位置', String(seat?.order))
   check(client.namespaces.includes('dsh-plugin-services'), '文案命名空间也是包名后缀',
     client.namespaces.join('、'))
+  // dsh 分享给页面的模块表，抄自 packages/client/web/src/platform.ts。
+  const PLATFORM_MODULES = [
+    'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',
+    '@deepseek-ai/dsh-client-store', '@deepseek-ai/dsh-client-ui-slots',
+    '@deepseek-ai/dsh-client-ui-primitives',
+  ]
+  const offTable = client.externals.filter(id => !PLATFORM_MODULES.includes(id))
+  check(offTable.length === 0, '浏览器产物只 require 页面模块表里的说明符',
+    offTable.length === 0 ? client.externals.join('、') : `表外：${offTable.join('、')}`)
+  check(client.externals.includes('@deepseek-ai/dsh-client-ui-primitives'),
+    'Modal 与图标是向页面借的，没有被打进 bundle 变成第二份')
 
   const { child, token } = await startDsh()
   try {

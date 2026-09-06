@@ -101,6 +101,7 @@ describe('apply', () => {
       const face = row?.options.inject?.() as ExecProcessInjected
       expect(face.foldStore).toBeDefined()
       expect(face.collapsed).toBeDefined()
+      expect(face.frame).toBeDefined()
     }
   })
 
@@ -111,6 +112,7 @@ describe('apply', () => {
       world.registrations.find(entry => entry.options.key === key)?.options.inject?.() as ExecProcessInjected)
     expect(faces[0]?.foldStore).toBe(faces[1]?.foldStore)
     expect(faces[0]?.collapsed).toBe(faces[1]?.collapsed)
+    expect(faces[0]?.frame).toBe(faces[1]?.frame)
   })
 
   it('shadows dsh own control at a lower priority, never at the same one', () => {

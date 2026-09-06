@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest'
 import {
-  execProcessStats, segmentEndSeq, assistantRunning, EMPTY_STATS, hasVisibleReasoning, isFormalMessage,
+  execProcessStats, segmentEnded, segmentEndSeq, assistantRunning, EMPTY_STATS, hasVisibleReasoning, isFormalMessage,
   retryAttempts, toolFailed, toolName, toolRunning, type ExecNodeView,
 } from '../src/client/stats.js'
 
@@ -226,6 +226,23 @@ describe('segmentEndSeq', () => {
 
   it('is unbounded when the turn has no finalized answer', () => {
     expect(segmentEndSeq([], 10, null)).toBe(Number.POSITIVE_INFINITY)
+  })
+})
+
+describe('segmentEnded', () => {
+  it('uses the real closed Turn status for the final segment', () => {
+    expect(segmentEnded([], 10, null, false)).toBe(false)
+    expect(segmentEnded([], 10, null, true)).toBe(true)
+  })
+
+  it('ends when the answer anchor exists even before the Turn closes', () => {
+    expect(segmentEnded([], 10, 100, false)).toBe(true)
+  })
+
+  it('ends an earlier segment when a formal message opened the next header', () => {
+    const nodes = [node({ key: 'next', kind: 'exec-process-step', anchorSeq: 30 })]
+    expect(segmentEnded(nodes, 10, null, false)).toBe(true)
+    expect(segmentEnded(nodes, 30, null, false)).toBe(false)
   })
 })
 

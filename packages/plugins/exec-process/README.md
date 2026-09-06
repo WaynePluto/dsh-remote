@@ -3,20 +3,20 @@
 在会话流里给**每一段执行过程**一条默认折叠的「执行过程」行。
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ 执行过程  思考 12 次 · 工具调用 34 次  失败 2   ● read 进行中  ⌄ │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│ 执行过程  思考12次·工具34次·失败2  最近read              ⌄ │
+└──────────────────────────────────────────────────────────┘
 ```
 
-点它展开，再点收起。展开后是这一段原本的思考行与工具行；收起时它们整体消失，
-只剩上面这一行。**一个圆角细边框**把它和 agent 说的话分开（第一版只有 dsh 那条
-下边线，读起来和上一条消息粘在一起）；文字走 dsh 的**次级字号轴**
-（`--dsh-content-font-size-secondary`，比正文小一档，跟着设置里的字号走）。
+点它展开，再点收起。中文计数摘要固定为 `思考{n}次·工具{m}次·失败{o}`，没有失败时
+整段 `·失败{o}` 不出现；`工具调用` 缩为 `工具`，失败计数与其余摘要同色。段或 turn 已结束时
+不再显示任何「最近动作」区域；只有仍可继续的 segment 才显示 `最近{动作}`。运行中仍显示
+`{工具}进行中` / `思考中`，呼吸圆点位于最右侧 chevron 的左边，动作文字是唯一可截断区域。
 
-最右边那段说的是「它在干什么」：还在跑就是 **`● pwsh 进行中`**（小圆点会呼吸），
-跑完了就是 `最近 pwsh`。两个词的位置不一样是故意的：「进行中」是谓语、跟在名字后面，
-「最近」是状语、放在名字前面。并行工具按「还没结束的那个」算，不按「最后开始的那个」算；
-名字太长被截断时，**呼吸的小圆点是仍然留在原地的那个状态标识**。
+标题条收起时使用基础背景；展开时，标题和整个 member frame 都复用 dsh TodoPanel 同款
+`--dsw-specific-tip`，并回退到 `--dsw-alias-bg-base`。背景始终不透明，避免 sticky 或滚动时
+下方内容透出。展开内容由运行时 stylesheet 按 `data-chat-flow-key` 画成连续外框；formal answer
+内的 inline reasoning 父 wrapper 使用相同的边框与背景，整个过程不移动任何 dsh/React 拥有的 DOM。
 
 三条贯穿全篇的规则：
 
@@ -46,8 +46,8 @@ dsh 本来就有这个想法：`ui-chat` 为每个 turn 投影一个 `turn-proce
 | # | 注册 | 说明 |
 |---|---|---|
 | A | `ConversationNodeDefinition`（kind `exec-process`） | 每个 turn 的**第一段**。只提供位置：窗口与边界直接读 dsh 自己发布的 `turn-process` Turn 数据——那份投影**不受** `historyIncomplete` 影响，被关掉的只是它的呈现 |
-| B | `ConversationNodeDefinition`（kind `exec-process-step`） | **正式消息之后的每一段**。一个 agent step 恰好一条助手消息，所以按 `turn:step` 建 Context；没说过正式话的 step 出 `visibility: 'hidden'` 而不是撤回节点（撤回已物化的节点会被引擎判错） |
-| C | `conversation.chat.node` key `exec-process` / `exec-process-step` | 这一行本身：一个圆角细边框，颜色与字号全部取自 dsh 的令牌与字号轴 |
+| B | `ConversationNodeDefinition`（kind `exec-process-step`） | **正式消息之后的每一段**。一个 agent step 恰好一条助手消息，所以按 `turn:step` 建 Context；节点位于消息 `+0.04`，早于 dsh 的 max-tokens `+0.05` 与 turn-tail `+0.1`，保证 turn-tail 仍是最后节点、分叉按钮不会被误禁用；没说过正式话的 step 出 `visibility: 'hidden'` 而不是撤回节点 |
+| C | `conversation.chat.node` key `exec-process` / `exec-process-step` | 标题条本身：展开背景复用 TodoPanel 的 `--dsw-specific-tip`，颜色与字号取自 dsh 令牌 |
 | D | `conversation.chat.node` key `turn-process`，`priority: -1` | **影子覆盖** dsh 自己的控件 |
 
 D 做两件事：短会话里 dsh 的折叠本来能用，覆盖掉它就不会出现两条控件；同时它把 dsh 的
@@ -62,6 +62,14 @@ disclosure **强制常开**，于是 dsh 不再隐藏任何行（包括本插件
 而不是 `display:none`，因为 dsh 靠行的 rect 有序性二分查找阅读位置（`ChatView.tsx:93-104`）；
 只藏行**内部**那个「已思考」盒子时反过来必须用 `display:none`——它不参与那份 rect 顺序，
 而只有 `display:none` 才连 dsh 助手正文那 16px 的 flex 间距一起去掉。
+
+展开外框由另一张生命周期绑定的运行时样式表（`src/client/segment-frame.ts`）负责。它同样只按
+`data-chat-flow-key` 选择 dsh 的 sibling wrapper：每个 member row 画左右边，首尾分别封口并加圆角，
+原有行间 margin 改成 frame 内 padding，因此视觉上是一只连续容器。正式回答本身不进入外框；如果回答
+内部带 inline reasoning，只给其 `div:has(> [data-variant="think"])` 父 wrapper 单独画框，避免给
+固定高度的 thinking 盒子加 padding/border 导致内容压缩或溢出。member rows 与 inline reasoning
+父 wrapper 的描边统一使用更清晰但仍克制的 `--dsw-alias-border-l2`（带中性 fallback），背景统一使用
+`--dsw-specific-tip` 并回退到 `--dsw-alias-bg-base`，因此连续 frame 在深浅主题与滚动中都不会透底。
 
 ## 展开之后怎么收起来
 
@@ -78,10 +86,11 @@ wrapper 的 containing block 是**整条消息列**，不是它所概括的那�
 补法是每帧发布一个数字：
 
 ```
-push = clamp(滚动容器顶 + 行高 − 本段最后一行的底, 0, 行高)
+push = clamp(滚动容器顶 + 行高 − 本段最后一个展开内容的底, 0, 行高)
 ```
 
-表头下面还有内容时这一项是负的、夹到 0，就是普通吸顶；最后一行的底边升过表头自己的底边之后，
+这个内容终点优先取段尾正式回答内部 `[data-variant="think"]` 的底边；没有 inline reasoning 时才取最后一个 member row；不能量整个正式回答 wrapper，否则长回答会让表头粘住整段。
+表头下面还有内容时这一项是负的、夹到 0，就是普通吸顶；终点底边升过表头自己的底边之后，
 `push` 与滚动**等速**增长，表头就以内容的速度滑出容器顶端。实测每滚 1px 推出 1px，
 `top` 从 0 连续走到 −32 —— 这正是真正的 containing block 会做的事，所以**不需要过渡动画，也不会跳**。
 
@@ -105,12 +114,15 @@ flex 列里；CSS 的 `overflow` 只裁剪后代，要把它们套进一个容�
 - **没有宿主行为。** `src/index.ts` 是空插件，它存在只因为 dsh 的客户端模块系统靠 overlay 指向的
   宿主模块往上找到 `package.json` 才会下发浏览器半。**缺 `dist/client.js` 会让 dsh 的 web UI 整个起不来。**
 
-## 外观上的两条硬约束
+## 外观上的三条硬约束
 
-- **行的背景必须是不透明的 `--dsw-alias-bg-base`**，`:hover` 只能动**边框色和文字色**。
-  这一行展开时会 sticky 到滚动容器顶端，而 dsh 的 hover 令牌
-  （`--dsw-alias-interactive-bg-hover`）是半透明的 —— 把它画进 background，
-  吸顶时下面滚过去的内容就会透出来。
+- **展开标题背景使用 `--dsw-specific-tip`，并保留不透明 fallback**；收起时使用
+  `--dsw-alias-bg-base`。`:hover` 只能动边框色和文字色。标题展开后会 sticky，半透明 hover
+  背景会让下面滚过的内容透出来。
+- **展开内容统一使用不透明的 `--dsw-specific-tip` 背景，并回退到 `--dsw-alias-bg-base`**；
+  member rows 形成的连续 frame 与 inline reasoning 父 wrapper 都必须覆盖，sticky/滚动时不能透底。
+- **展开内容外框使用 `--dsw-alias-border-l2`（带中性 fallback）**，比 `border-l1` 更清楚但仍克制；
+  `border-l1` 不再用于 frame。不能把 token 里的字母 `l` 写成数字 `1`。
 - **字号走 `--dsh-content-font-size-secondary` 而不是写死 13px**：那是 dsh
   「比正文小一档」的次级轴（`gradient-shadow-text.css:56`），每条流式行的标题与摘要都在这条轴上，
   读者在设置里改字号时这一行才会跟着变。
@@ -147,6 +159,6 @@ node scripts/exec-process-check.mjs
 
 ```powershell
 pnpm --filter @dsh-remote/dsh-plugin-exec-process build      # 两半
-pnpm --filter @dsh-remote/dsh-plugin-exec-process test       # 144 项
+pnpm --filter @dsh-remote/dsh-plugin-exec-process test
 pnpm --filter @dsh-remote/dsh-plugin-exec-process typecheck  # 宿主程序 + 浏览器程序各一次
 ```

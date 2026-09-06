@@ -24,7 +24,7 @@
  *   — see {@link bannerStyle}.
  * - HEIGHT is the text's fault. The message gets a container of its own with a
  *   hard `maxHeight` and its own scrollbar, every box in the column carries
- *   `minWidth: 0`, and the buttons sit on the title row where their position
+ *   `minWidth: 0`, and the action sits on the title row where its position
  *   does not depend on how long the message is. The Host clamps the string as
  *   well (`MESSAGE_LIMIT`), because scrolling a megabyte is not a feature
  *   either.
@@ -51,6 +51,7 @@ export interface RetryDockInjected {
 /** Copy key reporting each refusal the Host can answer with. */
 const REFUSAL_KEYS = {
   busy: 'busy',
+  'pending-input': 'pendingInput',
   'not-failed': 'notFailed',
   'no-agent': 'noAgent',
   subagent: 'subagent',
@@ -199,11 +200,6 @@ export function RetryBanner({ pending, running, onRetry, t }: RetryDockOwnProps)
   const translate = useCallback((key: RetryKey): string => t?.(key) ?? key, [t])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // A turn the user chose not to act on stays out of the way, but only that
-  // one: a later turn ending badly is a new decision, so the dismissal is keyed
-  // by turn rather than being a sticky preference.
-  const [dismissedTurn, setDismissedTurn] = useState<number | null>(null)
-
   const turn = pending?.turn
   useEffect(() => {
     setError(null)
@@ -235,7 +231,6 @@ export function RetryBanner({ pending, running, onRetry, t }: RetryDockOwnProps)
 
   if (pending === null || pending === undefined) return null
   if (running) return null
-  if (dismissedTurn === pending.turn) return null
 
   const failed = pending.kind === 'failed'
   const title = failed
@@ -256,14 +251,6 @@ export function RetryBanner({ pending, running, onRetry, t }: RetryDockOwnProps)
           onClick={retry}
         >
           {translate(action)}
-        </button>
-        <button
-          type="button"
-          style={buttonStyle}
-          disabled={busy}
-          onClick={() => { setDismissedTurn(pending.turn) }}
-        >
-          {translate('dismiss')}
         </button>
       </div>
       {pending.kind === 'failed' && (

@@ -219,7 +219,7 @@ describe('execProcessStepDefinition', () => {
     expect(again).toMatchObject({ formalSeq: 80 })
   })
 
-  it('opens the next segment just after the formal message', () => {
+  it('opens the next segment after the formal message but before dsh follow-up nodes', () => {
     const node = execProcessStepDefinition.buildViewNode?.(
       stepContext(7, 2, { turn: 7, step: 2, formalSeq: 50 }))
     expect(node).toMatchObject({
@@ -228,9 +228,11 @@ describe('execProcessStepDefinition', () => {
       anchorSeq: 50 + EXEC_RESUME_SEQ_OFFSET,
       data: { turn: 7 },
     })
-    // Strictly between the message row and the first tool call it dispatched.
+    // dsh reserves +0.05 for max-tokens and +0.1 for turn-tail. Its branch
+    // guard requires turn-tail to remain the Turn's last Chat node, so this
+    // presentation-only segment marker must sort before both follow-ups.
     expect((node as unknown as { anchorSeq: number }).anchorSeq).toBeGreaterThan(50)
-    expect((node as unknown as { anchorSeq: number }).anchorSeq).toBeLessThan(51)
+    expect((node as unknown as { anchorSeq: number }).anchorSeq).toBeLessThan(50.05)
   })
 
   it('a step that said nothing hides its row instead of withdrawing it', () => {

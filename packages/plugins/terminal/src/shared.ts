@@ -47,7 +47,7 @@ export const CHANNEL = '/terminal'
  * ⚠️ There is deliberately no `open` and no `close`. Creating a shell is the
  * one action on this surface that manufactures new capability rather than
  * steering capability the user can already see, and it belongs where dsh put
- * it: the `terminal_open` tool, which runs inside the turn with the transcript
+ * it: the model-facing `interactive_terminal_open` tool (wrapping upstream `terminal_open`), which runs inside the turn with the transcript
  * and the approval stack around it. See the README's security section.
  */
 export const ENDPOINTS = ['list', 'read', 'send', 'interrupt'] as const
@@ -84,7 +84,7 @@ export type TerminalsUnavailable =
 export interface TerminalView {
   /** Service-minted session id (`pty-1`, `pty-2`, …). */
   id: string
-  /** Owner-local display name, when `terminal_open` was given one. */
+  /** Owner-local display name, when `interactive_terminal_open` was given one. */
   name?: string
   /** Backend type the session was opened with (`shell`). */
   type: string
@@ -101,7 +101,7 @@ export interface TerminalView {
   /**
    * Whether THIS PLUGIN currently has a send in flight on the session.
    *
-   * ⚠️ It is not "the session is idle". A send started by `terminal_send` is
+   * ⚠️ It is not "the session is idle". A send started by model-facing `interactive_terminal_send` (upstream `terminal_send`) is
    * invisible from here — the registry keeps the active operation private — so
    * a `false` here does not promise the next send will be accepted. The Host
    * handles that case by waiting rather than by predicting it; see
@@ -243,4 +243,44 @@ export function revisionOf(text: string, totalLines: number): string {
  */
 export function terminalLabel(terminal: TerminalView): string {
   return terminal.name === undefined || terminal.name === '' ? terminal.id : `${terminal.name} (${terminal.id})`
+}
+
+/**
+ * How many consecutive "could not answer" polls it takes to clear the panel.
+ *
+ * At the panel's list cadence this is a few seconds of the Host having no agent
+ * to look in — long enough to ride out a session remount, short enough that a
+ * genuinely dead conversation does not keep a stale panel.
+ */
+export const BLIND_POLL_LIMIT = 3
+
+/**
+ * Decide what one poll does to what the panel is showing.
+ *
+ * ⚠️ A poll that could not ANSWER must not be read as "there are no terminals".
+ * {@link TerminalsSnapshot.unavailable} means the Host had nothing to look in —
+ * the agent is momentarily absent while a session remounts — and taking it at
+ * face value unmounts the panel, which throws away the user's DRAFT. An input
+ * box that vanishes mid-password is precisely the failure this plugin must not
+ * have, and it was caught exactly once in twenty live browser runs, which is
+ * how a bug like this reaches a user rather than a test.
+ *
+ * A definitive answer always wins, so a terminal the model closed disappears
+ * immediately. A genuinely dead agent clears the panel once the blind polls
+ * reach {@link BLIND_POLL_LIMIT}, rather than leaving a stale panel forever.
+ * @param previous - what the panel is showing now.
+ * @param next - the poll's answer.
+ * @param blindPolls - how many polls in a row have already failed to answer.
+ * @returns the snapshot to show and the new blind-poll count.
+ */
+export function foldPoll(
+  previous: TerminalsSnapshot | undefined,
+  next: TerminalsSnapshot,
+  blindPolls: number,
+): { snapshot: TerminalsSnapshot | undefined, blindPolls: number } {
+  if (next.unavailable === undefined) return { snapshot: next, blindPolls: 0 }
+  const attempts = blindPolls + 1
+  const held = previous?.terminals.length ?? 0
+  if (held > 0 && attempts < BLIND_POLL_LIMIT) return { snapshot: previous, blindPolls: attempts }
+  return { snapshot: next, blindPolls: attempts }
 }

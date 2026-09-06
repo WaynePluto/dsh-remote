@@ -249,8 +249,12 @@ function registerTools(ctx: Context, config: Config): void {
       const result = await startService({
         name: args.name,
         command: args.command,
-        // The registry always lives in the SESSION's project directory even when
-        // the command runs elsewhere, so one project has exactly one list.
+        // The registry and the log always live in the SESSION's project
+        // directory, even when the command runs somewhere else. Collapsing the
+        // two is not a style choice: `service_list` and the panel only know the
+        // session's directory, so a registry that followed `args.cwd` produces
+        // a service that is demonstrably running and reported as absent.
+        root: cwd,
         cwd: args.cwd ?? cwd,
         ...args.port === undefined ? {} : { port: args.port },
         ...args.readyLog === undefined ? {} : { readyLog: args.readyLog },

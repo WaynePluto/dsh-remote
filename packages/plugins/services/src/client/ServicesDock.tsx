@@ -30,8 +30,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
+// dsh's own primitives, taken from the page's frozen module table rather than
+// bundled: the same `Modal` its dialogs use (mask, blur, Escape, body portal)
+// and the same 14px icon language its dock panels use.
+import { IconApiOutline14, IconChevronDownOutline14, IconChevronUpOutline14, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { formatUptime } from '../shared.js'
 import type { ServiceActionResult, ServiceLogsResult, ServiceView, ServicesSnapshot } from '../shared.js'
+import { LOG_DIALOG_CLASS, LOG_DIALOG_HEIGHT, LOG_PATH_MIN_HEIGHT_PX, logDialogRule, logDialogWidth, publishLogDialogWidth } from './log-dialog.js'
 import { fill } from './locales.js'
 import type { ServicesKey } from './locales.js'
 
@@ -40,6 +45,34 @@ export const POLL_MS = 5000
 
 /** How often the locally rendered uptime advances, in milliseconds. */
 const TICK_MS = 1000
+
+/**
+ * Install the log-dialog stylesheet.
+ *
+ * The rule text and the width arithmetic live in `./log-dialog.ts`, which stays
+ * DOM-free so a unit test can assert them; only the two `document` calls are
+ * here, where the browser program supplies the types.
+ * @returns a disposer removing the stylesheet.
+ */
+function installLogDialogStyles(): () => void {
+  const element = document.createElement('style')
+  element.dataset['dshServicesLogDialog'] = ''
+  element.textContent = logDialogRule()
+  document.head.append(element)
+  return () => { element.remove() }
+}
+
+/**
+ * Publish the measured dialog width onto `<html>` for the stylesheet to read.
+ * @param width - the dialog width in px.
+ */
+function publishWidth(width: number): void {
+  publishLogDialogWidth(
+    (name, value) => { document.documentElement.style.setProperty(name, value) },
+    width,
+  )
+}
+
 
 /** What this plugin injects into its own registration. */
 export interface ServicesDockInjected {
@@ -78,6 +111,28 @@ const CARD_MAX = 'var(--dsh-composer-card-max-width, 952px)'
  */
 const BORDER = 'var(--dsw-alias-border-l1, rgba(128,128,128,0.3))'
 const SECONDARY = 'var(--dsw-alias-label-secondary, #6b7280)'
+const TERTIARY = 'var(--dsw-alias-label-tertiary, #6b7280)'
+
+/**
+ * The card surface, taken from dsh's own todo panel rather than invented.
+ *
+ * `--dsw-specific-tip` is the ELEVATED surface rung — the same one dsh's menus
+ * use — and it is deliberately NOT the page background:
+ * `rgb(245,246,247)` in light, `rgb(53,54,56)` in dark
+ * (`ui-theme/src/styles/design-platform.css:245,337`;
+ * `ui-conversation/.../TodoPanel.module.css:24`).
+ *
+ * The first version used `--dsw-alias-bg-base`, which in the light palette is
+ * plain white — so the card dissolved into the page and read as "太白了" next
+ * to dsh's own todo strip. This is the same class of mistake as §8.6a: a
+ * background that is technically a valid token but carries no elevation.
+ *
+ * The fallback is a neutral translucent grey rather than either literal: it
+ * darkens a light surface and lightens a dark one, so if a future dsh renames
+ * the token this degrades to a still-visible card in BOTH themes instead of
+ * being right in one and invisible in the other.
+ */
+const SURFACE = 'var(--dsw-specific-tip, rgba(128,128,128,0.1))'
 
 const rootStyle: CSSProperties = {
   display: 'flex',
@@ -88,22 +143,41 @@ const rootStyle: CSSProperties = {
   maxWidth: `calc(${CARD_MAX} - ${INSET} * 4)`,
   minWidth: 0,
   boxSizing: 'border-box',
-  borderRadius: '10px',
-  border: `1px solid ${BORDER}`,
-  // Opaque, not a layer token: in dsh's light palette layers 1-3 are the same
-  // white, so a layer token would make this box invisible in half the themes.
-  background: 'var(--dsw-alias-bg-base, transparent)',
+  // 0.5px and 12px are dsh's own numbers for this card, not rounded versions:
+  // sitting directly beside the todo panel, a 1px border and a 10px radius
+  // read as a different component rather than a sibling.
+  borderRadius: '12px',
+  border: `0.5px solid ${BORDER}`,
+  background: SURFACE,
   fontSize: '13px',
   lineHeight: 1.5,
   overflow: 'hidden',
 }
 
+/**
+ * ⚠️ 表头对齐全部交给 flex，**不写任何固定尺寸**。
+ *
+ * dsh 自己的表头是 `lead`(14px svg) + 标题(line-height 24px) + 摘要(20px) +
+ * chevron(14px)，靠 `align-items:center` 对齐 —— 它对齐的是**盒子中心**，而这四个
+ * 盒子高度各不相同，图标的几何中心与文字 ink 的视觉中心就差出肉眼可见的一两像素
+ * （用户实机反馈：icon / 标题 / 副标题竖直方向没对齐）。
+ *
+ * 这里的做法是两层 flex：
+ * 1. 表头 `align-items: stretch` —— 四个块被拉成**同一高度**（由最高的内容决定，
+ *    不是某个写死的数字）。
+ * 2. 每个块自己 `display:flex; align-items:center` —— 图标 / 文字各自在这同一个
+ *    高度里居中。
+ *
+ * 于是「居中」只依赖 flex 本身，既不依赖字体度量，也不需要谁去猜一个行高。
+ * ⚠️ 摘要要省略号，就必须把文字放进**内层 span**：flex 容器自己做不了
+ * `text-overflow: ellipsis`。
+ */
 const headerStyle: CSSProperties = {
   display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
+  alignItems: 'stretch',
+  gap: '10px',
   width: '100%',
-  padding: '7px 12px',
+  padding: '8px 12px',
   border: 'none',
   background: 'transparent',
   color: 'inherit',
@@ -114,11 +188,70 @@ const headerStyle: CSSProperties = {
   boxSizing: 'border-box',
 }
 
-const titleStyle: CSSProperties = { fontWeight: 600, flex: '0 0 auto' }
+/**
+ * ⚠️ 图标的**光学**下移量，不是随手写的数字。
+ *
+ * flex 把图标格与文字格拉成等高、各自居中之后，量一张真实截图（`sharp` 读墨迹包
+ * 围盒，1× 无缩放）：标题「常驻服务」与副标题「1 个运行中」的墨迹中心都落在
+ * y=48.0，而图标的墨迹中心在 y=46.5 —— 图标高了 1.5px。原因是**几何居中不等于视
+ * 觉居中**：汉字字面在行盒里天然偏下，svg 却是按几何中心摆的，这 1.5px 无论怎么
+ * 调 flex 都补不回来。
+ *
+ * 所以补一次光学位移，写成 **em**（1.5px ÷ 13px ≈ 0.115em）而不是 px：字号变了它
+ * 跟着变。用 `transform` 而不是 margin —— 纯视觉位移，不参与布局，不会把等高的格
+ * 子挤歪。
+ */
+const GLYPH_OPTICAL_SHIFT = 'translateY(0.115em)'
+
+/**
+ * The header's leading glyph cell — centres the icon in the stretched row.
+ *
+ * `line-height: 0` 是这一格的最后一道保险：svg 作为 flex item 会被 blockify，但
+ * 只要格子里出现任何文本节点（哪怕 JSX 里的一个空白），行盒的半行距就会把图标顶
+ * 偏一两像素 —— 归零后这一格的高度只由 svg 自己决定。
+ */
+const leadStyle: CSSProperties = {
+  display: 'flex',
+  flex: 'none',
+  alignItems: 'center',
+  justifyContent: 'center',
+  lineHeight: 0,
+  transform: GLYPH_OPTICAL_SHIFT,
+  color: 'var(--dsw-alias-label-tertiary, #6b7280)',
+}
+
+/** The disclosure chevron cell — the same centring and optical shift as the lead. */
+const chevronStyle: CSSProperties = {
+  display: 'flex',
+  flex: 'none',
+  alignItems: 'center',
+  justifyContent: 'center',
+  lineHeight: 0,
+  transform: GLYPH_OPTICAL_SHIFT,
+  color: TERTIARY,
+}
+
+const titleStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  flex: '0 0 auto',
+  fontSize: '13px',
+  fontWeight: 500,
+  color: 'var(--dsw-alias-label-primary, inherit)',
+  whiteSpace: 'nowrap',
+}
 
 const summaryStyle: CSSProperties = {
-  color: SECONDARY,
+  display: 'flex',
+  alignItems: 'center',
+  color: TERTIARY,
+  fontSize: '13px',
   flex: '1 1 auto',
+  minWidth: 0,
+}
+
+/** The summary's text box — the ellipsis lives here, not on the flex cell. */
+const summaryTextStyle: CSSProperties = {
   minWidth: 0,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -131,7 +264,7 @@ const listStyle: CSSProperties = {
   padding: '0 12px 8px',
   display: 'flex',
   flexDirection: 'column',
-  gap: '6px',
+  gap: '8px',
   minWidth: 0,
 }
 
@@ -144,7 +277,7 @@ const rowStyle: CSSProperties = {
 }
 
 const nameStyle: CSSProperties = {
-  fontFamily: 'var(--dsw-font-mono, ui-monospace, monospace)',
+  fontFamily: 'var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
   fontWeight: 600,
   minWidth: 0,
   overflow: 'hidden',
@@ -176,26 +309,58 @@ const buttonStyle: CSSProperties = {
   flex: '0 0 auto',
 }
 
+/**
+ * The log body inside the modal.
+ *
+ * ⚠️ The monospace fallback is a COMPLETE stack, not `ui-monospace, monospace`.
+ * `--dsw-font-mono` is a name dsh references but never defines, so this
+ * fallback is what actually renders — and on Windows `ui-monospace` does not
+ * resolve, which would drop straight to the browser's default fixed font
+ * (docs/02 §8.6b).
+ */
 const logBoxStyle: CSSProperties = {
-  maxHeight: '12em',
-  overflowY: 'auto',
-  overflowX: 'auto',
-  // Keeps a flick that reaches the end of this box from scrolling the
-  // transcript behind it — the mobile failure mode a nested scroller creates.
+  // FIXED, not a maximum: a maximum grew with the content, so the card opened
+  // small on "loading…" and jumped to full size when the log landed. Still
+  // clamped to the viewport — see LOG_DIALOG_HEIGHT for why that clamp is
+  // load-bearing rather than cosmetic.
+  height: LOG_DIALOG_HEIGHT,
+  // `.body` is a flex column, so without this the fixed height would still be a
+  // shrinkable flex base.
+  flex: 'none',
+  overflow: 'auto',
   overscrollBehavior: 'contain',
-  margin: '2px 0 0',
-  padding: '6px 8px',
+  margin: 0,
+  padding: '10px 12px',
   borderRadius: '8px',
   border: `1px solid ${BORDER}`,
   background: 'rgba(128,128,128,0.1)',
   color: SECONDARY,
-  fontFamily: 'var(--dsw-font-mono, ui-monospace, monospace)',
-  fontSize: '11px',
-  lineHeight: 1.45,
+  fontFamily: 'var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
+  fontSize: '12px',
+  lineHeight: 1.5,
   whiteSpace: 'pre',
   minWidth: 0,
-  maxWidth: '100%',
   boxSizing: 'border-box',
+}
+
+/**
+ * The log file path shown above the body.
+ *
+ * The reserved height keeps the box present while the path is still unknown, so
+ * the dialog does not gain a line when the Host answers; `nowrap` keeps a long
+ * path from wrapping to a second line, which would be the same jump again. The
+ * full path stays available through the element's `title`.
+ */
+const logPathStyle: CSSProperties = {
+  fontFamily: 'var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
+  fontSize: '11px',
+  lineHeight: `${String(LOG_PATH_MIN_HEIGHT_PX)}px`,
+  minHeight: `${String(LOG_PATH_MIN_HEIGHT_PX)}px`,
+  color: TERTIARY,
+  margin: '0 0 8px',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
 }
 
 const errorStyle: CSSProperties = {
@@ -253,6 +418,12 @@ export function ServicesPanel({ sessionId, actions, t }: ServicesPanelProps) {
    */
   const [receivedAt, setReceivedAt] = useState(() => Date.now())
   const [localNow, setLocalNow] = useState(() => Date.now())
+  /** This card's own box — the ruler the log dialog is sized against. */
+  const rootRef = useRef<HTMLElement | null>(null)
+
+  // One stylesheet for the lifetime of the panel; the width itself travels as a
+  // custom property, so opening a dialog never rebuilds this.
+  useEffect(() => installLogDialogStyles(), [])
 
   const onList = actions?.onList
   // A ref keeps the poll effect from being torn down and restarted every time
@@ -339,12 +510,13 @@ export function ServicesPanel({ sessionId, actions, t }: ServicesPanelProps) {
     })()
   }, [actions, load, translate])
 
-  const toggleLog = useCallback((name: string): void => {
-    if (openLog === name) {
-      setOpenLog(null)
-      setLog(null)
-      return
-    }
+  /** Open the log dialog for one service, or refresh the one already open. */
+  const showLog = useCallback((name: string): void => {
+    // Measure now, not at mount: the column changes width when the sidebar
+    // collapses or the user drags the width handles, and this is the moment the
+    // number is actually needed.
+    const measured = rootRef.current?.getBoundingClientRect().width ?? 0
+    publishWidth(logDialogWidth(measured))
     setOpenLog(name)
     setLog(null)
     const fetchLogs = actions?.onLogs
@@ -358,26 +530,26 @@ export function ServicesPanel({ sessionId, actions, t }: ServicesPanelProps) {
         }))
       }
     })()
-  }, [actions, openLog, translate])
+  }, [actions, translate])
+
+  const closeLog = useCallback((): void => {
+    setOpenLog(null)
+    setLog(null)
+  }, [])
 
   const services: readonly ServiceView[] = snapshot?.services ?? []
-  const stoppedLogs = snapshot?.stoppedLogs ?? []
 
-  const summary = useMemo(() => {
-    const parts: string[] = []
-    parts.push(services.length === 0
-      ? translate('summaryNone')
-      : fill(translate('summaryRunning'), { count: services.length }))
-    if (stoppedLogs.length > 0) {
-      parts.push(fill(translate('summaryStopped'), { count: stoppedLogs.length }))
-    }
-    return parts.join(' · ')
-  }, [services.length, stoppedLogs.length, translate])
+  const summary = useMemo(
+    () => fill(translate('summaryRunning'), { count: services.length }),
+    [services.length, translate],
+  )
 
-  // Nothing has ever run in this project: no panel at all. A permanently empty
-  // box above the composer would cost every user vertical space to tell them
-  // about a feature they are not using.
-  if (services.length === 0 && stoppedLogs.length === 0) return null
+  // No running service means no panel at all — not even a "0 stopped" strip.
+  // The dock sits between the transcript and the composer, so anything shown
+  // there costs every user vertical space on every turn; a panel about
+  // something that is not running has not earned it. A crashed service's log
+  // stays readable through `service_logs`.
+  if (services.length === 0) return null
 
   const elapsed = (service: ServiceView): string => {
     if (snapshot === undefined) return ''
@@ -385,16 +557,25 @@ export function ServicesPanel({ sessionId, actions, t }: ServicesPanelProps) {
   }
 
   return (
-    <section style={rootStyle} aria-label={translate('title')} data-dsh-services-panel="">
+    <section ref={rootRef} style={rootStyle} aria-label={translate('title')} data-dsh-services-panel="">
       <button
         type="button"
         style={headerStyle}
         aria-expanded={!collapsed}
         onClick={() => { setCollapsed(value => !value) }}
       >
+        {/* dsh's own 14px glyph set, matching the todo panel's lead icon. The
+            API mark is a terminal prompt in a rounded square — which is
+            literally what a service is here. */}
+        <span aria-hidden style={leadStyle}><IconApiOutline14 /></span>
         <span style={titleStyle}>{translate('title')}</span>
-        <span style={summaryStyle}>{summary}</span>
-        <span aria-hidden style={{ color: SECONDARY, flex: '0 0 auto' }}>{collapsed ? '▾' : '▴'}</span>
+        <span style={summaryStyle}><span style={summaryTextStyle}>{summary}</span></span>
+        {/* dsh's shared disclosure chevron: collapsed points UP, expanded
+            points DOWN (`TodoPanel.tsx:104-106`). A text "▾" was a different
+            glyph at a different weight sitting right beside it. */}
+        <span aria-hidden style={chevronStyle}>
+          {collapsed ? <IconChevronUpOutline14 /> : <IconChevronDownOutline14 />}
+        </span>
       </button>
 
       {!collapsed && (
@@ -415,9 +596,9 @@ export function ServicesPanel({ sessionId, actions, t }: ServicesPanelProps) {
                   type="button"
                   style={buttonStyle}
                   disabled={busy[service.name] !== undefined}
-                  onClick={() => { toggleLog(service.name) }}
+                  onClick={() => { showLog(service.name) }}
                 >
-                  {openLog === service.name ? translate('hideLogs') : translate('logs')}
+                  {translate('logs')}
                 </button>
                 <button
                   type="button"
@@ -439,23 +620,44 @@ export function ServicesPanel({ sessionId, actions, t }: ServicesPanelProps) {
               {service.identity === 'unknown' && (
                 <div style={warnStyle}>{translate('unknownIdentity')}</div>
               )}
-              {openLog === service.name && (
-                <div style={logBoxStyle}>
-                  {log === null
-                    ? translate('loadingLogs')
-                    : log.tail === '' ? translate('emptyLog') : log.tail}
-                </div>
-              )}
             </li>
           ))}
-          {stoppedLogs.length > 0 && (
-            <li style={{ ...warnStyle, minWidth: 0 }}>
-              {fill(translate('stoppedHint'), { names: stoppedLogs.join('、') })}
-            </li>
-          )}
           {error !== null && <li style={errorStyle}>{error}</li>}
         </ul>
       )}
+
+      {/* The log lives in dsh's own centred dialog rather than under the row:
+          the dock strip is a few lines tall, and a dev server's output is not
+          readable in it. `Modal` brings the mask, the blur, Escape-to-close and
+          the body portal with it, so this cannot be clipped by the dock's
+          `overflow: hidden`. */}
+      <Modal
+        open={openLog !== null}
+        onClose={closeLog}
+        className={LOG_DIALOG_CLASS}
+        title={fill(translate('logTitle'), { name: openLog ?? '' })}
+        closeLabel={translate('close')}
+        footer={(
+          <button
+            type="button"
+            style={buttonStyle}
+            onClick={() => { if (openLog !== null) showLog(openLog) }}
+          >
+            {translate('refresh')}
+          </button>
+        )}
+      >
+        {/* Rendered even while `log` is null: the box holds its reserved height
+            so the dialog does not grow a line when the path arrives. */}
+        <div style={logPathStyle} title={log?.file ?? ''}>{log?.file ?? ''}</div>
+        <pre style={logBoxStyle}>
+          {log === null
+            ? translate('loadingLogs')
+            : log.tail === '' ? translate('emptyLog') : log.tail}
+        </pre>
+      </Modal>
     </section>
   )
 }
+
+

@@ -16,8 +16,13 @@
 |---|---|
 | `ctx.terminals`：按 Agent 归属的 PTY 会话注册表 | `@deepseek-ai/dsh-terminal` |
 | 真 PTY 后端，**bash / pwsh 按平台切换**（`shellDialect`） | `@deepseek-ai/dsh-terminal-bash` |
-| 六个模型工具 `terminal_open/send/read/signal/close/list` | `@deepseek-ai/dsh-tool-terminal` |
+| 六个上游模型工具 `terminal_open/send/read/signal/close/list` | `@deepseek-ai/dsh-tool-terminal` |
 | 底层 PTY（node-pty，六个平台的预编译产物随包） | `packages/subprocess/subprocess-local` |
+
+这些名字是**上游实现名**，不会原样暴露给本插件的模型。插件在上游工具包的 `apply()` 外包一层
+**fail-closed wrapper**：只接受预期的六次工具注册，再以
+`interactive_terminal_open/send/read/signal/close/list` 暴露；缺少、重复或出现未知注册时整组拒绝，
+绝不退回到裸 `terminal_*`。因此，本插件对模型可见的终端工具**只有**这六个 `interactive_terminal_*`。
 
 缺的正好是两件事，这个插件补的就是这两件：
 
@@ -34,13 +39,19 @@
 
 ## 用起来是什么样
 
-1. 让模型开一个终端：它调 `terminal_open`（六个工具由本插件挂上）。
+1. 让模型开一个终端：它调 `interactive_terminal_open`（六个 `interactive_terminal_*` 工具由本插件挂上）。
 2. 输入框上方出现「**交互终端**」折叠面板，展开是终端画面 + 一个输入框。
 3. 命令停在 `PASSWORD:` 这种提示上时，**你自己在面板里输入并回车** ——
    进的是同一个 shell，模型看得到之后的输出，但你输入的内容不经过模型的参数。
 4. 打错了或者想停下来，点「中断」（向前台进程组发 `SIGINT`）。
 
 会话没开过终端时，面板整个不出现 —— 一个常驻的空盒子只会白占输入框上方的高度。
+
+## 严格使用边界
+
+`interactive_terminal_*` **只用于两类需求**：需要交互式 stdin（密码、确认、REPL 等），
+或必须让同一个终端状态跨多次工具调用保留。普通一次性命令一律用 `pwsh` / `bash`，包括
+Git、构建、测试和脚本；**仅仅运行时间长，不构成使用交互终端的理由**，需要时用它们的 `run_in_background`。
 
 ---
 
@@ -52,7 +63,7 @@
 在此之上，这个插件划了两条线：
 
 - **面板不能开终端，也不能关终端。** 通道只有 `list` / `read` / `send` / `interrupt` 四个端点。
-  造一个 shell 是「凭空多出一份能力」，只能走 turn 里的 `terminal_open` ——
+  造一个 shell 是「凭空多出一份能力」，只能走 turn 里的 `interactive_terminal_open` ——
   那里有转录记录，也有审批栈。这与本仓库 `services` 插件「面板刻意没有启动按钮」是同一条取舍。
   冒烟脚本里有两条专门锁死通道上没有 `open` / `close`。
 - **不需要额外的沙箱门。** 与 `services` 插件不同，本插件**不自己 spawn** ——
@@ -107,7 +118,7 @@ bash 那一侧**不动** dsh 的默认 argv（本机没有 bash，不猜）。
 默认 20 秒）并允许重试（`startupAttempts`，默认 3 次）。它存在是因为 `terminal-bash`
 用同一个 `timeoutMs` 同时兜住「一次发送」和「整个启动」，300 秒的发送预算会让一次失败的
 开终端挂 5 分钟。⚠️ 它是打在**本插件自己挂载的那个 registry 实例**上的补丁 ——
-`terminal_open` 直接调 `spawn`，dsh 没有留下拦截的接缝；补丁挂在本插件的 fiber 上，卸载即还原。
+上游实现的 `terminal_open` 直接调 `spawn`，dsh 没有留下拦截的接缝；补丁挂在本插件的 fiber 上，卸载即还原。
 
 ---
 
@@ -131,12 +142,18 @@ bash 那一侧**不动** dsh 的默认 argv（本机没有 bash，不猜）。
 ## 一次发送为什么可能被拒，以及为什么草稿不会被清掉
 
 `ctx.terminals` **同一时刻只允许一次发送**，第二次直接抛 `SEND_ACTIVE`。模型自己那次
-`terminal_send` 还在结算时，你敲的密码就会撞上它。所以宿主侧会**等**（`sendWaitMs`，默认 10 秒，
+`interactive_terminal_send` 还在结算时，你敲的密码就会撞上它。所以宿主侧会**等**（`sendWaitMs`，默认 10 秒，
 每 250ms 重试一次）——模型那次发送会在输出静默约 3 秒后结算，而「停在提示符上等输入」
 恰好就是这种状态。
 
 等不到就返回 `busy: true`，页面**保留你输入的内容**。一个刚吞掉密码的输入框自己清空，
 是这个组件唯一不能有的失败方式。
+
+同一条规矩还管着另一处，而且是真浏览器验收才逼出来的（二十次里出现一次）：
+**一次「答不上来」的轮询不等于「没有终端」**。`unavailable` 的意思是宿主没东西可查
+（会话重挂的那一瞬间 agent 不在），照字面理解就会把整个面板卸载掉 —— 连同你正在打的那半个密码。
+所以 `foldPoll`（`src/shared.ts`，纯函数、单独有测试）只认**确定的答案**：模型关掉终端时
+面板立刻消失，而连续三次答不上来才清空。
 
 ---
 
@@ -154,7 +171,7 @@ bash 那一侧**不动** dsh 的默认 argv（本机没有 bash，不猜）。
 | 字段 | 默认 | 含义 |
 |---|---|---|
 | `mountBackend` | `true` | 挂 dsh 的 PTY 注册表与 shell 后端 |
-| `mountTools` | `true` | 挂 dsh 的六个 `terminal_*` 工具（关掉等于没人能开终端；它是固定的 token 成本） |
+| `mountTools` | `true` | 通过 fail-closed wrapper 挂六个 `interactive_terminal_*` 工具；上游实现名仍是 `terminal_*`（关掉等于没人能开终端；它是固定的 token 成本） |
 | `shellDialect` | `auto` | `auto` 按平台，和 dsh 自己的组合体一致 |
 | `hardenPwshReadLine` | `true` | 见上面那一节；关掉请自带 `shellArgs` |
 | `shellArgs` | `[]` | 非空则原样交给 `terminal-bash`，覆盖全部默认 |
@@ -166,8 +183,8 @@ bash 那一侧**不动** dsh 的默认 argv（本机没有 bash，不猜）。
 ## 验证
 
 ```powershell
-pnpm --filter @dsh-remote/dsh-plugin-terminal test   # 52 项，含真 PTY 的交互闭环
-node scripts/terminal-check.mjs                      # 25 项真机冒烟，升级 dsh 后跑
+pnpm --filter @dsh-remote/dsh-plugin-terminal test   # 含真 PTY 的交互闭环
+node scripts/terminal-check.mjs                      # 真机冒烟，升级 dsh 后跑
 ```
 
 `tests/live.spec.ts` 是唯一真的起 PTY 的测试文件，它跑的是这个插件全部主张的那一条：
@@ -177,5 +194,11 @@ node scripts/terminal-check.mjs                      # 25 项真机冒烟，升�
 是操作系统、node-pty 与 dsh 后端三者共同的性质，只能真做一遍。
 
 `scripts/terminal-check.mjs` 比部分兄弟插件多做一步「把宿主产物 import 进来跑一遍 `apply()`」，
-因为**六个工具是 dsh 的、三个包是本插件挂上去的**，而 dsh 没有把工具表暴露成任何 `/api` 方法：
-「dsh 能启动」证明不了挂进去的是哪三个、模型最后看见的是哪六个。
+因为**六个实现来自 dsh、本插件只暴露改名后的六个工具、三个包又是本插件挂上去的**，而 dsh 没有把工具表暴露成任何 `/api` 方法：
+「dsh 能启动」证明不了挂进去的是哪三个、模型是否只看见 `interactive_terminal_*`、看不见裸 `terminal_*`。
+
+浏览器半另外在**真 Chrome 里**验收过一轮（隔离 dsh + CDP，脚手架在被 git 忽略的 `.dev/`）：
+面板出现 → 默认折叠 → 展开看到真 shell 输出 → 往输入框打字 → 回车 → 在终端画面里读回自己打的那串 →
+输入框被清空 → 深浅两套主题下 computed 值不同。连跑六次全绿。
+**它逼出了两个只在页面上才成立的缺陷**：`--dsw-font-mono` 从来没被 dsh 定义过（docs/02 §8.6b），
+以及上面那条「一次答不上来的轮询会卸载面板、连草稿一起丢」。

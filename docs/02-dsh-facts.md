@@ -501,7 +501,7 @@ dsh-remote 里 dsh 恒定 bind `127.0.0.1`（铁律 4），所以 **Windows / ma
 |---|---|---|
 | `--dsw-alias-border-1` | **`--dsw-alias-border-l1`** | 是字母 `l`（layer 1），不是数字 1；另有 `--dsw-alias-border-l2` |
 | `--dsw-alias-fill-2` | **`--dsw-alias-bg-layer-2`** | 没有 `fill-*` 这一族 |
-| `--dsw-font-family-mono` | **`--dsw-font-mono`** | 另有 `--dsw-font-family` |
+| `--dsw-font-family-mono` | **`--dsw-font-mono`** | 另有 `--dsw-font-family`。⚠️ 见下面 §8.6b：这个名字**对但没用** |
 
 确实存在、可以放心用的：`--dsw-alias-bg-base` / `-bg-layer-1` / `-bg-layer-2` / `-bg-overlay`、
 `--dsw-alias-border-l1` / `-l2`、`--dsw-alias-label-primary` / `-secondary` / `-primary-inverted`、
@@ -512,6 +512,25 @@ dsh-remote 里 dsh 恒定 bind `127.0.0.1`（铁律 4），所以 **Windows / ma
 或者用 esbuild 把组件单独打进一张空白页、喂假的 scope 与假的 RPC 通道来看明暗两套
 （本次就是这么发现上面三个错名的；产物放在被 git 忽略的 `.dev/` 里，属于一次性脚手架，
 需要常备的话再提升到 `scripts/`）。
+
+### 8.6b ⚠️ `--dsw-font-mono` 名字是对的，但 dsh 从来没有定义过它
+
+核实于 alpha.4，**在真浏览器里问出来的**（`getComputedStyle(el).getPropertyValue('--dsw-font-mono')`
+返回空串），随后在源码里对上：全 `packages/client/**` 只有**四处引用、零处定义** ——
+`ui-agent-preset/src/client/AgentPresetSection.module.css:245,329,412` 三处写的都是
+`var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)`，
+`ui-jobs/src/client/JobListAction.module.css:102` 干脆写成不带兜底的 `var(--dsw-font-mono)`（等于什么都没设）。
+
+**结论**：等宽字体这一条上**没有主题令牌可依**，dsh 自己也一直在吃兜底。所以
+
+- 继续写 `var(--dsw-font-mono, …)` 是对的（哪天 dsh 定义了就自动跟上），
+- 但**兜底必须是一整条完整字体栈**，照抄 dsh 自己那条
+  `ui-monospace, SFMono-Regular, Menlo, monospace`；只写 `ui-monospace, monospace`
+  在 Windows 上会直接落到浏览器的默认 fixed 字体（`ui-monospace` 是 Apple 平台的通用族）。
+- ⚠️ 这条也说明「名字写对」和「值解析得出」是两回事：**§8.6 那套检查只能查前者**，
+  后者只有在真页面里问一句 `getPropertyValue()` 才知道
+  （`packages/plugins/terminal` 的浏览器验收就是这么做的）。
+  本仓库 `packages/plugins/services` 的面板用的仍是那条短兜底，视觉上无差别，**已知且接受**。
 
 ### 8.6a ⚠️ 浅色主题里 `bg-layer-1/2/3` 是同一个白
 
@@ -804,6 +823,20 @@ completed | aborted{reason: AgentCancelCause} | blocked
 `method` 还必须和路径段**一致**，否则报错。客户端 `rpc.call(channel, endpoint, payload)` 正是这么拼的。
 （本项目的 `scripts/turn-retry-check.mjs` 第一版就栽在这里。）
 
+### 10.9 ⚠️ 事后重试不能直接 `followup` 已有队列的 agent
+
+出处：`packages/core/agent-loop/src/agent.ts:122-141,254-339`、
+`packages/core/agent/src/inbox.ts:63-77`、`packages/api/session-controller/src/commands.ts:327-330`。
+
+`followup(message)` 会把消息追加到 `nextTurn` 尾部并唤醒。新 turn 的首个
+`claim('next-turn')` 先取光 `nextStep`，再取 `nextTurn` 的第一条。
+因此失败后若已有排队消息，直接 `followup(retryNotice)` 会先把旧消息写成
+`user/message` 并交给模型；这轮正常结束后，driver 还会继续排空余下队列。
+
+dsh 没有公开的“只跑一轮但冻结现有队列”入口。turn-retry 的可靠做法是宿主 fail closed：
+`nextTurn` 非空时返回 `pending-input`；不调用 `followup()`、不改 inbox、不产生 `turn/start`。
+`nextStep` 属于插话/上下文，不是普通排队消息，仍按 dsh 原有语义进入下一次 pre-step。
+
 ## 11. 转录里的「执行过程」：dsh 自带的折叠，以及它为什么永远不出现（exec-process 插件的依据）
 
 > 全部核实于 tag `dsh-v0.1.2-alpha.4`（`4e84901e64`）。
@@ -1003,6 +1036,67 @@ dsh 只折**已结束**的 turn（`turnClosed`），插件如果要在运行中�
 实测：一轮真实的 3 次工具调用，运行中那一行实时显示「执行过程 思考 1 次 · 工具调用 3 次 最近 pwsh」，
 被折的 `assistant-step` / `tool-call` 行高度为 0，turn 结束后正式回答与 `turn-tail` 照常可见。
 
+### 11.10 第八轮当前实现：结束态摘要与展开外框
+
+出处：`packages/plugins/exec-process/src/client/ExecProcessRow.tsx`、
+`packages/plugins/exec-process/src/client/stats.ts`、`packages/plugins/exec-process/src/client/locales.ts`、
+`packages/plugins/exec-process/src/client/row-styles.ts`、`packages/plugins/exec-process/src/client/segment-frame.ts`；Todo 背景出处：
+`packages/client/ui-conversation/src/client/skeleton/TodoPanel.module.css`。
+
+当前摘要固定为「思考N次·工具M次·失败K」：没有失败就省略「失败K」，失败计数留在同一个
+status 区域并使用同一颜色。segment 或 turn 结束后不再显示「最近动作」；进行中的 segment 仍显示
+当前动作，呼吸点作为独立 flex 项紧邻在 chevron 左边。
+
+⚠️ **结束判断必须同时看三类信号**：最终 `answerAnchorSeq` 已出现、timeline 的 Turn status 已为
+`closed`、后续可见的 segment header 已出现。三者分别覆盖正常回答刚落地、没有最终回答的异常结束，
+以及整个 turn 仍在进行时 turn 内前一段已经结束；少看任一类都会漏判相应场景。
+
+第八轮初版中，展开标题背景复用 TodoPanel 的 `--dsw-specific-tip`；内容外框不包新容器，也不移动 React DOM，
+`SegmentFrameController` 只维护一张运行时样式表，并用 `--dsw-alias-border-l1` 组成连续外框。边框 token
+随后按反馈升级，见 §11.11。sticky 的终点也测量 inline reasoning 的同一个父 wrapper
+（`div:has(> [data-variant="think"])`），而不是内部固定高度的
+think 根节点，才能把外框 padding / border 的真实底边算进去。
+
+### 11.11 第九轮反馈：连续 frame 使用更强边框与不透明 Todo 背景
+
+出处：`packages/plugins/exec-process/src/client/segment-frame.ts`；token 定义与语义：
+`packages/client/ui-theme/src/client/index.ts:137`、
+`packages/client/ui-theme/src/styles/design-platform.css:173-174,245,265-266,337`；Todo 用法：
+`packages/client/ui-conversation/src/client/skeleton/TodoPanel.module.css:24-25`。
+
+`--dsw-alias-border-l1` 用在一整块展开内容的外轮廓时太淡；改用 dsh 明确定义为
+“Secondary stronger border”的 `--dsw-alias-border-l2`，仍保持 0.5px，所以边界更清楚但不会变成重框。
+fallback 使用中性 `rgba(128, 128, 128, 0.28)`，单独落地时在深浅底色上都可见；frame 样式不再使用
+`border-l1`。
+
+⚠️ **只换边框不够**：member rows 仍是 dsh 自己的 sibling wrapper，页面内容会从它们下面滚过；
+如果 wrapper 没有背景，连续外框内部和 inline reasoning 都会透出底层内容。正确做法是在不移动 DOM 的前提下，
+给每一个展开 member wrapper 与 `div:has(> [data-variant="think"])` 父 wrapper 都画
+`background: var(--dsw-specific-tip, var(--dsw-alias-bg-base, #fff))`。这与展开标题、TodoPanel 使用同一
+不透明表面；`--dsw-specific-tip` 在深浅主题各有定义，缺失时先回退到同样随主题变化的
+`--dsw-alias-bg-base`。连续左右边、首尾封口与圆角、sticky 推出和折叠逻辑均保持不变。
+
+### 11.12 ⚠️ 插件的 presentation-only 节点也会让原生分叉按钮失效
+
+出处：`packages/client/ui-chat/src/client/chat/TurnTailNodeView.tsx:17-18,44-50`、
+`packages/client/ui-chat/src/client/conversation-nodes/common.ts:8-20`、
+`packages/plugins/exec-process/src/client/definition.ts`。
+
+dsh 允许从完成轮次的 closing assistant 分叉，但还有一道纯 UI 防线：
+`hasLaterChatNode = locations.getTurn(turn).at(-1) !== turnTail.key`。它不区分业务消息与插件节点，
+只要 `turn-tail` 后面还有任何 Chat Node，按钮就显示“仅可从已完成轮次的最后一条消息分叉”。
+
+exec-process 的 follow-on 段头最初放在正式消息 `+0.2`，而 dsh 把 max-tokens notice 放在 `+0.05`、
+`turn-tail` 放在 `+0.1`。最终正式消息后的 follow-on 段即使没有过程内容、组件返回 `null`，
+其 Node 仍在 Location 索引里，于是它排在 `turn-tail` 后面并把分叉按钮永久禁用。
+
+修复原则不是绕过 dsh 的 guard，而是维护它明确要求的排序：插件段头改到 `+0.04`，形成
+`formal < exec-process-step < max-tokens < turn-tail`。这样 presentation-only 节点仍在正式消息之后，
+又保证 `turn-tail` 是正常完成轮次的最后节点；若确实存在后续工具、重试或 steering，dsh 原有保护仍会禁用分叉。
+
+写消息流插件时要把“最后节点”视为跨插件契约：一个视觉上为空的 Node 也参与 Location 排序，
+不能因为 React 组件最终返回 `null` 就当它不存在。
+
 ## 12. 「agent 停下来等人」这件事在宿主侧怎么观察（notify 插件的依据）
 
 核实于 tag `dsh-v0.1.2-alpha.4`。
@@ -1183,6 +1277,64 @@ dsh 有完整的后台任务运行时：`bash` / `pwsh` 的 `run_in_background` 
 插件来说，这意味着每份日志都带噪音、就绪正则可能匹配错，而一个会提问或很慢的 profile
 会让服务根本起不来。`ENCODING_PREAMBLE` 则是防 Windows PowerShell 5.1 回退时中文变乱码。
 
+### 13.7 ⚠️ `dsh-remote-web` profile 没有 HMR：改完插件**必须重启 dsh**，刷新页面没用
+
+实测（2026-09-04）：改完插件重新 `pnpm build` 后，宿主半**没有**重新加载 —— 新起的服务
+仍然走旧代码的路径。核实原因：
+
+- `<DSH_HOME>/profiles/dsh-remote-web/cordis.yml` 里**没有任何 hmr 行**（`dsh-client-hmr` /
+  `cordis-plugin-hmr` 都没挂），而 launcher 与 `pnpm dev` 都用这个 profile。
+- 浏览器半同样不行，而且**刷新页面也没用**：客户端模块注册表在注册时就
+  `readFileSync(clientPath)` 把字节读成不可变快照、并以 `IMMUTABLE_CACHE` 下发
+  （`packages/client/modules/src/index.ts:872-884, 968, 1015`）；**只有 `rebuilt(id)` 会重新读盘**
+  （`:630-637`），而**调用它的只有 HMR 的 watch 回调**。没有 HMR 行 ⇒ 没人调 ⇒ 刷新拿到的
+  仍是启动时那份字节。
+
+⚠️ 所以 `docs/05-roadmap.md` 里 proxy 那条「这次正是我重新构建 `dist/index.js` 触发了热重载」
+**不适用于当前的启动方式**（那多半发生在挂过 hmr 的环境里）。当前结论是：
+
+> **插件的任何一半改动都要重启 dsh 才生效。改样式也一样 —— 不要让用户白刷新一次页面。**
+
+（反过来它正好证明了 services 插件的价值：dsh 重启后，`.agents/services.json` 里那些 detached
+服务**照样活着**，`service_list` 靠 pid + 创建时间比对把它们原样认回来 —— 前提是先修好 §13.8。）
+
+### 13.8 ⚠️⚠️ Windows：`detached: true` **挡不住 `taskkill /T`**，两级启动器才行
+
+上面 §13.7 那句「dsh 重启后服务照样活着」第一版是**假的**，用户实机一重启就暴露了：
+服务连同 dsh 一起没了，日志里 vite 正常启动、没有任何报错就消失。
+
+**根因**（`node:child_process` 的 Windows 语义，与 dsh 无关，但被我们自己的停止方式触发）：
+
+- launcher 停 dsh 用的是 `taskkill /pid <dsh> /T /F`
+  （`packages/launcher/src/supervisor.ts:76`、`scripts/dev-stack.mjs:136`）。
+- `/T` 是**按记录的父 pid 递归**杀整棵树。而 Windows 的 `DETACHED_PROCESS`
+  （Node 的 `detached: true`）只解除**控制台**，**不清除父 pid 字段** —— 所以「detached 的
+  服务」在进程表里仍然是 dsh 的直接子进程，`/T` 一路走下来照杀不误。
+
+**两条实测约束把所有单进程解法都堵死了**（都用一个「假 dsh + taskkill /T」的探针验过）：
+
+1. **孙进程不能 detach**：没有 console 的 **pwsh 会立刻退出且不输出任何东西**，日志全空 ——
+   而日志是这个插件存在的意义。（这与 §13.6 那条「pwsh 需要 console」是同一件事。）
+2. **启动器不能直接退出**：Windows 上**非 detached 的子进程活不过父进程退出**
+   （Node 文档对 `detached` 的措辞就是「makes it possible for the child process to continue
+   running after the parent exits」）。实测启动器一 `process.exit(0)`，shell 立刻陪葬。
+
+**解法：两级启动器。**
+
+```
+dsh → L1(node, detached, 起完 L2 立刻 exit) → L2(node, detached, 常驻) → pwsh(普通子进程)
+```
+
+- L1 退出 ⇒ L2 的父 pid 指向一个**已经不存在的进程** ⇒ 从 dsh 出发的 `/T` 枚举不到它。
+- L2 是 node，**不需要 console**，所以 detach 它没有代价；pwsh 作为 L2 的普通子进程
+  仍然拿得到 console，日志正常。
+- 注册表记的是 **L2 的 pid**（L2 经 sidecar 文件把自己的 pid 交回来）：L2 在 shell 退出时
+  才退出，所以「L2 活着」就等于「服务活着」，`killTree(L2)` 也正好带走 shell 及其全部后代。
+  ⚠️ **不能记 L1 的 pid** —— 它几毫秒后就没了，`identify()` 会一律报 `gone`。
+
+回归测试锁死这条：`tests/live.spec.ts` 会起一个子进程、由它启动服务，再对**这个子进程**
+`taskkill /T /F`，然后断言服务仍然存活且仍被注册表认得。
+
 ## 14. dsh 自带的 PTY 终端，以及它为什么在 web profile 里不存在（terminal 插件的依据）
 
 > 核实于 tag `dsh-v0.1.2-alpha.4`（`4e84901e64`）。
@@ -1194,10 +1346,19 @@ dsh 有完整的后台任务运行时：`bash` / `pwsh` 的 `run_in_background` 
 | 底层 | `packages/subprocess/subprocess-local`（`node-pty@1.2.0-beta.15`） | `spawnTerminal()` 真 PTY；六个平台的**预编译产物随包**，无需编译 |
 | 注册表 | `packages/terminal/terminal`（`ctx.terminals`） | 按 Agent 归属的会话表：`spawn` / `startSend` / `read` / `signal` / `kill` / `list` |
 | 后端 | `packages/terminal/terminal-bash` | 真交互 shell，`shellDialect` 在 **bash / pwsh** 之间切换 |
-| 工具 | `packages/terminal/tool-terminal` | 六个模型工具 `terminal_open/send/read/signal/close/list` |
+| 工具 | `packages/terminal/tool-terminal` | 六个上游模型工具 `terminal_open/send/read/signal/close/list` |
 
 三个包都是**已发布的公开 npm 包**（`0.1.2-alpha.4`，peerDependencies 只有 cordis / agent /
 brand / session 等），可以从外部 overlay 或插件挂载。
+
+`packages/plugins/terminal` **不把这些上游名字原样暴露给模型**。它用 fail-closed wrapper
+包住上游工具包的 `apply()`：只接受预期的六次注册，再改名为
+`interactive_terminal_open/send/read/signal/close/list`；缺少、重复或出现未知注册时整组失败，
+不会泄漏或回退到裸 `terminal_*`。因此，上游名称仍是 `terminal_*`，本插件对外只有六个
+`interactive_terminal_*`。
+
+使用边界也严格锁定：仅在需要**交互式 stdin**，或需要同一个终端的状态跨调用保留时使用。
+普通一次性命令（包括 Git、构建、测试、脚本）都用 `pwsh` / `bash`；运行时间长本身不是理由，需要时用 `run_in_background`。
 
 ### 14.2 但 web profile 一行都没挂
 
@@ -1240,7 +1401,7 @@ cordis，`Service` 基类同一性没问题。
 
 它们不注册 session projection、不 emit 事件、不往会话日志 append（全仓库搜
 `projection|emit|session.append` 在这三个包的 `src/` 下只命中一处**只读**的
-`sessionProjections.stateOf`）。唯一会到浏览器的是 `terminal_send(run_in_background)`
+`sessionProjections.stateOf`）。唯一会到浏览器的是上游 `terminal_send(run_in_background)`
 经 `ctx.jobs` 产生的通用任务帧，而那只有状态和标签、**没有终端输出**。
 所以想在页面上看终端画面，只能轮询（§13.3 那条「插件不能 append 自己的事件类型」在这里同样成立）。
 
