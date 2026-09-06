@@ -1445,7 +1445,92 @@ PSReadLine 还让它**越用越坏**：每条命令都会被写进用户真正�
 `/bin/bash --noprofile --norc -i`，pwsh 默认 `<resolved> -NoLogo -NoProfile`。
 `read({offset, count})` 的 `offset` 是**从最新一行往回数**，`count` 默认 500。
 
-## 15. 一句话总结
+## 15. 工具注册表：进程内可读，且 dsh **没有** deferred tool loading（tools-inspector 插件的依据）
+
+核实于 `dsh-v0.1.2-alpha.4` / `4e84901e64`。与 §13.4 互补：那条讲的是**进程外**没有 API，
+这一节讲**进程内**（插件宿主半）能读到什么。
+
+### 15.1 `ctx.tools` 的公开面
+
+`packages/core/tools/src/index.ts` 的 `ToolRuntime` 对插件公开：
+
+| 成员 | 位置 | 用途 |
+|---|---|---|
+| `schemas(scope?)` | :1225 | 返回该 scope 可见工具的 `{name, description, parameters}`（深拷贝） |
+| `get(name, scope?)` | :1195 | 取一个可见定义 |
+| `register(def)` | :1028 | 注册，返回 disposer |
+| `restrict({allow,deny})` | :1062 | **仅 scoped**，全局调用抛错 |
+| `guard(fn)` | :1101 | 单调拒绝，不改变可见性 |
+
+`schemas()` 只投影 name / description / parameters 三个字段（`schemaOf`，:1247），
+`timeoutMs`、`isConcurrencySafe`、`presentCall` 等**永远不出现**在返回值里。
+
+### 15.2 ⚠️ dsh **没有** deferred / dynamic tool loading
+
+对照 pi-coding-agent：它有 `pi.getActiveTools()` / `pi.setActiveTools()`，形成
+「注册集 ⊃ 激活集」双层模型，**只增不减**以保住 prompt 缓存前缀
+（实例见 `D:\dev\custom-skill\extensions\services\core.ts:509-524`）。
+
+**dsh 没有这一层**，三条证据：
+
+1. 全仓库搜 `setActiveTools|getActiveTools|activeTools` → **零命中**。
+2. `view(scope)`（:1143-1184）只算出**一个** `visible` 集合，由四件事决定：
+   层叠继承 → `restrict` 交集 → 本 scope 同名影子覆盖 → ptc 塌缩。
+   它直接喂给 `wireSchemas()`（:972）→ `SystemPrompt.assemble()`（`core/system-prompt/src/index.ts:598`）。
+   **注册即可见**，中间没有「已注册但未激活」的档位。
+3. dsh 每轮请求都重新 `assemble()`（`core/agent-loop/src/agent.ts:239`），
+   工具按 `toolOrder` 或字典序**整体重排**（`orderTools`，`system-prompt/src/index.ts:205-218`），
+   压根没把工具集当成需要保护的稳定缓存前缀 —— 也就没有做增量加载的动机。
+
+> ⚠️ `llm-pi-ai/src/catalog.ts:240` 那个 `deferredToolsMode: 'withhold'` **不是**这回事：
+> 它是 OpenAI-completions 协议兼容位的 disposition 表项，且值为 `withhold`（不向下游透出）。
+> 别把它当成 dsh 支持 deferred loading 的证据。
+
+### 15.3 最接近的是 `restrict()`，但语义不同，别混为一谈
+
+| | pi 的 defer | dsh 的 `restrict` |
+|---|---|---|
+| 方向 | 只增不减（减了废缓存） | 可增可减 |
+| 谁触发 | **模型**调工具触发加载 | **代码**在 scope 创建时设定 |
+| 目的 | 省 token / 保缓存 | 权限隔离（子 agent 减能力） |
+
+实际用处集中在子 agent 创建窗口（`packages/subagent/subagent/src/child-agent.ts:217`），
+不是会话中途按需放行。**观察类插件不要用 `restrict` 去伪造 defer**——那会改变 agent 行为。
+
+### 15.4 ⚠️⚠️ 调用历史**能**从会话日志回放出来（这一节曾经写错过）
+
+**先前这里写的是「计数只能靠事件累计，只覆盖本次进程运行」—— 那是错的**，
+而且错得很显眼：用户重启 dsh 后看到「全部未使用」，一眼就发现了。实际情况：
+
+- `tool/call` 是 dsh 的**持久化会话事件**，在构建期常量 `KNOWN_SESSION_EVENT_TYPES` 里
+  （`packages/core/session/src/known-event-types.ts:66`），
+  且 data **自带 `name`**（`session/src/types.ts:306`）—— 工具名就在日志里躺着。
+- `session.snapshotEvents(from?, to?)`（`session/src/index.ts:600`）返回整段日志的不可变快照；
+  `ownEvents()`（:615）是去掉 fork 继承前缀的版本。
+- 从宿主插件拿到会话：`ctx.agents.get(sessionId)?.session`。
+
+**混淆点在 §13.2**：那条说的是「插件不能 **append** 自己的**新事件类型**」，
+与「能不能 **读** dsh 自己的事件」是两码事 —— **读完全可以**。
+凡是需要「这个会话历史上发生过什么」的插件，都应该回放日志，而不是在内存里累加；
+后者重启即归零。
+
+配对规则：`tool/call` 带 `callId` + `name`；`tool/result` 只带可选的 `error`，
+它的 callId 在 `message.source.callId` 与 `message.content[0].toolCallId`
+**两个等价位置**（`llm/src/message.ts:235,238` 同时写入）。所以失败数必须靠 callId
+回填到 call 认领的名字上；配不上对的（日志截断 / fork 前缀只剩一半）应当安全忽略，
+数不出名字的失败宁可不算，也不要归到错误的工具头上。
+
+> `tools/result`（tools/src/index.ts:189）与 `tools/change`（:199）这两个**运行时**事件仍然存在，
+> 适合做「实时反应」，但**不是**历史统计的正确来源。
+
+### 15.5 会话头部的视图切换栏是一个 list 槽，可以直接加 tab
+
+`conversation.view`：`{ kind: 'list', scope: 'session' }`
+（`packages/client/ui-conversation/src/client/contract/slots.ts:117`）。
+`ui-conversation` 把每个条目投影成一个 tab（`client/apply.ts:121-132`），
+`label` 传**thunk** 才能跟随语言切换而不用重新注册。
+现成范本是 `ui-trajectory`（`src/client/index.ts:77-106`），加一个 tab 约 20 行，**不用碰 dsh 源码**。
+
 
 > dsh 的 Web 面就是「静态资源 + `POST /api/<service>/<method>` + 一条下行 WebSocket」，
 > 外加一道基于 `Host` 头的 rebinding 防御，以及 0.1.2 新增的、只能用启动 token 换取的 cookie 认证。

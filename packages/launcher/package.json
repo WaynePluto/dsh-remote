@@ -24,6 +24,7 @@
     "@dsh-remote/dsh-plugin-remote-privileged": "workspace:*",
     "@dsh-remote/dsh-plugin-services": "workspace:*",
     "@dsh-remote/dsh-plugin-terminal": "workspace:*",
+    "@dsh-remote/dsh-plugin-tools-inspector": "workspace:*",
     "@dsh-remote/dsh-plugin-turn-retry": "workspace:*",
     "@dsh-remote/protocol": "workspace:*",
     "@dsh-remote/relay": "workspace:*",

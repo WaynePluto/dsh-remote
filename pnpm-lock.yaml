@@ -113,6 +113,9 @@ importers:
       '@dsh-remote/dsh-plugin-terminal':
         specifier: workspace:*
         version: link:../plugins/terminal
+      '@dsh-remote/dsh-plugin-tools-inspector':
+        specifier: workspace:*
+        version: link:../plugins/tools-inspector
       '@dsh-remote/dsh-plugin-turn-retry':
         specifier: workspace:*
         version: link:../plugins/turn-retry
@@ -483,6 +486,45 @@ importers:
       '@deepseek-ai/dsh-subprocess-local':
         specifier: 0.1.2-alpha.4
         version: 0.1.2-alpha.4(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-subprocess@0.1.2-alpha.4(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-timeout@0.1.2-alpha.4(@deepseek-ai/cordis@4.0.2))
+      '@types/react':
+        specifier: 18.3.27
+        version: 18.3.27
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.0))
+
+  packages/plugins/tools-inspector:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: 4.0.2
+        version: 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
+      '@deepseek-ai/dsh-agent':
+        specifier: 0.1.2-alpha.4
+        version: 0.1.2-alpha.4(c5cc672bd5ee417388896b008bce4ee7)
+      '@deepseek-ai/dsh-client-connection':
+        specifier: 0.1.2-alpha.4
+        version: 0.1.2-alpha.4(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.2-alpha.4(@deepseek-ai/cordis@4.0.2))
+      '@deepseek-ai/dsh-client-locale':
+        specifier: 0.1.2-alpha.4
+        version: 0.1.2-alpha.4(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/dsh-client-ui-conversation':
+        specifier: 0.1.2-alpha.4
+        version: 0.1.2-alpha.4(@deepseek-ai/cordis@4.0.2)(typescript@6.0.3)
+      '@deepseek-ai/dsh-client-ui-session':
+        specifier: 0.1.2-alpha.4
+        version: 0.1.2-alpha.4(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: 0.1.2-alpha.4
+        version: 0.1.2-alpha.4(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/dsh-session':
+        specifier: 0.1.2-alpha.4
+        version: 0.1.2-alpha.4(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-scope@0.1.2-alpha.4(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.2-alpha.4(@deepseek-ai/cordis@4.0.2)))
+      '@deepseek-ai/dsh-tools':
+        specifier: 0.1.2-alpha.4
+        version: 0.1.2-alpha.4(6f17de9b01b7bb711bb9888e3e73adf0)
       '@types/react':
         specifier: 18.3.27
         version: 18.3.27

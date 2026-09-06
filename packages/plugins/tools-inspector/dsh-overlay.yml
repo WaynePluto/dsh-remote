@@ -1,0 +1,16 @@
+# dsh-remote 的 dsh 插件叠加层，由 launcher 用 `dsh --patch <这个文件>` 传给 dsh。
+#
+# 形态与 services / exec-process 相同：`./` 开头的 insert 名字由 dsh 锚定到本文件所在目录
+# 再转成 file:// URL，所以这里只写相对路径（铁律 D17，见 docs/01 §D17）。
+#
+# 两半都有实际行为：
+# - 宿主半 dist/index.js：读 `ctx.tools.schemas(agent)` 快照 + 累计 `tools/result` 调用次数，
+#   并把二者合成后经私有 RPC 通道 `/tools-inspector` 交给页面。
+# - 浏览器半 dist/client.js：往 `conversation.view` 这个 list 槽注册一个「工具」tab。
+#
+# ⚠️ dist/client.js 缺失会让 dsh 的 web UI 整个起不来（FAILED fiber），不是静默降级。
+#
+# 顺序无关：只往 list 槽追加一个条目，tab 位置由 register 的 `order` 决定，与行序无关。
+- insert:
+    - id: tools-inspector
+      name: './dist/index.js'

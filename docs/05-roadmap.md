@@ -152,11 +152,20 @@
   - 心跳与超时
   - **上报自己的 slug**，供 launcher 生成 `--trusted-host` 参数（模式 A）
 
-- [ ] **M1.5** 端到端联调
-  - 同机跑 relay + connector + dsh，由另一台局域网机器直接访问 `http://<relay局域网IP>:30809`
-  - M1 单机模式配置 `directSlug=pc1`，IP/localhost Host固定路由到该机器；不要求 hosts、域名或 TLS，多机器子域名路由留到公网联调
-  - **前置：先完成正式浏览器认证。** 只有“loopback socket + loopback Host”可免登录；局域网 IP访问与未来域名访问走同一登录/session中间件，认证落地前禁止非 loopback bind
+- [x] **M1.5** 端到端联调
+  - 同机跑 relay + connector + dsh，由另一台局域网机器直接访问 `http://<relay局域网IP>:30809` ✅
+  - M1 单机模式配置 `directSlug=pc1`，IP/localhost Host 固定路由到该机器 ✅
+  - **前置正式浏览器认证已完成**（M2.3）：实测局域网 IP 访问 `/`、`/api/remote.mux`、`/plugins/*`
+    一律 302 到 `/_auth/login`，认证确实排在路由解析之前 ✅
+  - 隧道数据面由 `relay.integration.spec.ts` **6 项集成测试**覆盖并通过（真 relay + 真 connector +
+    真 HTTP server）：控制信道认证、HTTP body 双向转发 + 模式 A 头原样、dsh 自身 token 交换只做一次、
+    坏 Origin / cross-site 在分配 stream 前就被拒、浏览器 WebSocket upgrade 走独立数据流、
+    过期 access cookie 在 upgrade 期间轮换、未注册设备拿到致命错误 ✅
+
 ### M1 验收
+
+> 下面几条**刻意不由测试代劳**：它们要的是「真浏览器 + 真时间 + 真断网」，
+> 集成测试只能证明协议对，证明不了长连接在真实网络里熬不熬得住。
 
 - [ ] 浏览器通过 relay 能完整使用 dsh：发消息、流式输出、切换会话、打开设置
       （dsh 0.1.2 删除了特权方法围栏，设置页在模式 A 下应该直接可用）
@@ -1238,14 +1247,88 @@
 
 ---
 
+## 工具状态视图（tools-inspector 插件）
+
+> 用户需求：「在会话头部的视图切换栏增加一个『工具』，让用户看到当前会话注册了哪些工具、
+> 哪个用过、用了多少次、哪个是延迟加载还没暴露给 agent。」
+> 核实后发现最后一问的前提不成立：**dsh 没有工具延迟加载**（见下），
+> 所以状态只有「用过 / 没用过」两档，并在页面上把这个事实直接告诉用户。
+
+- [x] ⚠️⚠️ **先查清了「dsh 到底有没有 deferred tool loading」，结论是没有**，
+      事实链记进 [02-dsh-facts.md](02-dsh-facts.md) §15。三条证据：
+      ① 全仓库搜 `setActiveTools|getActiveTools|activeTools` **零命中**
+      （对照 pi-coding-agent 有这组 API，用户给的 `D:\dev\custom-skill\extensions\services`
+      就是它的实例，`core.ts:509-524` 的 `planToolLoad` 只增不减以保住 prompt 缓存前缀）；
+      ② `ToolRuntime.view(scope)` 同步算出**唯一一个** `visible` 集合直接喂给系统提示装配，
+      **注册即可见**，没有「已注册但未激活」的中间态；
+      ③ dsh 每轮都重新 `assemble()` 并把工具**整体重排**，压根没把工具集当成需要保护的
+      缓存前缀，也就没有做增量加载的动机。
+      ⚠️ `llm-pi-ai/src/catalog.ts:240` 的 `deferredToolsMode: 'withhold'` **不是**这回事，
+      它是 OpenAI-completions 协议兼容位的 disposition 表项，别拿它当证据
+- [x] **用户拍板：不展示「模型不可见」那一组**（restrict 遮蔽 / 同名影子覆盖 / ptc 塌缩），
+      只展示「已注册·已激活」里的用过与没用过。将来 dsh 若加了 active-set API 再补第三档 ——
+      预留位置就是 `src/client/ToolsView.tsx` 的 `GROUPS` 和 `src/shared.ts` 的 `ToolStatus`
+- [x] 新建插件包 `packages/plugins/tools-inspector`（`@dsh-remote/dsh-plugin-tools-inspector`），**双半**
+- [x] **座位是 `conversation.view`（list 槽，order 20）** —— 这就是会话头部视图切换栏的来源
+      （`ui-conversation/src/client/apply.ts:121-132` 把每个槽条目投影成一个 tab），
+      范本是 dsh 自己的 `ui-trajectory`。**没有改 dsh 任何源码**。
+      ⚠️ `label` 必须传 **thunk**，传字符串会把注册时的语言钉死，切语言后 tab 文字不变
+- [x] ⚠️ **`ctx.tools.schemas(scope)` 的 scope 必须传 Agent**：agent preset 把工具挂在
+      **每会话的 scope** 下（`preset/agent-presets/src/mount.ts`），不传只读得到全局层。
+      冒烟里那个「没有活 agent 的会话」就只看得到 11 个插件工具，内置工具一个都没有 ——
+      这正好反证了 scope 参数不是可有可无的
+- [x] ~~⚠️ **计数只能活在内存里**：插件不能往会话日志 append 自定义事件类型，
+      历史轮次无法回填、重启归零~~ —— **这条是错的，已被用户实机证伪并推翻，见下面「第二轮」**
+- [x] **它是只读观察窗口**：不注册工具、不 `restrict`、不 `guard`，对 agent 行为零影响。
+      冒烟脚本显式断言这三条 —— 技术上可以用 `restrict` 的 disposer 伪造一个 defer，
+      但那是改变 agent 行为，不在观察工具的职责里
+- [x] **界面**：一屏一列表不做仪表盘；统计带 + 搜索 + 两组（已用按次数降序 / 未用按字母序）；
+      状态靠字形 `●`/`○` 不靠颜色（深色主题下颜色容易翻车，docs/02 §8.6）；
+      次数右对齐等宽并写**完整兜底栈**（`--dsw-font-mono` 定义零处，docs/02 §8.6b）；
+      点一行展开顶层参数（刻意不递归展开嵌套 schema，否则一屏 JSON）
+
+### 第二轮（用户实机试用）：一个根本性错误 —— 计数源找错了
+
+- [x] ⚠️⚠️ **用户重启 dsh 后看到「全部未使用」，一句话就证伪了上面那条「只能统计本次运行」**。
+      根因是把 docs/02 §13.2 读串了：那条说的是**插件不能 append 自己的新事件类型**，
+      我却当成了「插件读不到调用历史」——**两码事，读是完全可以的**。真实情况：
+      · `tool/call` 是 dsh 的**持久化会话事件**，在构建期常量 `KNOWN_SESSION_EVENT_TYPES` 里
+        （`session/src/known-event-types.ts:66`），而且 data **自带 `name`**（`types.ts:306`）；
+      · `session.snapshotEvents()`（`session/src/index.ts:600`）直接给出整段不可变日志；
+      · 宿主插件经 `ctx.agents.get(id)?.session` 就能拿到。
+      改成**回放会话日志**后，统计覆盖**整个会话的全部历史**，dsh 重启、会话重开都不受影响。
+      docs/02 §15.4 已整条重写（保留「曾经写错」的记录，避免下一个人重蹈覆辙）
+- [x] ⚠️ **失败数要靠 callId 回填**：`tool/call` 才有 `name`，`tool/result` 只带可选的 `error`，
+      而它的 callId 在 `message.source.callId` 与 `message.content[0].toolCallId`
+      **两个等价位置**（`llm/src/message.ts:235,238` 同时写入），两处都要认。
+      配不上对的（日志被截断、fork 前缀只剩一半）**安全忽略** ——
+      数不出名字的失败宁可不算，也不要归到错误的工具头上
+- [x] **教训**：「这个数据 dsh 存不存」这种问题，必须去翻**持久化事件类型表**，
+      不能从一条讲「写入限制」的结论里推断「读取也不行」。
+      单元测试全绿、31 项冒烟全过，都没能发现这个错 ——
+      因为测的是「我实现的逻辑对不对」，而不是「我选的数据源对不对」
+- [x] 单元测试 17 → **22 项**（新增回放、配对、半截日志、已下线工具不进快照等）；
+      冒烟仍 **31 项全过**，其中两项改为断言「不再监听任何事件」与「从 `tool/call` 回放出次数」
+
+- [x] **用户实机验证（已通过）**：重启 dsh 后会话头部切换栏出现「工具」，
+      切过去立刻看到历史调用次数（不再是全部未使用）。用户确认满意
+
+---
+
 ## 进度记录
 
 | 里程碑 | 状态 | 完成日期 | 备注 |
 |---|---|---|---|
 | M0 | 进行中 | | M0.1/M0.2/M0.4 完成（见 reference/m0-report.md）；M0.3 待用户手机实测；M0.5 未做（不阻塞） |
-| M1 | 进行中 | | M1.1 骨架、M1.2 protocol、M1.3 relay、M1.4 connector 完成；下一项为正式浏览器认证，完成后进入 M1.5 |
-| M2 | 进行中 | | M2.1 存储层、M2.3 用户认证、M2.4 安全检查顺序完成；剩 M2.2 设备认证、M2.5 管理页、M2.6 审计日志输出 |
+| M1 | 进行中 | | M1.1–M1.4 完成；M1.5 隧道数据面已由 6 项集成测试覆盖并通过，**剩「浏览器长时间实操」类验收**（>30min WebSocket、断网重连、图片附件）待用户实测 |
+| M2 | 基本完成 | | M2.1–M2.6 全部完成（设备认证、用户认证+TOTP、安全检查顺序、管理页、审计日志）；验收仅剩「连错 5 次被锁」未做浏览器实操（会把管理员锁 15 分钟，单测已覆盖） |
 | M3 | 未开始 | | |
 | M4 | 未开始 | | |
 | M5 | 未开始 | | |
 | M6 | 未开始 | | |
+### 插件（不属于 M 序列，按需求随时插入）
+
+| 插件 | 状态 |
+|---|---|
+| remote-privileged / proxy / copilot-auth / models-catalog / turn-retry / exec-process / notify / services / terminal | 已完成并经用户实机验证 |
+| tools-inspector（工具状态视图） | 已完成并经用户实机验证 |
