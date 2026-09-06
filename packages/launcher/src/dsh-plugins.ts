@@ -56,6 +56,16 @@ export const DSH_PLUGIN_PACKAGES = [
     artifacts: [['dist', 'index.js'], ['dist', 'client.js']],
   },
   {
+    // Host half + browser half. Order-insensitive: it registers one private RPC
+    // channel and one `settings.section` page, and touches nothing dsh loads.
+    //
+    // ⚠️ It edits `$DSH_HOME/AGENTS.md` — the file dsh's own `agent-instructions`
+    // rows already read into every session — and deliberately does NOT register
+    // an `agent-instructions` row of its own. dsh stays the only reader.
+    name: '@dsh-remote/dsh-plugin-agents-md',
+    artifacts: [['dist', 'index.js'], ['dist', 'client.js']],
+  },
+  {
     // Host half + browser half. Order-insensitive: it only observes — it reads
     // `agent/status` and prepends itself to the two request waterfalls,
     // delegating every request untouched.

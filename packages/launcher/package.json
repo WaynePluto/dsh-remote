@@ -18,6 +18,7 @@
     "@dsh-remote/connector": "workspace:*",
     "@dsh-remote/dsh-plugin-copilot-auth": "workspace:*",
     "@dsh-remote/dsh-plugin-exec-process": "workspace:*",
+    "@dsh-remote/dsh-plugin-agents-md": "workspace:*",
     "@dsh-remote/dsh-plugin-models-catalog": "workspace:*",
     "@dsh-remote/dsh-plugin-notify": "workspace:*",
     "@dsh-remote/dsh-plugin-proxy": "workspace:*",

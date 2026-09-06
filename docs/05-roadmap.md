@@ -176,6 +176,66 @@
 
 ---
 
+## 已完成 · 全局提示词编辑插件（`packages/plugins/agents-md`）
+
+> 起因：用户提出「增加一个写入 `$DSH_HOME/AGENTS.md` 的插件，在设置里加一个新页面，
+> 回显之前编辑的内容、可以直接编辑保存」。
+> 核实后发现：**这个文件 dsh 本来就在读，而且排在所有项目级 `AGENTS.md` 之前
+> 推给模型**（`agent-instructions/src/files.ts:280`），但 **dsh 没给它任何界面** ——
+> 唯一的编辑方式是「你得先知道它存在」，而手机远程根本做不到。
+> 事实链见 [02-dsh-facts.md](02-dsh-facts.md) §17。
+
+- [x] 新建插件包 `packages/plugins/agents-md`（`@dsh-remote/dsh-plugin-agents-md`），**双半**
+- [x] **需求收敛：用户原本要「每个预设一份」，问过之后改为「全局唯一一份」**。
+      先查清了可行性：`agent-instructions` 这一行位于**每个预设自己的 composition** 里
+      （`presets/standard/agent.cordis.yml:30-33`），`dshHome` 是它的 config 字段，
+      所以「每个预设一份」在 dsh 里**技术上完全可行**。但官方的
+      `standard` / `cordis` / `ptc` 是 `trust: 'system'`、`remoteExportCopy` 明确拒绝写
+      shipped 预设 —— 按预设区分等于**逼用户把每个想用的预设都复制一份**。
+      把这个代价摆给用户后，用户拍板「不要根据预设改变了，全局唯一只有一份」。
+      **接缝已查清并记进 docs/02 §17.2**，将来若要做按预设区分不必重查
+- [x] 界面入口：设置页新增 **「全局提示词」页**（`settings.section`，`id: dsh-plugin-agents-md`，
+      order 55，排在代理 60 / 通知 70 之前 —— 那两个是配一次就忘的开关，这个是会反复回来改的内容）
+- [x] ⚠️ **刻意没有设置命名空间**：正文的归宿就是那个文件本身。存进设置命名空间会变成
+      **第二份、而且是 dsh 的加载器不读的那一份** —— 页面显示得好好的，模型收到的是另一回事
+- [x] ⚠️ **也刻意不注册自己的 `agent-instructions` 行**：dsh 的加载器仍是唯一读取方，
+      插件只往它读的那个文件里写字节。这是升级 dsh 后仍然正确的唯一姿势
+- [x] ⚠️⚠️ **`MAX_BYTES` 不是我们发明的限制**：dsh 的 `readBounded` 拒绝读超过
+      `maxSourceBytes`（默认 1 MiB）的提示词文件，而且是**静默丢弃**（两处 `return undefined`，
+      不报错、不进上下文）。不在保存时拦下来，用户就会看到「已保存」而模型永远收不到 ——
+      一个没有任何错误信息的失败。两半用 `shared.ts` 里**同一个** `documentFault()` 判断，
+      所以页面接受的内容不可能被宿主拒绝（正是 docs/02 §8.8 那个坑的形状）
+- [x] ⚠️ **按 UTF-8 字节判，不是字符**：60 万个汉字的字符数远小于上限、字节数远超上限。
+      单测里有一条专门锁这个
+- [x] ⚠️ **保存是原子的**（临时文件 + `rename`）：半个提示词文件会被当成用户写的内容
+      原样喂给模型。失败时清掉临时文件，不在 home 里留一堆 `.tmp`
+- [x] ⚠️ **失败时保留草稿**，报错贴着出错的地方显示 —— 这个仓库已经在设置页上吃过两次这个亏
+- [x] 「文件不存在」被如实报告成 `exists: false` 而不是一次失败（全新机器上这是**正常状态**），
+      页面显示「这个文件还不存在，保存时会自动创建」并直接给出空编辑器
+- [x] 路径经 dsh 自己的 `resolveDshHome()` 解析，显示用 `dshHomeDisplay()`
+      （`~/.dsh/AGENTS.md` 或 `$DSH_HOME/AGENTS.md`，**永不显示绝对路径**）
+- [x] 导航图标：`settings.section` 没有图标位，未知 id 一律齿轮（docs/02 §8.7）。
+      照 notify 的机制画了一个文档图标（16×16、`stroke-width 1.25`、圆头圆角），
+      **跨度对齐 dsh 自带图标**（x 2.75–13.25、y 1.75–14.25）
+- [x] 16 项单元测试（路径、缺文件/空文件之分、UTF-8 计数、原子写、校验器、
+      四种 dispatch 失败码），两半 typecheck + 构建通过，本包 oxlint **0 error**
+- [x] 三处产物检查同步加上新插件：`packages/launcher/src/dsh-plugins.ts`、
+      `scripts/pack.mjs`（两张表）；launcher 的 workspace 依赖也加了一行。
+      **顺带补上了 `pack.mjs` 里漏掉的 `tools-inspector` / `skills-inspector` 两行**
+- [x] ⚠️⚠️ **真机冒烟 `node scripts/agents-md-check.mjs` 17 项全绿，其中最关键的一条是
+      单元测试锁不住的**：`USER_GLOBAL_FILE` 定义在 dsh 内部的 `render.ts`、
+      **不在该包的公开入口上**，插件只能抄一份常量 —— 抄错或 dsh 改名都**不会报错**，
+      只会安静地编辑一个没人读的文件。所以脚本**反过来验**：写一段带唯一标记的文字，
+      再调 dsh **自己的** `discoverBaselineInstructionFiles()` 确认它认领了这个文件。
+      实测 dsh 认领 `["$DSH_HOME/AGENTS.md", "AGENTS.md"]`，并显示为 `$DSH_HOME/AGENTS.md`。
+      其余各项：全部 `--patch` 正常启动、`__DSH_BOOT__` 有本插件行、combo bundle 200
+      且带着槽注册与通道路径、全新 home 读到 `exists:false`、写入后磁盘字节一致、
+      未知端点与非字符串载荷各自被自己的错误码挡下、无 cookie 401
+- [x] **用户实机验证通过**（2026-09-04）：重启 dsh 后设置 → 全局提示词 → 写入 1692 字节并保存 →
+      磁盘上的 `~/.dsh/AGENTS.md` 与页面完全一致 → **新会话里 dsh 自己把它注入成
+      `Additional instructions from: ~/.dsh/AGENTS.md`（标为 `user-global`）**。
+      也就是说「写对了地方」最终由 **dsh 本身**证实，而不是由插件自己的报告证实
+
 ## 已完成 · 任务完成通知插件（`packages/plugins/notify`）
 
 > 起因：用户说「pi coding agent 有个 `notify` 扩展，完成任务后给 Windows 发一条常驻系统通知，

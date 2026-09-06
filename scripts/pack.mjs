@@ -225,9 +225,12 @@ const BUILD_ARTIFACTS = [
   'packages/plugins/proxy/dist/index.js',
   'packages/plugins/turn-retry/dist/index.js',
   'packages/plugins/exec-process/dist/index.js',
+  'packages/plugins/agents-md/dist/index.js',
   'packages/plugins/notify/dist/index.js',
   'packages/plugins/services/dist/index.js',
   'packages/plugins/terminal/dist/index.js',
+  'packages/plugins/tools-inspector/dist/index.js',
+  'packages/plugins/skills-inspector/dist/index.js',
   // 浏览器半：缺了 dsh 不是少一个卡片，而是整个 web UI 启动失败（客户端模块扫描会把
   // 缺失的 bundle 汇成一次响亮的抛错）。
   'packages/plugins/copilot-auth/dist/client.js',
@@ -235,9 +238,12 @@ const BUILD_ARTIFACTS = [
   'packages/plugins/proxy/dist/client.js',
   'packages/plugins/turn-retry/dist/client.js',
   'packages/plugins/exec-process/dist/client.js',
+  'packages/plugins/agents-md/dist/client.js',
   'packages/plugins/notify/dist/client.js',
   'packages/plugins/services/dist/client.js',
   'packages/plugins/terminal/dist/client.js',
+  'packages/plugins/tools-inspector/dist/client.js',
+  'packages/plugins/skills-inspector/dist/client.js',
 ]
 
 /**
@@ -269,15 +275,24 @@ const DSH_PLUGIN_FILES = [
   'node_modules/@dsh-remote/dsh-plugin-exec-process/dsh-overlay.yml',
   'node_modules/@dsh-remote/dsh-plugin-exec-process/dist/index.js',
   'node_modules/@dsh-remote/dsh-plugin-exec-process/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-agents-md/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-agents-md/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-agents-md/dist/client.js',
   'node_modules/@dsh-remote/dsh-plugin-notify/dsh-overlay.yml',
   'node_modules/@dsh-remote/dsh-plugin-notify/dist/index.js',
   'node_modules/@dsh-remote/dsh-plugin-notify/dist/client.js',
   'node_modules/@dsh-remote/dsh-plugin-services/dsh-overlay.yml',
   'node_modules/@dsh-remote/dsh-plugin-services/dist/index.js',
   'node_modules/@dsh-remote/dsh-plugin-services/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-skills-inspector/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-skills-inspector/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-skills-inspector/dist/client.js',
   'node_modules/@dsh-remote/dsh-plugin-terminal/dsh-overlay.yml',
   'node_modules/@dsh-remote/dsh-plugin-terminal/dist/index.js',
   'node_modules/@dsh-remote/dsh-plugin-terminal/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-tools-inspector/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-tools-inspector/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-tools-inspector/dist/client.js',
 ]
 
 /**

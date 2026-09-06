@@ -1654,6 +1654,63 @@ dsh 有且只有**两条**把技能正文注入上下文的路径，**两条都�
 所以 UI 必须先探测、能开才显示按钮，并且无论如何都要把路径本身显示成可复制文本 ——
 否则就是做了一个在手机上点了没反应的按钮。
 
+## 17. 用户级全局提示词 `$DSH_HOME/AGENTS.md`（agents-md 插件的依据）
+
+### 17.1 它真实存在，而且排在项目级提示词之前
+
+`agent-instructions` 的发现过程（`packages/context/agent-instructions/src/files.ts:280`）
+**第一件事**就是把用户级全局文件加进候选：
+
+```ts
+const userGlobal = join(config.dshHome, USER_GLOBAL_FILE)
+```
+
+然后才从项目根向 cwd 逐级收集项目级候选（`:298-307`）。所以全局那一份**先进上下文**，
+项目级的叠加在它上面。
+
+- 文件名 `USER_GLOBAL_FILE = 'AGENTS.md'` 定义在同包的 `render.ts:98`，
+  ⚠️ **不在该包的公开入口上** —— 插件只能抄一份常量，抄错或 dsh 改名都不会报错，
+  只会安静地编辑一个没人读的文件。
+- 显示成 `~/.dsh/AGENTS.md` 或 `$DSH_HOME/AGENTS.md`（`files.ts:519-520`，
+  由 `dshHomeDisplay()` 二选一），**永远不显示绝对路径**。
+- 文件不存在是完全正常的状态（`statFile` 的 `absent` 分支直接跳过），不是错误。
+
+### 17.2 `dshHome` 是**每个预设**的配置，不是进程全局的
+
+⚠️ 这一条容易想当然。`agent-instructions` 这一行位于**每个预设自己的 composition** 里
+（`packages/preset/agent-presets/presets/standard/agent.cordis.yml:30-33`，
+`cordis` / `ptc` 同样），而 `dshHome` 是它的 config 字段（`config.ts:20,40`）。
+
+**所以「每个预设一份全局提示词」在 dsh 里是天然可行的** —— 给各预设配不同的 `dshHome` 即可。
+
+本项目**没有走这条路**，理由不是技术性的：官方的 `standard` / `cordis` / `ptc` 是
+`trust: 'system'`（`preset.ts:8`），`remoteExportCopy` 明确拒绝写 shipped 预设，
+所以「每个预设一份」等于逼用户把每个想用的预设都复制成用户预设。用户据此拍板
+**只要全局唯一一份**。这条结论记在这里是为了：将来若要做「按预设区分」，
+接缝在哪里是已经查清的，不必重查。
+
+### 17.3 超过 `maxSourceBytes` 的文件被**静默丢弃**
+
+`readBounded`（`files.ts:327-349`）在两处 `return undefined`：`size` 超限、
+或流式累加时超限。返回 `undefined` 的候选**不进上下文，也不报错**。
+默认 `maxSourceBytes` 是 1 MiB（`config.ts:14`）。
+
+⚠️ 对写编辑器的插件而言这是硬约束：不在保存时拦下来，用户就会看到「已保存」
+而模型永远收不到 —— 一个没有任何错误信息的失败。
+
+### 17.4 怎么**反向验证**「写对了地方」
+
+`@deepseek-ai/dsh-agent-instructions` 的公开入口导出了
+`discoverBaselineInstructionFiles({ cwd, dshHome })`（`index.ts:36`）。
+它返回 dsh **自己**认领的基线文件列表（`absolutePath` + `displayPath`）。
+
+所以插件的正确性可以由 dsh 自己回答，而不是由我们抄的常量回答：
+写一个带唯一标记的文件 → 调这个函数 → 看它在不在返回值里。
+`scripts/agents-md-check.mjs` 就是这么做的，实测 dsh 认领
+`["$DSH_HOME/AGENTS.md", "AGENTS.md"]`。**升级 dsh 后必须重跑**：
+这是 §17.1 那个「不在公开入口上的常量」唯一的护栏。
+
+## 18. 一句话总结
 
 > dsh 的 Web 面就是「静态资源 + `POST /api/<service>/<method>` + 一条下行 WebSocket」，
 > 外加一道基于 `Host` 头的 rebinding 防御，以及 0.1.2 新增的、只能用启动 token 换取的 cookie 认证。
