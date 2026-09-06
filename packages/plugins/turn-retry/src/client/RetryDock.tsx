@@ -38,6 +38,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
+// dsh's own 14px glyph set, taken from the page's frozen module table rather
+// than bundled — see the dock-card convention in this repository's AGENTS.md.
+import { IconRefreshOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { RetryResult, TurnRetryState } from '../shared.js'
 import { fill } from './locales.js'
 import type { RetryKey } from './locales.js'
@@ -77,36 +80,86 @@ const CLEARANCE = 'var(--dsh-composer-side-clearance, 16px)'
 const INSET = 'var(--dsh-composer-dock-inset, 8px)'
 const CARD_MAX = 'var(--dsh-composer-card-max-width, 952px)'
 
+/**
+ * The card surface, taken from dsh's own todo panel rather than invented.
+ *
+ * `--dsw-specific-tip` is the ELEVATED surface rung dsh's dock cards and menus
+ * use — `rgb(245,246,247)` in light, `rgb(53,54,56)` in dark
+ * (`ui-conversation/.../TodoPanel.module.css:22-24`). The first version used
+ * `--dsw-alias-bg-layer-2`, which in the light palette is the SAME white as the
+ * page, so the banner dissolved into the background beside dsh's own todo strip.
+ * `0.5px` / `12px` are dsh's own numbers for this card, not rounded versions: a
+ * 1px border and a 10px radius read as a different component rather than a
+ * sibling. The fallback is a neutral translucent grey, which darkens a light
+ * surface and lightens a dark one, so a renamed token still leaves a visible
+ * card in BOTH themes.
+ */
 const bannerStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  gap: '6px',
+  gap: '8px',
   flex: 'none',
   margin: '0 auto',
   width: `calc(100% - ${CLEARANCE} * 2 - ${INSET} * 4)`,
   maxWidth: `calc(${CARD_MAX} - ${INSET} * 4)`,
   minWidth: 0,
   boxSizing: 'border-box',
-  padding: '8px 12px',
-  borderRadius: '10px',
-  border: '1px solid var(--dsw-alias-border-l1, rgba(128,128,128,0.3))',
-  background: 'var(--dsw-alias-bg-layer-2, rgba(128,128,128,0.08))',
+  padding: '6px 12px',
+  borderRadius: '12px',
+  border: '0.5px solid var(--dsw-alias-border-l1, rgba(128,128,128,0.3))',
+  background: 'var(--dsw-specific-tip, rgba(128,128,128,0.1))',
   fontSize: '13px',
   lineHeight: 1.5,
+  overflow: 'hidden',
 }
 
+/**
+ * ⚠️ 表头对齐全部交给 flex，**不写任何固定尺寸**：`align-items:stretch` 把图标格
+ * 子和标题拉成同一高度（由这一行最高的内容决定），每个块再自己
+ * `display:flex; align-items:center` 居中。盒高不同的两个块只靠
+ * `align-items:center` 对齐的是**盒子中心**，图标的几何中心与文字 ink 仍会差出肉
+ * 眼可见的一两像素（用户实机反馈）。
+ */
 const headerRowStyle: CSSProperties = {
   display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
+  alignItems: 'stretch',
+  gap: '10px',
   flexWrap: 'wrap',
   minWidth: 0,
 }
 
+/**
+ * ⚠️ 图标的**光学**下移量，不是随手写的数字：flex 把各格拉成等高、各自居中之后，
+ * 量真实截图（`sharp` 读墨迹包围盒，1× 无缩放）仍是「文字墨迹中心 y=48.0、图标墨
+ * 迹中心 y=46.5」—— 汉字字面在行盒里天然偏下，而 svg 按几何中心摆，这 1.5px 靠
+ * flex 补不回来。写成 em（1.5 ÷ 13 ≈ 0.115em）让它跟字号走；用 `transform` 而不是
+ * margin，纯视觉位移不参与布局。
+ */
+const GLYPH_OPTICAL_SHIFT = 'translateY(0.115em)'
+
+/**
+ * The header's leading glyph cell — centres the icon in the stretched row.
+ * `line-height: 0` 让这一格的高度只由 svg 决定，行盒的半行距不会把图标顶偏。
+ */
+const leadStyle: CSSProperties = {
+  display: 'flex',
+  flex: 'none',
+  alignItems: 'center',
+  justifyContent: 'center',
+  lineHeight: 0,
+  transform: GLYPH_OPTICAL_SHIFT,
+  color: 'var(--dsw-alias-label-tertiary, #6b7280)',
+}
+
+/** The header title — a flex cell so a wrapped title still centres as a whole. */
 const titleStyle: CSSProperties = {
-  fontWeight: 600,
+  display: 'flex',
+  alignItems: 'center',
   flex: '1 1 auto',
   minWidth: 0,
+  fontSize: '13px',
+  fontWeight: 500,
+  color: 'var(--dsw-alias-label-primary, inherit)',
   overflowWrap: 'anywhere',
 }
 
@@ -134,7 +187,7 @@ const messageBoxStyle: CSSProperties = {
   border: '1px solid var(--dsw-alias-border-l1, rgba(128,128,128,0.3))',
   background: 'rgba(128,128,128,0.1)',
   color: 'var(--dsw-alias-label-secondary, #6b7280)',
-  fontFamily: 'var(--dsw-font-mono, ui-monospace, monospace)',
+  fontFamily: 'var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
   fontSize: '12px',
   lineHeight: 1.5,
   // Provider messages carry their own newlines, and a stack trace or a JSON
@@ -170,6 +223,9 @@ const buttonStyle: CSSProperties = {
   font: 'inherit',
   whiteSpace: 'nowrap',
   flex: '0 0 auto',
+  // The row stretches its cells; the button keeps its own height instead of
+  // growing when a long title wraps to two lines.
+  alignSelf: 'center',
 }
 
 const primaryButtonStyle: CSSProperties = {
@@ -243,6 +299,9 @@ export function RetryBanner({ pending, running, onRetry, t }: RetryDockOwnProps)
   return (
     <div style={bannerStyle} role="status">
       <div style={headerRowStyle}>
+        {/* dsh's dock cards all lead their title with a 14px outline glyph
+            (todo: checklist, queue: queue). A retry banner's verb is refresh. */}
+        <span aria-hidden style={leadStyle}><IconRefreshOutline14 /></span>
         <span style={titleStyle}>{translate(title)}</span>
         <button
           type="button"

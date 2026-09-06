@@ -814,6 +814,57 @@ completed | aborted{reason: AgentCancelCause} | blocked
   `conversation.session.header.actions/.utilities`（list）、
   `conversation.chat.turnTail`（**chain**，第一个接受的才渲染，已有 ui-deliverables 占用）。
 
+### 10.7a dock 卡片的「样子」也是抄的，不是设计的
+
+出处：`packages/client/ui-conversation/src/client/skeleton/TodoPanel.module.css`、
+`.../skeleton/TodoPanel.tsx:88-121`、`.../queue/QueueDock.module.css:28-100`、
+`packages/client/ui-primitives/src/icons/index.tsx`、
+`packages/client/web/src/platform.ts:8-13`
+
+宽度轴（§10.7）只解决「不比消息区宽」；**卡片本身长什么样**是另一件必须照抄的事，
+否则插件的卡片挨着 dsh 自己的 todo / queue 条目，一眼就是外来户。dsh 自己那两张卡的数值：
+
+| 位置 | 值 | 备注 |
+|---|---|---|
+| 背景 | `var(--dsw-specific-tip)` | **抬升面**，浅色 `rgb(245,246,247)`、深色 `rgb(53,54,56)`（`design-platform.css:245,337`）。⚠️ 不是 `--dsw-alias-bg-base`（浅色下就是纯白，卡片直接融进页面），也不是 `--dsw-alias-bg-layer-*`（浅色下 layer 1-3 同一个白，见 §8.6a） |
+| 描边 | `0.5px solid var(--dsw-alias-border-l1)` | 是 0.5px，不是 1px |
+| 圆角 | `12px` | 不是 10px |
+| 头部 | `display:flex; align-items:center; gap:10px`（todo `.body` 6px 12px + `.header`；queue 用 36px 行高 + `padding:4px 12px`） | 整行是 `<button>`，`border:none; background:transparent; text-align:left`，并带 `aria-expanded` |
+| 标题 | `font-size:13px; line-height:24px; font-weight:500; color: var(--dsw-alias-label-primary)` | 不是 `font-weight:600` |
+| 副标题 / 摘要 | `flex:1 1 auto; min-width:0; font-size:13px; line-height:20px; color: var(--dsw-alias-label-tertiary)` + 省略号 | |
+| 标题左侧图标 | `display:grid; place-items:center; color: var(--dsw-alias-label-tertiary)`，内放 dsh 自带的 14px outline 图标 | todo 用 `IconChecklistOutline14`，queue 用 `IconQueueOutline14` |
+| 折叠箭头 | 同上的 grid 单元格，**collapsed → `IconChevronUpOutline14`，展开 → `IconChevronDownOutline14`** | ⚠️ 方向就是这样，不要按直觉反过来；也不要用文本 `▾ / ▴`，那是另一套字形和字重 |
+| 内部滚动条 | 卡片上再写 `--dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2)`、`--dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2)` | 抬升面上的滚动条要换 l2 档，见 ui-theme `styles/scrollbar.css` |
+
+图标从哪来：`@deepseek-ai/dsh-client-ui-primitives` **在页面的冻结模块表里**
+（`PLATFORM_MODULES`，`packages/client/web/src/platform.ts:12`），所以插件的浏览器半可以直接
+`import` 它，并在自己的 `tsdown.config.ts` 的 `MODULE_TABLE` 里列上这个 specifier 保持 external ——
+拿到的是页面**已经加载的那一份**组件与 CSS，不是打进 bundle 的第二份副本。
+可用图标名见 `ui-primitives/src/icons/index.tsx`（`IconApiOutline14`、`IconCodeOutline16`、
+`IconRefreshOutline14`、`IconChevronUp/DownOutline14` …）。
+本仓库现有占用：services 与 terminal 两张卡**共用** `IconApiOutline14`（用户拍板；两卡标题不同、
+也很少同屏，不必各占一枚），turn-retry 用 `IconRefreshOutline14`。
+
+⚠️ **本仓库在表头这一项上刻意不照抄 dsh：对齐交给 flex，不写死尺寸。**
+dsh 的表头是 `lead`(14px) + 标题(24px) + 摘要(20px) + chevron(14px)，靠 `align-items:center`
+对齐 —— 对齐的是**盒子中心**，而这四个盒子高度各不相同，图标的几何中心与文字 ink 的视觉中心就
+差出肉眼可见的一两像素（用户实机反馈「icon、标题、副标题竖直方向没对齐」）。本仓库三张卡改成
+两层 flex：① 表头 `align-items: stretch`，四个块被拉成**同一高度**（由内容决定，不是某个写死
+的数字）；② 每个块自己 `display:flex; align-items:center`，图标与文字各自在这同一高度里居中。
+⚠️ 摘要要省略号，`text-overflow:ellipsis` 必须落在**内层 span** 上 —— flex 容器自己做不了 ellipsis。
+
+⚠️⚠️ **flex 全做对之后还差 1.5px —— 那不是布局问题，是字体的，图标要补一次光学下移。**
+量真实截图（读墨迹包围盒，1× 无缩放，13px 表头；量法与整套居中判定顺序见 skill `flex-centering`）：
+标题「常驻服务」与副标题「1 个运行中」的墨迹中心都落在 y=48.0，图标的墨迹中心却在 y=46.5。
+**几何居中不等于视觉居中**：汉字字面在行盒里天然偏下，而 svg 是按几何中心摆的，这 1.5px 无论
+怎么调 flex 都补不回来。所以图标格与箭头格再加
+`transform: translateY(0.115em)`（1.5px ÷ 13px —— 写成 em 才跟着字号走；用 `transform` 而不是
+margin，纯视觉位移不参与布局，不会把等高的格子挤歪）。改完复量：图标 35.5 / 标题 35.0 /
+副标题 35.0，残差 0.5px。dsh 自己没做这一步，它的 todo 条目有同样的偏移。
+
+⚠️ 这个包在 Node 环境下 import 会因为它带 CSS 而失败，所以带它的浏览器半**不能**被
+`environment: 'node'` 的单测直接 import（services 的 `tests/client.spec.ts` 头注已记）。
+
 ### 10.8 Connection RPC 通道的端点在 URL 路径里
 
 出处：`packages/client/connection/src/rpc-host.ts:259-267`、`src/client/rpc.ts:34-53`

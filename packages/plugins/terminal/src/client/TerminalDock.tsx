@@ -23,6 +23,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent } from 'react'
+// dsh's own glyph set, taken from the page's frozen module table rather than
+// bundled — see the dock-card convention in this repository's AGENTS.md.
+import {
+  IconApiOutline14, IconChevronDownOutline14, IconChevronUpOutline14,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import { foldPoll, terminalLabel } from '../shared.js'
 import type {
   TerminalReadResultView, TerminalSendResultView, TerminalView, TerminalsSnapshot,
@@ -53,6 +58,7 @@ const EAGER_POLL_MS = 400
  * it is the one piece of state machinery in this component that can lose a
  * user's typed draft, and it deserves a test that needs no DOM.
  */
+
 /** What this plugin injects into its own registration. */
 export interface TerminalDockInjected {
   /** Ask the Host which terminals this conversation's agent owns. */
@@ -80,12 +86,34 @@ const CARD_MAX = 'var(--dsh-composer-card-max-width, 952px)'
 /**
  * ⚠️ Theme tokens are spelled exactly as dsh defines them. A misspelt custom
  * property does not warn — it silently falls back to the literal after the
- * comma — so `--dsw-alias-border-l1` is an L, not a 1, and the mono family is
- * `--dsw-font-mono` (docs/02 §8.6).
+ * comma — so `--dsw-alias-border-l1` is an L, not a 1 (docs/02 §8.6).
+ *
+ * ⚠️ `--dsw-font-mono` is spelt correctly and is NEVER DEFINED. Measured in a
+ * real page: `getPropertyValue('--dsw-font-mono')` comes back empty, and dsh's
+ * own CSS references it four times without defining it once. So the FALLBACK is
+ * the value that actually renders, and it is dsh's own complete stack rather
+ * than a two-item one — `ui-monospace` is an Apple-platform generic, so a short
+ * fallback drops straight to the browser's default fixed font on Windows
+ * (docs/02 §8.6b).
  */
 const BORDER = 'var(--dsw-alias-border-l1, rgba(128,128,128,0.3))'
 const SECONDARY = 'var(--dsw-alias-label-secondary, #6b7280)'
-const MONO = 'var(--dsw-font-mono, ui-monospace, monospace)'
+const TERTIARY = 'var(--dsw-alias-label-tertiary, #6b7280)'
+const MONO = 'var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)'
+
+/**
+ * The card surface, taken from dsh's own todo panel rather than invented.
+ *
+ * `--dsw-specific-tip` is the ELEVATED surface rung dsh's dock cards and menus
+ * use — `rgb(245,246,247)` in light, `rgb(53,54,56)` in dark
+ * (`ui-conversation/.../TodoPanel.module.css:22-24`). The first version used
+ * `--dsw-alias-bg-base`, which in the light palette is plain white, so this
+ * card dissolved into the page beside dsh's own todo strip. The fallback is a
+ * neutral translucent grey rather than either literal: it darkens a light
+ * surface and lightens a dark one, so a renamed token still leaves a visible
+ * card in BOTH themes.
+ */
+const SURFACE = 'var(--dsw-specific-tip, rgba(128,128,128,0.1))'
 
 const rootStyle: CSSProperties = {
   display: 'flex',
@@ -96,22 +124,34 @@ const rootStyle: CSSProperties = {
   maxWidth: `calc(${CARD_MAX} - ${INSET} * 4)`,
   minWidth: 0,
   boxSizing: 'border-box',
-  borderRadius: '10px',
-  border: `1px solid ${BORDER}`,
-  // Opaque, not a layer token: in dsh's light palette layers 1-3 are the same
-  // white, so a layer token would make this box invisible in half the themes.
-  background: 'var(--dsw-alias-bg-base, transparent)',
+  // 0.5px and 12px are dsh's own numbers for this card, not rounded versions:
+  // sitting directly beside the todo panel, a 1px border and a 10px radius
+  // read as a different component rather than a sibling.
+  borderRadius: '12px',
+  border: `0.5px solid ${BORDER}`,
+  background: SURFACE,
   fontSize: '13px',
   lineHeight: 1.5,
   overflow: 'hidden',
 }
 
+/**
+ * ⚠️ 表头对齐全部交给 flex，**不写任何固定尺寸**。
+ *
+ * dsh 自己的表头是 `lead`(14px svg) + 标题(line-height 24px) + 摘要(20px) +
+ * chevron(14px)，靠 `align-items:center` 对齐 —— 它对齐的是**盒子中心**，而这四个
+ * 盒子高度各不相同，图标的几何中心与文字 ink 的视觉中心就差出肉眼可见的一两像素
+ * （用户实机反馈）。这里用两层 flex 代替：表头 `align-items:stretch` 把四个块拉成
+ * 同一高度（由内容决定，不是写死的数字），每个块再自己 `display:flex;
+ * align-items:center` 把内容居中。
+ * ⚠️ 摘要要省略号就得把文字放进**内层 span**：flex 容器自己做不了 ellipsis。
+ */
 const headerStyle: CSSProperties = {
   display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
+  alignItems: 'stretch',
+  gap: '10px',
   width: '100%',
-  padding: '7px 12px',
+  padding: '8px 12px',
   border: 'none',
   background: 'transparent',
   color: 'inherit',
@@ -122,11 +162,61 @@ const headerStyle: CSSProperties = {
   boxSizing: 'border-box',
 }
 
-const titleStyle: CSSProperties = { fontWeight: 600, flex: '0 0 auto' }
+/**
+ * ⚠️ 图标的**光学**下移量，不是随手写的数字：flex 把各格拉成等高、各自居中之后，
+ * 量真实截图（`sharp` 读墨迹包围盒，1× 无缩放）仍是「文字墨迹中心 y=48.0、图标墨
+ * 迹中心 y=46.5」—— 汉字字面在行盒里天然偏下，而 svg 按几何中心摆，这 1.5px 靠
+ * flex 补不回来。写成 em（1.5 ÷ 13 ≈ 0.115em）让它跟字号走；用 `transform` 而不是
+ * margin，纯视觉位移不参与布局。
+ */
+const GLYPH_OPTICAL_SHIFT = 'translateY(0.115em)'
+
+/**
+ * The header's leading glyph cell — centres the icon in the stretched row.
+ * `line-height: 0` 让这一格的高度只由 svg 决定，行盒的半行距不会把图标顶偏。
+ */
+const leadStyle: CSSProperties = {
+  display: 'flex',
+  flex: 'none',
+  alignItems: 'center',
+  justifyContent: 'center',
+  lineHeight: 0,
+  transform: GLYPH_OPTICAL_SHIFT,
+  color: TERTIARY,
+}
+
+/** The disclosure chevron cell — the same centring and optical shift as the lead. */
+const chevronStyle: CSSProperties = {
+  display: 'flex',
+  flex: 'none',
+  alignItems: 'center',
+  justifyContent: 'center',
+  lineHeight: 0,
+  transform: GLYPH_OPTICAL_SHIFT,
+  color: TERTIARY,
+}
+
+const titleStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  flex: '0 0 auto',
+  fontSize: '13px',
+  fontWeight: 500,
+  color: 'var(--dsw-alias-label-primary, inherit)',
+  whiteSpace: 'nowrap',
+}
 
 const summaryStyle: CSSProperties = {
-  color: SECONDARY,
+  display: 'flex',
+  alignItems: 'center',
+  color: TERTIARY,
+  fontSize: '13px',
   flex: '1 1 auto',
+  minWidth: 0,
+}
+
+/** The summary's text box — the ellipsis lives here, not on the flex cell. */
+const summaryTextStyle: CSSProperties = {
   minWidth: 0,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -353,7 +443,6 @@ export function TerminalPanel({ sessionId, actions, t }: TerminalPanelProps) {
     setSelected(terminals[terminals.length - 1]?.id)
     setScreen(undefined)
     revisionRef.current = undefined
-    blindPolls.current = 0
   }, [terminals, selected])
 
   // Poll the screen only while the panel is open: a collapsed panel showing one
@@ -476,9 +565,20 @@ export function TerminalPanel({ sessionId, actions, t }: TerminalPanelProps) {
         aria-expanded={!collapsed}
         onClick={() => { setCollapsed(value => !value) }}
       >
+        {/* dsh's dock cards all lead their title with an outline glyph and
+            close the header with the shared disclosure chevron — collapsed
+            points UP, expanded points DOWN, exactly as dsh's todo panel does
+            (`TodoPanel.tsx:101-106`). The API mark is a terminal prompt in a
+            rounded square, which is literally what this panel shows; the
+            services panel deliberately uses the same glyph (user's call —
+            the two cards are never mistaken for each other, their titles
+            differ and they rarely appear together). */}
+        <span aria-hidden style={leadStyle}><IconApiOutline14 /></span>
         <span style={titleStyle}>{translate('title')}</span>
-        <span style={summaryStyle}>{summary}</span>
-        <span aria-hidden style={{ color: SECONDARY, flex: '0 0 auto' }}>{collapsed ? '▾' : '▴'}</span>
+        <span style={summaryStyle}><span style={summaryTextStyle}>{summary}</span></span>
+        <span aria-hidden style={chevronStyle}>
+          {collapsed ? <IconChevronUpOutline14 /> : <IconChevronDownOutline14 />}
+        </span>
       </button>
 
       {!collapsed && (
@@ -498,7 +598,6 @@ export function TerminalPanel({ sessionId, actions, t }: TerminalPanelProps) {
                     setScreen(undefined)
                     setNote(undefined)
                     revisionRef.current = undefined
-    blindPolls.current = 0
                     followRef.current = true
                   }}
                 >
