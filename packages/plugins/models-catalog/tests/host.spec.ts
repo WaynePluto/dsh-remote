@@ -1,16 +1,11 @@
-/**
- * The Host half against fakes of the two dsh services it uses (`settings`,
- * `llm`) and a faked installed catalog, so the suite exercises the parts that
- * are ours: which routes are offered, the write order across the two
- * namespaces, the unasked cleanup, and the channel's dispatch.
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`settings`、`llm`） */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 
 const installed = new Map<string, { ids: string[]; apis: string[] }>()
 
-/** The URLs the fake fetch saw, and what the next call answers with. */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 const requests: string[] = []
 let responseBody: () => string = () => '{}'
 
@@ -26,7 +21,7 @@ vi.mock('@earendil-works/pi-ai/providers/all', () => ({
 
 const { BAD_PAYLOAD_CODE, CatalogService, dispatch, UNKNOWN_ENDPOINT_CODE } = await import('../src/index.js')
 
-/** Apply one path op to a section, creating the objects it needs. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 function applyOp(section: Record<string, unknown>, op: { op: string; path: readonly string[]; value?: unknown }): void {
   const parent = op.path.slice(0, -1).reduce<Record<string, unknown>>((node, key) => {
     const next = node[key]
@@ -40,10 +35,10 @@ function applyOp(section: Record<string, unknown>, op: { op: string; path: reado
   else parent[leaf] = op.value
 }
 
-/** The order in which namespaces were written, for the write-order assertion. */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 const writes: string[] = []
 
-/** A context carrying just the service surface this plugin reads. */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 function fakeCtx(sections: Record<string, Record<string, unknown>>): Context {
   return {
     settings: {
@@ -66,7 +61,7 @@ function fakeCtx(sections: Record<string, Record<string, unknown>>): Context {
   } as unknown as Context
 }
 
-/** A source document with one model beyond the installed catalog. */
+/** 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。 */
 const DOCUMENT = {
   anthropic: { name: 'Anthropic', models: { 'old-1': {}, 'new-1': { name: 'New One', limit: { context: 42 } } } },
   openai: { name: 'OpenAI', models: { 'gpt-next': {} } },
@@ -87,9 +82,9 @@ beforeEach(() => {
 
 describe('reaching the source', () => {
   it('reads through the process-wide dispatcher, carrying no proxy option of its own', async () => {
-    // The proxy is `@dsh-remote/dsh-plugin-proxy`'s business: one place to
-    // configure it, and this plugin reaches the internet exactly when the rest
-    // of dsh does.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`@dsh-remote/dsh-plugin-proxy`）
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 与 dsh 的行为一致。
     const service = new CatalogService(
       fakeCtx({ 'llm-pi-ai': { providers: { anthropic: {} } }, 'dsh-plugin-models-catalog': {} }),
       'https://example.test/api.json',
@@ -146,14 +141,14 @@ describe('applying', () => {
     await expect(service.apply(['nope'])).rejects.toThrow('not a configured pi-ai provider')
   })
 
-  it('reports a blocked multi-protocol route rather than writing it', async () => {
+  it('offers additions for a mixed-protocol route using the runtime catalog path', async () => {
     const service = new CatalogService(
       fakeCtx({ 'llm-pi-ai': { providers: { openai: {} } }, 'dsh-plugin-models-catalog': {} }),
       'https://example.test/api.json',
     )
     const view = await service.preview()
-    expect(view.routes[0]?.blocked).toBe('multi-protocol')
-    expect(view.routes[0]?.additions).toEqual([])
+    expect(view.routes[0]?.blocked).toBeUndefined()
+    expect(view.routes[0]?.additions.map(model => model.id)).toEqual(['gpt-next'])
   })
 })
 
@@ -165,12 +160,12 @@ describe('the unasked cleanup', () => {
     }
     installed.set('anthropic', { ids: ['old-1', 'new-1'], apis: ['anthropic-messages'] })
     const view = await new CatalogService(fakeCtx(sections), 'https://example.test/api.json').status()
-    // The routes are already clean by the time the view is built, so the
-    // removal reports itself instead of showing up as pending work.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 删除会自我报告，而不是显示为待处理工作。
     expect(view.reconciled).toEqual([{ route: 'anthropic', displayName: 'Anthropic', ids: ['new-1'] }])
     expect(view.routes[0]?.reclaimed).toEqual([])
-    // Nothing of ours is left, so the list itself is gone and the route serves
-    // the installed catalog again.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。
     expect(sections['llm-pi-ai'].providers).toEqual({ anthropic: {} })
     expect(sections['dsh-plugin-models-catalog']).toEqual({ overlays: {} })
   })
@@ -190,7 +185,7 @@ describe('reverting', () => {
 })
 
 describe('the channel', () => {
-  /** A service over an empty but registered pair of sections. */
+  /** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
   function service(): InstanceType<typeof CatalogService> {
     return new CatalogService(
       fakeCtx({ 'llm-pi-ai': { providers: { anthropic: {} } }, 'dsh-plugin-models-catalog': {} }),

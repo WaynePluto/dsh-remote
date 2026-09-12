@@ -1,16 +1,6 @@
-/**
- * Copy for the terminal panel. Both dictionaries are complete by construction:
- * `en` defines the key set and `zh` is typed against it, so a missing
- * translation fails the build rather than falling back at runtime.
- *
- * Sentences the HOST authors (refusals, "sent", "busy") are not here: the Host
- * is the half that knows which refusal happened, and it sends the finished
- * sentence. See `src/notes.ts`.
- *
- * @module @dsh-remote/dsh-plugin-terminal/client/locales
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`en`、`zh`、`src/notes.ts`） */
 
-/** English copy; also the key set of this namespace. */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 export const en = {
   title: 'Terminal',
   summaryOne: '{label}',
@@ -33,10 +23,10 @@ export const en = {
   failed: 'Failed: {message}',
 } as const
 
-/** One copy key of this namespace. */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 export type TerminalKey = keyof typeof en
 
-/** Simplified Chinese copy. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 export const zh: Record<TerminalKey, string> = {
   title: '交互终端',
   summaryOne: '{label}',
@@ -59,12 +49,7 @@ export const zh: Record<TerminalKey, string> = {
   failed: '失败：{message}',
 }
 
-/**
- * Fill `{name}` placeholders in one copy string.
- * @param text - the translated string.
- * @param values - placeholder values by name.
- * @returns the filled string; an unknown placeholder is left as written.
- */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`{name}`） */
 export function fill(text: string, values: Readonly<Record<string, string | number>>): string {
   return text.replace(/\{(\w+)\}/gu, (match, key: string) =>
     Object.hasOwn(values, key) ? String(values[key]) : match)

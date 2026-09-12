@@ -15,13 +15,13 @@ import {
   whereDshRuns,
 } from './shell.js'
 
-/** A freshly issued token, rendered once and then unrecoverable. */
+/** 刚签发的令牌，只渲染一次，之后无法找回。 */
 export interface IssuedTokenView {
   readonly token: string
   readonly slug: string
 }
 
-/** The Host the operator is actually using, without its port. */
+/** 操作员实际使用的 Host，不含端口。 */
 function consoleHostname(host: string | undefined): string | undefined {
   if (host === undefined) return undefined
   try {
@@ -32,9 +32,8 @@ function consoleHostname(host: string | undefined): string | undefined {
 }
 
 /**
- * Where a browser reaches this machine's dsh UI, or undefined when the current
- * deployment has no route to it (no subdomain, no allocated member port, and
- * not the machine serving this console).
+ * 浏览器访问这台机器 dsh UI 的地址；当前部署没有到它的路由时为 undefined
+ * （没有子域名、没有已分配成员端口，且它不是提供此控制台的机器）。
  */
 function machineEntryUrl(options: {
   device: DeviceRecord
@@ -46,25 +45,20 @@ function machineEntryUrl(options: {
     return `${config.publicScheme}://${device.slug}.${config.publicDomain}/`
   }
   if (config.directSlug === device.slug) return '/'
-  // D16 routing key 2: same host, the machine's own port.
+  // D16 路由键 2：同一主机、机器自己的端口。
   if (hostname === undefined || device.browserPort === null) return undefined
   return `${config.publicScheme}://${hostname}:${String(device.browserPort)}/`
 }
 
 /**
- * The authority a browser will put in the `Host` header of requests destined
- * for the machine about to be hung off this one.
+ * 浏览器会放入发往即将挂接机器的请求 `Host` header 中的 authority。
  *
- * Mode A forwards that Host untouched (铁律 7), so it is exactly what the other
- * machine's dsh must be told to trust. It is derived here rather than typed by
- * the operator because this console already knows it: with a public domain the
- * machine gets its own subdomain, otherwise it is reached on this very host at
- * a per-machine port — and a port-less `--trusted-host` entry matches any port,
- * which is what lets this be printed before any port has been allocated.
- * @param options The machine's slug, relay config and the hostname the operator
- * is reading this console on.
- * @returns The bare `host` to trust, or undefined when the request carried no
- * usable Host to derive it from.
+ * 模式 A 原样转发该 Host（铁律 7），因此它正是另一台机器的 dsh 必须信任的值。
+ * 这里直接推导而不是让操作员手动输入，因为控制台已经知道它：使用公网域名时
+ * 机器有自己的子域名，否则通过当前主机上的每机器端口访问——而不带端口的
+ * `--trusted-host` 条目匹配任意端口，所以在端口分配前也能打印此值。
+ * @param options 机器的 slug、relay 配置以及操作员查看此控制台时使用的 hostname。
+ * @returns 要信任的裸 `host`；请求没有携带可用 Host 可供推导时返回 undefined。
  */
 function hubBrowserAuthority(options: {
   slug: string
@@ -93,9 +87,8 @@ function machineItem(options: {
   const link = entry === undefined || !online
     ? ''
     : `<a class="open" href="${escapeHtml(entry)}">打开 ${escapeHtml(device.slug)} 的 dsh →</a>`
-  // A link rather than a submit button: revoking cannot be undone from the
-  // machine it hits, so it goes through the confirmation page this same path
-  // serves on GET.
+  // 使用链接而不是提交按钮：吊销无法从它所影响的机器上撤销，
+  // 因此要经过同一路径在 GET 上提供的确认页面。
   const action = revoked
     ? '<span class="off">已停止并移除，重新挂上来需要新的注册令牌。</span>'
     : `<a class="danger-link" href="${ADMIN_REVOKE_PATH}?machineId=${encodeURIComponent(device.machineId)}">停止 ${escapeHtml(device.slug)} 并移除…</a>`
@@ -110,14 +103,12 @@ function machineItem(options: {
 }
 
 /**
- * The connector invocation for a machine that is about to be hung off this one.
- * The address is the very authority the operator is reading this page on, so a
- * machine behind NAT or on a changing DHCP lease still prints something that
- * works.
+ * 用于将要挂接到这台机器上的机器的 connector 调用命令。
+ * 地址就是操作员查看此页面时使用的 authority，因此即使机器位于 NAT 后或 DHCP 租约
+ * 不断变化，也能打印出可用的内容。
  *
- * Everything the other machine needs is in this one line — including
- * `--hub-authority`, so that nothing about mode A is left for the operator to
- * fill in by hand on the far side.
+ * 另一台机器所需的一切都在这一行中——包括 `--hub-authority`，因此模式 A 不会留下
+ * 任何内容让操作员在另一端手动填写。
  */
 function connectorCommand(options: {
   host: string | undefined
@@ -128,8 +119,8 @@ function connectorCommand(options: {
 }): string {
   const authority = options.host ?? '<relay-host>:30809'
   const wsScheme = options.scheme === 'https' ? 'wss' : 'ws'
-  // Omitted rather than guessed when unknown: a placeholder would be written
-  // into the other machine's membership.json and stop its dsh from starting.
+  // 未知时省略而不是猜测：占位符会被写入另一台机器的 membership.json，
+  // 导致其 dsh 无法启动。
   const trust = options.hubAuthority === undefined ? '' : ` --hub-authority ${options.hubAuthority}`
   return `dsh-remote-connector --relay ${wsScheme}://${authority} --slug ${options.slug} --enroll-token ${options.token}${trust}`
 }
@@ -178,13 +169,11 @@ function issueForm(options: { csrf: string; machine: string; error: string | und
 }
 
 /**
- * The console's default page: everything whose dsh can be opened from here.
- * @param options The devices in the store, which of them hold a live control
- * channel, the CSRF token its forms carry, relay config and the request Host
- * (together they decide each machine's browser address), this machine's own
- * name, the signed-in user, the appearance to render in, a token just issued,
- * and an error from a rejected issue.
- * @returns A complete HTML document.
+ * 控制台默认页面：可以从这里打开 dsh 的所有机器。
+ * @param options store 中的设备、哪些设备拥有活动控制信道、表单携带的 CSRF token、
+ * relay 配置和请求 Host（共同决定每台机器的浏览器地址）、这台机器自己的名称、
+ * 登录用户、要渲染的外观、刚签发的令牌以及签发被拒绝时的错误。
+ * @returns 完整的 HTML 文档。
  */
 export function machinesPage(options: {
   devices: readonly DeviceRecord[]

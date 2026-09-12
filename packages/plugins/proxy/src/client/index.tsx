@@ -1,18 +1,9 @@
-/**
- * Browser half: add a Proxy page to Settings.
- *
- * `settings.section` is the seat dsh declares for "one settings page per list
- * entry". The page reads and writes the Host's `proxy` namespace through
- * `ctx.settingsScope.bind()`, which is the settings domain's own service seam —
- * no cross-plugin value import, and no second transport of our own.
- *
- * @module @dsh-remote/dsh-plugin-proxy/client
- */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 
 import type { Context } from '@deepseek-ai/cordis'
-// Type-only: each pulls in the Context merge naming the service this plugin
-// reads. `dsh-client-ui-settings/client` carries both the settings slot
-// declarations and the `ctx.settingsScope` merge.
+// 仅类型：引入声明本插件读取服务的 Context 合并
+// `dsh-client-ui-settings/client` 同时提供 settings 槽位
+// 声明和 `ctx.settingsScope` 合并。
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -27,46 +18,30 @@ import type { ProxyKey } from './locales.js'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    /** This plugin's copy namespace; the same string as its settings namespace. */
+    /** 本插件的文案命名空间，与 settings namespace 使用同一字符串。 */
     'dsh-plugin-proxy': ProxyKey
   }
 }
 
-/** The copy namespace this plugin owns; it matches the settings namespace. */
+/** 本插件拥有的文案命名空间，与 settings namespace 一致。 */
 const NS = NAMESPACE
 
-/**
- * Where this page sits in the settings navigation. High enough to be after the
- * pages a person opens daily (General, Models), since a proxy is configured
- * once and then forgotten.
- */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 const ORDER = 60
 
-/**
- * Required services. `settingsScope` is the read/write seam for the namespace,
- * `slots` is the seat, `locale` supplies the copy, `connection` carries the
- * test channel, and `remote.settings` is what the scope writes through.
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`settingsScope`、`slots`、`locale`、`connection`、`remote.settings`） */
 export const inject = ['slots', 'locale', 'connection', 'remote', 'remote.settings', 'settingsScope']
 
-/** The failure this plugin reports when the Host answers with an error. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 export class ProxyChannelError extends Error {}
 
-/**
- * Register the page.
- * @param ctx - client root context.
- */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'proxy: copy dictionaries')
   const t = ctx.locale.bind(NS)
   const scope = ctx.settingsScope.bind<ProxySettings>({ namespace: NAMESPACE })
 
-  /**
-   * Ask the Host to try one address through the live dispatcher.
-   * @param url - absolute http(s) URL.
-   * @returns what the Host observed.
-   * @throws ProxyChannelError when the Host reported a failure.
-   */
+  /** 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。 */
   const test = async (url: string): Promise<ProxyTestResult> => {
     const connection = ctx.get('connection') as ConnectionHandle | undefined
     if (connection === undefined) throw new ProxyChannelError('no active connection')
@@ -84,7 +59,7 @@ export function apply(ctx: Context): void {
     inject: () => ({ scope, test }),
   }, ProxySection))
 
-  // The shell draws the nav glyph itself and has no seat for ours, so the
-  // globe is painted onto our own row from the outside (see nav-glyph.ts).
+  // shell 自己绘制导航图标且没有我们的槽位，因此从外部把
+  // 地球图标画到本行（见 nav-glyph.ts）。
   ctx.effect(installNavGlyph, 'proxy: settings nav glyph')
 }

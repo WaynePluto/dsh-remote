@@ -1,29 +1,28 @@
 import type { BrowserCookiePolicy } from '../auth/cookies.js'
 
 /**
- * The three appearances dsh itself offers, spelled the same way it does
- * (`packages/client/ui-theme/src/theme-settings.ts`), so a machine's console
- * and the dsh UI behind it offer the same choice rather than two similar ones.
+ * dsh 自身提供的三种外观，使用与其
+ * （`packages/client/ui-theme/src/theme-settings.ts`）相同的拼写，使机器控制台
+ * 与其后的 dsh UI 提供相同选项，而不是两个相似选项。
  *
- * The preference is ours alone: dsh keeps its own in its settings document,
- * which relay must not read or write (it never parses dsh's protocol), so the
- * two are set independently and each remembers its own answer.
+ * 此偏好只由我们维护：dsh 将自己的偏好保存在 settings 文档中，
+ * relay 不得读写（它从不解析 dsh 协议），因此两者独立设置，各自记住自己的选择。
  */
 export type ThemePreference = 'light' | 'dark' | 'system'
 
-/** Same default as dsh: follow the operating system until told otherwise. */
+/** 与 dsh 相同的默认值：除非另行指定，否则跟随操作系统。 */
 export const DEFAULT_THEME: ThemePreference = 'system'
 
 /**
- * The switch endpoint. Under the `_` prefix like every other relay-owned path,
- * so it can never shadow one the tunnelled dsh frontend owns.
+ * 切换 endpoint。与其他 relay 拥有的路径一样使用 `_` 前缀，
+ * 因此不会遮蔽隧道中的 dsh 前端所拥有的路径。
  */
 export const THEME_PATH = '/_theme'
 
-/** Cube order copied from dsh's Appearance row: light, dark, system. */
+/** 复制自 dsh Appearance 行的选项顺序：light、dark、system。 */
 export const THEME_VALUES: readonly ThemePreference[] = ['light', 'dark', 'system']
 
-/** Labels lifted verbatim from dsh's zh-CN dictionary (`settings.theme`). */
+/** 从 dsh 的 zh-CN 字典（`settings.theme`）逐字取出的标签。 */
 const THEME_LABELS: Readonly<Record<ThemePreference, string>> = {
   light: '浅色',
   dark: '深色',
@@ -35,9 +34,9 @@ export function themeLabel(preference: ThemePreference): string {
 }
 
 /**
- * Parse a preference off the wire.
- * @param value The raw query parameter or cookie value.
- * @returns The preference, or undefined when the value names none.
+ * 解析线路上传来的偏好。
+ * @param value 原始查询参数或 cookie 值。
+ * @returns 对应偏好；值未命名任何偏好时返回 undefined。
  */
 export function parseThemePreference(
   value: string | null | undefined,
@@ -46,13 +45,13 @@ export function parseThemePreference(
 }
 
 /**
- * The appearance a browser asked for, defaulting to `system`.
+ * 浏览器请求的外观，默认为 `system`。
  *
- * A cookie that is missing, stale or hand-edited resolves to the default
- * instead of failing: this only decides which palette a page renders in.
- * @param cookies The relay's cookie policy, which owns the cookie name.
- * @param cookieHeader The request's raw Cookie header.
- * @returns The preference to render with.
+ * 缺失、过期或手动编辑的 cookie 会解析为默认值，而不是失败：
+ * 它只决定页面渲染哪种配色。
+ * @param cookies relay 的 cookie 策略，负责 cookie 名称。
+ * @param cookieHeader 请求的原始 Cookie header。
+ * @returns 用于渲染的偏好。
  */
 export function readThemePreference(
   cookies: BrowserCookiePolicy,
@@ -62,13 +61,12 @@ export function readThemePreference(
 }
 
 /**
- * Where a theme switch may send the browser back to.
+ * 主题切换可以把浏览器送回的地址。
  *
- * Same-origin paths only, and never back to `/_theme` itself: the switch is
- * reachable without a session, so an unvalidated parameter would turn it into
- * an open redirect on the login page.
- * @param value The `returnTo` parameter as received.
- * @returns A safe path to redirect to.
+ * 仅允许同源路径，且不能返回 `/_theme` 自身：切换 endpoint 无需会话即可访问，
+ * 未经校验的参数会把它变成登录页上的开放重定向。
+ * @param value 收到的 `returnTo` 参数。
+ * @returns 可安全重定向到的路径。
  */
 export function safeThemeReturnTo(value: string | null | undefined): string {
   if (
@@ -85,7 +83,7 @@ export function safeThemeReturnTo(value: string | null | undefined): string {
   return value
 }
 
-/** What the server should answer a `/_theme` request with. */
+/** server 应对 `/_theme` 请求返回的结果。 */
 export type ThemeSwitchResult =
   | {
     readonly kind: 'redirect'
@@ -99,14 +97,12 @@ export type ThemeSwitchResult =
   }
 
 /**
- * Resolve one `/_theme` request.
+ * 解析一次 `/_theme` 请求。
  *
- * Deliberately answered before authentication and without a CSRF token: the
- * login page is one of the pages that has to offer the switch, and the only
- * thing a forged request could achieve is showing somebody a dark page.
- * @param options The request method, its parsed URL, and the cookie policy
- * that serializes the preference.
- * @returns The redirect to send, or the error to answer with.
+ * 故意在认证前且无需 CSRF token 响应：登录页必须提供切换功能，
+ * 而伪造请求唯一能做到的事只是让某人看到深色页面。
+ * @param options 请求方法、解析后的 URL 以及负责序列化偏好的 cookie 策略。
+ * @returns 要发送的重定向，或要返回的错误。
  */
 export function resolveThemeSwitch(options: {
   method: string | undefined

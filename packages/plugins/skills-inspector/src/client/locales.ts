@@ -1,14 +1,8 @@
 /**
- * 「技能」视图的文案。两份词典按构造完整：`en` 定义 key 集合，`zh` 用它做类型约束，
- * 漏翻会在构建期失败，而不是运行时静默回退。
- *
- * 中文文案遵循本项目词表（docs/01-decisions.md §2.05）。
- *
- * 来源桶的标题刻意是「中文人话 + 真实相对路径」两段，把「概念」和「磁盘位置」
- * 一次讲完 —— 这正是用户问的「技能是全局还是项目级」。路径取自 dsh 的
- * `skill-filesystem/src/index.ts:246-258`，是写死的根目录，不会变。
- *
- * @module @dsh-remote/dsh-plugin-skills-inspector/client/locales
+ * 「技能」视图文案：`en` 定义 key 集合，`zh` 按它做类型约束，漏翻会在构建期失败。
+ * 中文文案遵循 `docs/01-decisions.md` §2.05。
+ * 来源标题使用「中文概念 + 真实相对路径」，回答技能是全局还是项目级；路径根来自
+ * 路径根源码见 dsh `skill-filesystem/src/index.ts:246-258`。
  */
 
 /** 英文文案；同时是本命名空间的 key 集合。 */
@@ -43,6 +37,8 @@ export const en = {
   userOnly: 'user only',
   modelOnly: 'model only',
 
+  descriptionLabel: 'Description',
+  noDescription: 'No description',
   whenToUse: 'When to use',
   sourceLabel: 'Source',
   openLocal: 'Open on host',
@@ -95,6 +91,8 @@ export const zh: Record<SkillsKey, string> = {
   userOnly: '仅用户可调用',
   modelOnly: '仅模型可调用',
 
+  descriptionLabel: '描述',
+  noDescription: '没有描述',
   whenToUse: '何时使用',
   sourceLabel: '来源',
   openLocal: '在本机打开',

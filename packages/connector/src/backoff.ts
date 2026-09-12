@@ -8,9 +8,9 @@ export interface BackoffOptions {
 }
 
 /**
- * Exponential backoff with symmetric jitter: attempt 0 waits ~initialMs and the
- * delay is capped at maxMs, so a relay restart is retried quickly but an outage
- * does not turn into a reconnect storm.
+ * 带对称抖动的指数退避：第 0 次尝试等待约 initialMs，
+ * 延迟上限为 maxMs，因此 relay 重启能快速重试，而中断
+ * 不会演变成重连风暴。
  */
 export function nextBackoffDelay(
   attempt: number,

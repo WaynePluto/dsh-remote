@@ -1,11 +1,4 @@
-/**
- * The notifier, against a fake spawner.
- *
- * The property worth testing is the one the design turns on: caller text NEVER
- * reaches the script. If a future edit reintroduces interpolation, a session
- * title containing a quote would start running as PowerShell, and no other test
- * in this package would notice.
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 
 import { describe, expect, it } from 'vitest'
 import {
@@ -13,18 +6,14 @@ import {
 } from '../src/toast.js'
 import type { ExecFile } from '../src/toast.js'
 
-/** One recorded spawn. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 interface Spawned {
   file: string
   args: readonly string[]
   options: { env?: NodeJS.ProcessEnv; windowsHide?: boolean; timeout?: number }
 }
 
-/**
- * A spawner that records calls and settles them on demand.
- * @param behaviour - how each call should settle.
- * @returns the fake and the calls it recorded.
- */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 function fakeExec(behaviour: 'ok' | 'fail' | 'hang' = 'ok'): {
   exec: ExecFile
   calls: Spawned[]
@@ -45,7 +34,7 @@ function fakeExec(behaviour: 'ok' | 'fail' | 'hang' = 'ok'): {
   return { exec, calls, settle: () => { for (const run of pending.splice(0)) run() } }
 }
 
-/** A notifier that believes it is on Windows and spawns the given fake. */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 function notifier(exec: ExecFile, env: NodeJS.ProcessEnv = {}): WindowsToastNotifier {
   return new WindowsToastNotifier({ platform: 'win32', exec, env })
 }
@@ -56,9 +45,9 @@ describe('shortening a line', () => {
   })
 
   it('flattens the whitespace a model-written title can contain', () => {
-    // A raw newline does not break the document — the value never reaches the
-    // parser as markup — but it lays the toast out wrongly, and a NUL cannot
-    // be carried in an environment variable at all.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(clampLine('two\nlines\u0000here', 90)).toBe('two lines here')
     expect(clampLine('  padded\t\tout  ', 90)).toBe('padded out')
   })
@@ -70,8 +59,8 @@ describe('shortening a line', () => {
 
 describe('the script', () => {
   it('is a constant that contains no caller data at all', () => {
-    // The design claim: there is no escaping function to get wrong, because
-    // there is no interpolation.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 这里没有插值。
     expect(TOAST_SCRIPT).toContain(`$env:${ENV.title}`)
     expect(TOAST_SCRIPT).toContain(`$env:${ENV.body}`)
     expect(TOAST_SCRIPT).toContain(`$env:${ENV.appId}`)
@@ -80,8 +69,8 @@ describe('the script', () => {
   })
 
   it('asks for a toast that stays until it is dismissed', () => {
-    // `scenario=reminder` is what makes it persist, and the scenario is only
-    // honoured when the toast carries at least one action.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`scenario=reminder`）
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(TOAST_SCRIPT).toContain(`SetAttribute('scenario', 'reminder')`)
     expect(TOAST_SCRIPT).toContain(`CreateElement('actions')`)
   })
@@ -99,8 +88,8 @@ describe('sending one toast', () => {
     expect(call.options.env?.[ENV.title]).toBe("it's done")
     expect(call.options.env?.[ENV.body]).toBe('body')
     expect(call.options.env?.[ENV.appId]).toBe(APP_ID)
-    // The ambient environment still reaches the child; the four values are
-    // added to it, not substituted for it.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(call.options.env?.['PATH']).toBe('/usr/bin')
   })
 
@@ -109,8 +98,8 @@ describe('sending one toast', () => {
     const hostile = `'; Remove-Item C:\\ -Recurse; '`
     await notifier(exec).send({ title: hostile, body: hostile })
 
-    // The whole argv is the constant script; the hostile string is only ever
-    // an environment value, which `CreateTextNode` escapes into the document.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`CreateTextNode`）
     expect(calls[0]!.args.join(' ')).not.toContain('Remove-Item')
     expect(calls[0]!.options.env?.[ENV.title]).toContain('Remove-Item')
   })
@@ -137,8 +126,8 @@ describe('sending one toast', () => {
   })
 
   it('drops the surplus of a burst instead of queueing it', async () => {
-    // Notifications are only interesting while they are fresh, so the right
-    // answer to a backlog is to skip it, not to show it late.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const { exec, calls, settle } = fakeExec('hang')
     const toast = notifier(exec)
     const flight = Array.from({ length: MAX_IN_FLIGHT + 3 }, async () =>

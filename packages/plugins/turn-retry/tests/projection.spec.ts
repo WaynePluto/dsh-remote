@@ -1,20 +1,11 @@
-/**
- * The projection fold, which is the whole of what the retry banner knows.
- *
- * The reference-identity assertions are not style: `ProjectionDefinition.apply`
- * requires the same reference back for an event the unit does not care about,
- * and dsh uses `Object.is` on it to decide whether to publish a frame to every
- * attached browser (`packages/session/session-projection/src/index.ts:645,679`).
- * A fold that rebuilt its state on every event would work and quietly flood the
- * wire.
- */
+/** 会话与投影契约：此处说明持久事件、投影状态或历史回放边界。（涉及：`ProjectionDefinition.apply`、`Object.is`、`packages/session/session-projection/src/index.ts:645,679`） */
 
 import { describe, expect, it } from 'vitest'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { foldTurnRetry, INITIAL_STATE } from '../src/projection.js'
 import { HOPELESS_CODES, isWorthRetrying, MESSAGE_LIMIT } from '../src/shared.js'
 
-/** One committed event, with only the fields the fold reads. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 function event(type: string, data: unknown, seq = 0): SessionEvent {
   return { type, data, seq, time: 0 } as unknown as SessionEvent
 }
@@ -48,9 +39,9 @@ describe('foldTurnRetry', () => {
   })
 
   it('clamps a provider message that would otherwise be pushed to every browser', () => {
-    // A rejected request body or an HTML error page arrives here verbatim. The
-    // cut belongs at the fold, not in the banner's CSS: this value is a wire
-    // frame sent to every attached page on change.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const huge = foldTurnRetry(INITIAL_STATE, event('turn/end', {
       turn: 1,
       reason: { kind: 'error', error: { message: 'x'.repeat(MESSAGE_LIMIT * 3), code: 'SERVER' } },
@@ -73,9 +64,9 @@ describe('foldTurnRetry', () => {
     ['completed', { kind: 'completed' }],
     ['blocked', { kind: 'blocked' }],
     ['max-tokens', { kind: 'max-tokens' }],
-    // A hook cancelled this turn on purpose and a parent collected its
-    // subagent; a Continue button would let one click overrule a decision that
-    // was already made by something that had the standing to make it.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     ['cancelled by a hook', { kind: 'aborted', reason: { kind: 'hook', reason: 'guard' } }],
     ['collected by its parent agent', { kind: 'aborted', reason: { kind: 'parent' } }],
   ])('offers nothing for a turn that ended %s', (_label, reason) => {
@@ -107,7 +98,7 @@ describe('foldTurnRetry', () => {
     const failed = foldTurnRetry(INITIAL_STATE, failedTurn)
     for (const other of [
       event('user/message', { id: 'm1' }),
-      event('assistant/chunk', { turn: 4, step: 1 }),
+      event('assistant/live-chunk', { turn: 4, step: 1 }),
       event('llm/retry', { turn: 4, step: 1, retry: 1 }),
       event('tool/call', { id: 't1' }),
     ]) {
@@ -118,8 +109,8 @@ describe('foldTurnRetry', () => {
 
 describe('isWorthRetrying', () => {
   it('defaults to offering the attempt', () => {
-    // Deliberately a deny-list: a human pressing the button has already
-    // decided to spend the attempt, so an unrecognised code must not hide it.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(isWorthRetrying('TIMEOUT')).toBe(true)
     expect(isWorthRetrying('TRANSPORT')).toBe(true)
     expect(isWorthRetrying('UNKNOWN')).toBe(true)

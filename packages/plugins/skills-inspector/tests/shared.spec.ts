@@ -69,6 +69,7 @@ function entry(name: string, source: string): SkillEntry {
   return {
     name,
     description: `${name} does things`,
+    fullDescription: `${name} does things`,
     source,
     provider: 'local',
     modelInvocable: true,

@@ -1,40 +1,7 @@
-/**
- * dsh-remote plugin: edit the global instruction file from Settings.
- *
- * WHY THIS PLUGIN EXISTS. dsh reads a user-global `AGENTS.md` from the harness
- * home into every session's context — `agent-instructions/src/files.ts:280`
- * joins `<dshHome>/AGENTS.md` and pushes it ahead of every project-level
- * instruction file — but it offers no way to see or change it. The file is
- * real, it is loaded into every conversation this machine runs, and today the
- * only way to edit it is to know that it exists and open it in a text editor.
- * For anyone driving this dsh from a phone through the relay, that is not
- * possible at all.
- *
- * WHAT IT DELIBERATELY DOES NOT DO. It does not change how dsh discovers,
- * loads, budgets or reconciles instructions, and it registers no
- * `agent-instructions` row of its own. dsh's loader stays the single reader;
- * this plugin only supplies the editor for the file that loader already reads.
- * That is what keeps the plugin correct across dsh upgrades: the moment dsh
- * changes its instruction pipeline, this page is still editing the same file,
- * or the smoke check fails loudly because the path no longer matches.
- *
- * WHY ONE FILE AND NOT ONE PER PRESET. The `agent-instructions` row lives in
- * each preset's own composition, so its `dshHome` COULD differ per preset and
- * give every preset a private instruction file. That was considered and
- * rejected by the user: the shipped presets are `trust: 'system'` and cannot be
- * edited, so per-preset files would have forced a writable copy of every preset
- * a person wanted to use. One global file, exactly the one dsh already reads.
- *
- * TWO HALVES, ONE PACKAGE. This module is the Host half, loaded through the
- * `--patch` overlay next to it; the browser half (`./client`) adds the Settings
- * page. They meet on the RPC channel in `./shared.ts` — there is no settings
- * namespace, because the document's home is the file itself.
- *
- * @module @dsh-remote/dsh-plugin-agents-md
- */
+/** 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。（涉及：`AGENTS.md`、`agent-instructions`、`./shared.ts`） */
 
 import type { Context } from '@deepseek-ai/cordis'
-// Type-only: activates the `ctx.connection` Context merge this plugin reads.
+// 仅类型：启用本插件读取的 `ctx.connection` Context 合并。
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type { ConnectionRpcResult } from '@deepseek-ai/dsh-client-connection'
 import { readDocument, writeDocument } from './file.js'
@@ -57,32 +24,25 @@ export type {
   AgentsMdDocument, AgentsMdEndpoint, AgentsMdSaveRequest, AgentsMdSaveResult,
 } from './shared.js'
 
-/** Cordis plugin name, as it appears in dsh's plugin tree and its diagnostics. */
+/** Cordis 插件名；它会出现在 dsh 插件树和诊断信息中。 */
 export const name = 'dsh-remote-agents-md'
 
-/** Required services. `connection` carries this plugin's only seam. */
+/** 必需服务；`connection` 承载本插件唯一的接缝。 */
 export const inject = ['connection']
 
-/** The failure code the channel reports for an unknown endpoint. */
+/** 通道对未知端点报告的故障码。 */
 export const UNKNOWN_ENDPOINT_CODE = 'agents-md/unknown-endpoint'
 
-/** The failure code reported when a save carries a malformed payload. */
+/** 保存载荷格式错误时报告的故障码。 */
 export const BAD_REQUEST_CODE = 'agents-md/bad-request'
 
-/** The failure code reported when a document is larger than dsh will read. */
+/** 文档超过 dsh 可读取大小时报告的故障码。 */
 export const TOO_LARGE_CODE = 'agents-md/too-large'
 
-/** The failure code reported when the file could not be read or written. */
+/** 文件读写失败时报告的故障码。 */
 export const IO_CODE = 'agents-md/io-failed'
 
-/**
- * Dispatch one decoded RPC call.
- *
- * Exported for tests, which drive the endpoints without an HTTP carrier.
- * @param endpoint - channel-relative endpoint name.
- * @param payload - the decoded request body.
- * @returns the document, or a coded failure.
- */
+/** 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。 */
 export async function dispatch(
   endpoint: string,
   payload: unknown,
@@ -96,9 +56,9 @@ export async function dispatch(
   try {
     if (endpoint === LOAD_ENDPOINT) return { ok: true, value: await readDocument() }
 
-    // SAVE. The payload crossed a network boundary, so it is untrusted input
-    // rather than a typed call: anything but a string is refused by shape
-    // before it can reach the filesystem.
+    // SAVE：载荷跨过网络边界，是不可信输入
+    // 而非类型安全调用；除字符串外的形状都会被拒绝
+    // 后才允许接触文件系统。
     const content = (payload as { content?: unknown } | undefined)?.content
     if (typeof content !== 'string') {
       return {
@@ -106,9 +66,9 @@ export async function dispatch(
         error: { code: BAD_REQUEST_CODE, message: 'save requires a string "content"', details: {} },
       }
     }
-    // The same validator the page runs before sending, so a document the page
-    // accepted can never be refused here (docs/02 §8.8 is the same failure in
-    // the settings domain: a silent refusal reads as a successful save).
+    // 页面发送前运行同一个校验器，因此页面
+    // 接受的文档不会在这里被拒绝（同类问题见 docs/dsh/plugins.md：
+    // settings 域的静默拒绝会看起来像保存成功）。
     if (documentFault(content) !== undefined) {
       return {
         ok: false,
@@ -132,16 +92,7 @@ export async function dispatch(
   }
 }
 
-/**
- * Mount the editor's channel.
- *
- * ⚠️ The endpoint is a PATH SEGMENT: the browser posts to `/agents-md/load`
- * and `/agents-md/save`, and the envelope's method must equal that last segment
- * (docs/02 §10.8). dsh wraps the channel in the same Host/Origin fence and
- * browser authentication as `/api`, and for a remote page the relay's own login
- * sits outside that again.
- * @param ctx - Host plugin context.
- */
+/** 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。（涉及：`/agents-md/load`、`/agents-md/save`、`/api`） */
 export function apply(ctx: Context): void {
   const dispose = ctx.connection.rpc.handle(
     CHANNEL,
@@ -150,5 +101,5 @@ export function apply(ctx: Context): void {
   ctx.effect(() => () => { void dispose() }, 'agents-md: editor channel')
 }
 
-/** Endpoint names this plugin serves, for the smoke check's assertions. */
+/** 本插件提供的端点名，供冒烟检查断言。 */
 export const SERVED = { load: LOAD_ENDPOINT, save: SAVE_ENDPOINT } as const

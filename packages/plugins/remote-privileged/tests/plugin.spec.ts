@@ -10,8 +10,8 @@ describe('dsh-remote-remote-privileged', () => {
   it('contributes exactly the ownsHost global and no transport override', () => {
     const row = transportInjection()
     expect(row).toEqual({ kind: 'global', name: TRANSPORT_GLOBAL, value: { ownsHost: true } })
-    // Anything else here would replace the page's own HTTP/WebSocket carriers,
-    // which are the ones the relay tunnels.
+    // 其他字段会替换页面自己的 HTTP/WebSocket carrier，
+    // 而 relay 正是转发这些 carrier。
     expect(Object.keys(row.kind === 'global' ? row.value as object : {})).toEqual(['ownsHost'])
   })
 
@@ -27,7 +27,7 @@ describe('dsh-remote-remote-privileged', () => {
 
     const listener = listeners.get('webserver/index-inject')
     expect(listener).toBeDefined()
-    // Fresh table per render: the row has to be appended each time, not once.
+    // 每次 render 都是新表：本行必须每次追加，而不是只追加一次。
     for (const table of [[], []]) {
       listener?.(table)
       expect(table).toEqual([transportInjection()])
@@ -40,9 +40,9 @@ describe('dsh-remote-remote-privileged', () => {
   })
 
   it('is named by the overlay through a package-relative path', () => {
-    // dsh anchors a `./` insert name to the overlay's own directory, so the
-    // overlay must never carry an absolute path: the green package is unzipped
-    // wherever the user likes.
+    // dsh 会把 `./` insert 名锚定到 overlay 自身目录，因此
+    // overlay 绝不能携带绝对路径：绿色包会被解压到
+    // 用户指定的位置。
     const overlay = readFileSync(join(packageRoot, 'dsh-overlay.yml'), 'utf8')
     expect(overlay).toContain("name: './dist/index.js'")
     const insertNames = [...overlay.matchAll(/^\s*- name: '(.+)'$/gmu)].map(match => match[1])

@@ -1,42 +1,16 @@
 /**
- * dsh-remote plugin: follow models.dev without waiting for a dsh release.
- *
- * WHY THIS PLUGIN EXISTS. dsh can already serve a model its installed catalog
- * has never heard of — `llm-pi-ai` merges a route's configured `models` list
- * over pi-ai's catalog, and the Models page can edit that list by hand
- * (`packages/llm/llm-pi-ai/src/catalog.ts`,
- * `packages/client/ui-settings-models/src/client/ModelListEditor.tsx`). What it
- * cannot do is *find out* that a provider shipped something new: pi-ai's
- * catalog is a build-time snapshot of models.dev, so a new model appears only
- * when dsh itself is upgraded. This plugin closes that gap by reading the same
- * upstream document at runtime and offering the difference.
- *
- * WHAT IT DELIBERATELY DOES NOT DO.
- * - It never writes without being asked. `preview` reads; `apply` writes only
- *   the routes the human picked.
- * - It never invents a wire protocol. models.dev carries none, and a dsh entry
- *   cannot name one, so routes whose catalog spans several protocols (openai,
- *   github-copilot) are reported as blocked rather than half-configured.
- * - It never keeps a model dsh has caught up with. Every pass drops the ones
- *   the installed catalog now ships, and a route with nothing of ours left
- *   loses its `models` key entirely.
- *
- * TWO HALVES, ONE PACKAGE. This module is the Host half, loaded through the
- * `--patch` overlay next to it; the browser half (`./client`) is served by
- * dsh's client module system. They meet on the RPC channel in `./shared.ts`,
- * which dsh gates with the same Host/Origin fence and browser authentication
- * as `/api`.
- *
- * @module @dsh-remote/dsh-plugin-models-catalog
+ * models-catalog Host half：读取 models.dev，preview/apply/revert pi-ai provider route，并维护本插件 provenance。
+ * `apply` 只改本插件拥有的 entries；用户条目和 sibling `copilot-auth` 条目保留。browser 通过 `/models-catalog` RPC 获取 status/preview 并提交选择。
  */
 
 import z from '@deepseek-ai/schemastery'
 import type { Context } from '@deepseek-ai/cordis'
-// Type-only: activates the Context merges for the services below.
+// 仅类型：激活 settings/llm Context merge。
 import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-llm'
 import type { ConnectionRpcResult } from '@deepseek-ai/dsh-client-connection'
 import { installedSnapshotAt } from './installed.js'
+import { createModelCatalogRuntime, ensureRuntimeModel, hydrateRuntimeModels } from './runtime-catalog.js'
 import { fetchCatalog } from './models-dev.js'
 import type { SourceCatalog } from './models-dev.js'
 import { planRevert, planRoute } from './planning.js'
@@ -48,44 +22,41 @@ import type { CatalogStatusView, ReclaimedNotice } from './shared.js'
 export { CHANNEL, DEFAULT_SOURCE_URL, PI_AI_NAMESPACE, SELF_NAMESPACE } from './shared.js'
 export type { CatalogStatusView, RoutePreview } from './shared.js'
 
-/** Cordis plugin name, as it appears in dsh's plugin tree and its diagnostics. */
+/** Cordis 插件名；它会出现在 dsh 插件树和诊断信息中。 */
 export const name = 'dsh-remote-models-catalog'
 
-/**
- * Required services. `connection` carries the channel, `settings` holds both
- * the overlay and its provenance, `llm` supplies the route directory.
- */
+/** overlay 等待 llm-pi-ai 启动前使用的 bootstrap service 名。 */
+export const BOOTSTRAP_SERVICE = 'modelsCatalogBootstrap'
+
+/** 提供给 sibling plugin 的 runtime catalog service 名。 */
+export const RUNTIME_SERVICE = 'modelsCatalogRuntime'
+
+export type { ModelCatalogRuntime } from './runtime-catalog.js'
+
+/** 所需 service：connection、settings 和 llm。 */
 export const inject = ['connection', 'settings', 'llm']
 
-/** This plugin's configuration. */
+/** catalog Host 配置。 */
 export interface Config {
-  /**
-   * Where the model facts are read from. Configurable because the default is a
-   * public host a deployment may not reach: pointing this at an internal
-   * mirror of the same document is one repair, and configuring
-   * Settings → Proxy is the other.
-   */
+  /** models.dev facts 的来源 URL。 */
   sourceUrl: string
 }
 
-/** Runtime schema of {@link Config}. */
+/** Config 的 runtime schema。 */
 export const Config: z<Config> = z.object({
   sourceUrl: z.string().default(DEFAULT_SOURCE_URL),
 })
 
-/** The failure code this channel reports for an unknown endpoint. */
+/** 未知 endpoint 的错误码。 */
 export const UNKNOWN_ENDPOINT_CODE = 'models-catalog/unknown-endpoint'
 
-/** The failure code this channel reports for a malformed payload. */
+/** malformed routes payload 的错误码。 */
 export const BAD_PAYLOAD_CODE = 'models-catalog/bad-payload'
 
-/** The failure code this channel reports when an endpoint threw. */
+/** Host 操作抛错时的错误码。 */
 export const INTERNAL_CODE = 'models-catalog/internal'
 
-/**
- * The plugin's whole read/write surface, kept in one object so the RPC
- * dispatcher and the tests drive exactly the same code.
- */
+/** 按 source URL、settings provenance 和 llm catalog 执行 route 规划的 Host service。 */
 export class CatalogService {
   private readonly ctx: Context
   private readonly sourceUrl: string
@@ -93,51 +64,26 @@ export class CatalogService {
   private fetchedAt: number | undefined
   private reconciled: readonly ReclaimedNotice[] = []
 
-  /**
-   * @param ctx - the plugin context.
-   * @param sourceUrl - the document to read.
-   */
+  /** 保存 Host context 和 facts source URL。 */
   constructor(ctx: Context, sourceUrl: string) {
     this.ctx = ctx
     this.sourceUrl = sourceUrl
   }
 
-  /**
-   * The current provenance, or an empty one before the namespace resolves.
-   * @returns the provenance section.
-   */
+  /** 读取本插件 settings 中的 overlay provenance；缺席时返回空 map。 */
   private provenance(): Provenance {
     const value = this.ctx.settings.get(SELF_NAMESPACE)
     const overlays = (value as Provenance | undefined)?.overlays
     return { overlays: overlays ?? {} }
   }
 
-  /**
-   * Facts for every configured route, or an empty list while the pi-ai
-   * namespace is not registered (a composition without that adapter, or one
-   * whose plugin has not applied yet).
-   * @returns the route facts.
-   */
+  /** 读取当前 llm-pi-ai route facts；没有该 settings section 时为空。 */
   private facts(): readonly RouteFacts[] {
     if (this.ctx.settings.get('llm-pi-ai') === undefined) return []
     return readRouteFacts(this.ctx, this.provenance())
   }
 
-  /**
-   * Drop everything dsh has caught up with.
-   *
-   * Runs on load and before every read. It is the one write this plugin makes
-   * unasked, and it is safe to make unasked because it can only ever *remove*
-   * our own entries: a model the installed catalog now describes goes back to
-   * being dsh's, and a route left with nothing of ours loses its `models` key.
-   * That is the rule this plugin was asked for — once dsh ships a model, dsh's
-   * description of it wins.
-   *
-   * What it removed is remembered for the view, because by the time the view
-   * is built the routes are already clean and the removal would otherwise be
-   * invisible.
-   * @returns whether anything was rewritten.
-   */
+  /** 对 managed routes 执行无提示清理，并记录 reclaimed ids。 */
   async reconcile(): Promise<boolean> {
     const plans = this.facts()
       .filter(facts => facts.managed)
@@ -157,12 +103,7 @@ export class CatalogService {
     return written
   }
 
-  /**
-   * Read the upstream document, at most once per process unless forced.
-   * @param force - re-read even when a copy is held.
-   * @param signal - caller cancellation.
-   * @returns the reduced catalog.
-   */
+  /** 按 source URL 缓存/刷新 models.dev catalog。 */
   private async source(force: boolean, signal?: AbortSignal): Promise<SourceCatalog> {
     if (this.catalog !== undefined && !force) return this.catalog
     const catalog = await fetchCatalog(this.sourceUrl, signal)
@@ -171,24 +112,13 @@ export class CatalogService {
     return catalog
   }
 
-  /**
-   * Plan every configured route against a catalog.
-   * @param catalog - the upstream catalog, or undefined for a cleanup-only view.
-   * @returns one plan per configured route, in document order.
-   */
+  /** 为每个 route 生成 preview plan；没有 source 时仍保留 route facts。 */
   private plans(catalog: SourceCatalog | undefined): readonly RoutePlan[] {
-    // Route key to source provider is an identity lookup: pi-ai's own catalog
-    // is generated from this same document, so its provider ids ARE the
-    // document's keys. A hand-declared route matches only when someone named
-    // it after an upstream provider, which is exactly when the match is right.
+    // 只从当前 route facts 生成 plans；source 缺席时仍能展示 route 的 template/block 原因。
     return this.facts().map(facts => planRoute(facts, catalog?.get(facts.route)))
   }
 
-  /**
-   * The view, with no network read.
-   * @param error - a failure to report beside the routes.
-   * @returns the status view.
-   */
+  /** 将当前 source、fetch time、route plans 和 cleanup notices 组装成页面 view。 */
   private view(error?: string): CatalogStatusView {
     const snapshotAt = installedSnapshotAt()
     return {
@@ -201,21 +131,13 @@ export class CatalogService {
     }
   }
 
-  /**
-   * What the routes look like right now; no network read, but the cleanup pass
-   * runs first so a dsh upgrade is reflected the moment the panel is opened.
-   * @returns the status view.
-   */
+  /** 刷新本插件清理并返回当前 status。 */
   async status(): Promise<CatalogStatusView> {
     await this.reconcile()
     return this.view()
   }
 
-  /**
-   * Read the source and report what would change. Writes nothing.
-   * @param signal - caller cancellation.
-   * @returns the status view, carrying the failure when the read failed.
-   */
+  /** 强制读取最新 catalog，返回不写入的 preview。 */
   async preview(signal?: AbortSignal): Promise<CatalogStatusView> {
     await this.reconcile()
     try {
@@ -226,28 +148,25 @@ export class CatalogService {
     return this.view()
   }
 
-  /**
-   * Write the chosen routes.
-   * @param routes - route keys the human picked.
-   * @param signal - caller cancellation.
-   * @returns the status view after the write.
-   * @throws Error when a named route is not configured, or dsh refuses the section.
-   */
+  /** 对用户选择的 routes 写入 additions，并先确保 runtime catalog 可接受每个 model。 */
   async apply(routes: readonly string[], signal?: AbortSignal): Promise<CatalogStatusView> {
     const catalog = await this.source(false, signal)
     const chosen = new Set(routes)
     const plans = this.plans(catalog).filter(plan => chosen.has(plan.preview.route))
     assertEveryRouteFound(routes, plans)
+    // 先确保每个 addition 能写入 runtime pi-ai catalog；失败时不提交 settings。
+    for (const plan of plans) {
+      for (const model of plan.nextOwnedModels) {
+        if (!ensureRuntimeModel(model)) {
+          throw new Error(`cannot extend the pi-ai catalog for route "${model.route}" and model "${model.id}"`)
+        }
+      }
+    }
     await commitPlans(this.ctx, plans)
     return this.view()
   }
 
-  /**
-   * Remove everything this plugin wrote on the chosen routes.
-   * @param routes - route keys the human picked.
-   * @returns the status view after the write.
-   * @throws Error when a named route is not configured, or dsh refuses the section.
-   */
+  /** 从选定 routes 清除本插件 additions，恢复 route 的原始配置。 */
   async revert(routes: readonly string[]): Promise<CatalogStatusView> {
     const chosen = new Set(routes)
     const plans = this.facts()
@@ -259,29 +178,14 @@ export class CatalogService {
   }
 }
 
-/**
- * Refuse a selection naming a route we do not serve, rather than silently
- * doing less than was asked.
- * @param routes - the requested route keys.
- * @param plans - the plans that matched.
- * @throws Error naming the first route that matched nothing.
- */
+/** 未知 route 必须显式拒绝，不能静默跳过。 */
 function assertEveryRouteFound(routes: readonly string[], plans: readonly RoutePlan[]): void {
   const found = new Set(plans.map(plan => plan.preview.route))
   const missing = routes.find(route => !found.has(route))
   if (missing !== undefined) throw new Error(`route "${missing}" is not a configured pi-ai provider`)
 }
 
-/**
- * Dispatch one decoded RPC call.
- *
- * Exported for tests, which drive the endpoints without an HTTP carrier.
- * @param service - the service this channel serves.
- * @param endpoint - channel-relative endpoint name.
- * @param payload - the browser's payload.
- * @param signal - request cancellation.
- * @returns the status view, or a coded failure.
- */
+/** 校验 endpoint/payload 并分发 status、preview、apply、revert RPC。 */
 export async function dispatch(
   service: CatalogService,
   endpoint: string,
@@ -323,24 +227,27 @@ export async function dispatch(
   }
 }
 
-/**
- * Mount the provenance namespace, the channel, and the load-time cleanup.
- * @param ctx - Host plugin context.
- * @param config - resolved plugin configuration.
- */
+/** 注册 provenance/runtime services 和 `/models-catalog` RPC，并启动一次 best-effort cleanup。 */
 export function apply(ctx: Context, config: Config): void {
-  ctx.settings.register(SELF_NAMESPACE, Provenance)
+  const provenance = ctx.settings.register(SELF_NAMESPACE, Provenance)
+  const failed = hydrateRuntimeModels(provenance.get().overlays)
+  if (failed.length > 0) {
+    ctx.logger?.warn(
+      'models-catalog: could not hydrate %d persisted runtime model(s); their settings may need removal or a pi-ai upgrade',
+      failed.length,
+    )
+  }
+  // runtime service 先提供给 sibling plugin，再注册 RPC；provenance 由 settings scope 管理。
+  const runtime = createModelCatalogRuntime()
+  ctx.provide(RUNTIME_SERVICE, runtime)
+  ctx.provide(BOOTSTRAP_SERVICE, true)
   const service = new CatalogService(ctx, config.sourceUrl)
   const dispose = ctx.connection.rpc.handle(
     CHANNEL,
     async (endpoint, payload, signal) => await dispatch(service, endpoint, payload, signal),
   )
   ctx.effect(() => () => void dispose(), 'models-catalog: channel')
-  // Load-time cleanup. Failure is logged, never thrown: this runs while the
-  // composition is still assembling, and a settings namespace that is not
-  // registered yet (or a section dsh refuses) must not take the plugin — and
-  // with it the Models page panel — down with it. The same pass runs again on
-  // the next read.
+  // 启动时 cleanup 是 best-effort；失败只记录日志，不阻塞 dsh boot。
   void service.reconcile().catch((error: unknown) => {
     ctx.logger?.info('models-catalog: load-time cleanup skipped: %s', error instanceof Error ? error.message : error)
   })

@@ -80,7 +80,7 @@ describe('relay store migrations', () => {
   it('upgrades a v2 database by dropping the spent rows and the column itself', () => {
     const database = new DatabaseSync(':memory:')
     try {
-      // Everything up to the point where tokens were flagged instead of deleted.
+      // 迁移到令牌被标记而非删除为止的全部内容。
       const upToV2 = STORE_MIGRATIONS.filter(migration => migration.version <= 2)
       applyStoreMigrations(database, upToV2)
       const insert = database.prepare(`
@@ -302,7 +302,7 @@ describe('relay store authentication records', () => {
       const success = store.appendAudit({ occurredAt: 200, event: 'login.succeeded', success: true })
 
       expect(store.listAudit({ event: 'login.failed' })).toEqual([newFailure, oldFailure])
-      // Ordered by id, not by occurredAt: the trail is paged by insertion order.
+      // 按 id 而非 occurredAt 排序：轨迹按插入顺序分页。
       expect(store.listAudit({ since: 200 })).toEqual([success, newFailure])
       expect(store.listAudit({ event: 'login.failed', since: 200 })).toEqual([newFailure])
       expect(store.listAudit({ event: 'login.failed', limit: 1 })).toEqual([newFailure])
@@ -355,12 +355,37 @@ describe('relay store devices and enrollment', () => {
       expect(device).toMatchObject({ machineId: 'machine-1', slug: 'pc1', revokedAt: null })
       expect(store.getDeviceBySlug('pc1')?.machineId).toBe('machine-1')
 
-      // A replayed token must not register a second machine.
+      // 重放的令牌不能登记第二台机器。
       expect(store.consumeEnrollToken({
         tokenHash,
         device: { machineId: 'machine-2', slug: 'pc1', publicKey: 'key-two' },
       })).toBeUndefined()
       expect(store.listDevices()).toHaveLength(1)
+    } finally {
+      store.close()
+    }
+  })
+
+  it('rolls back token consumption when device registration fails', () => {
+    const store = memoryStore()
+    try {
+      const tokenHash = hashOpaqueToken('rollback-secret')
+      const token = store.createEnrollToken({
+        id: 'token-rollback',
+        tokenHash,
+        requestedSlug: 'pc1',
+        createdAt: 100,
+        expiresAt: 1_000,
+      })
+
+      expect(() => store.consumeEnrollToken({
+        tokenHash,
+        device: { machineId: 'machine-1', slug: 'pc1', publicKey: '' },
+        now: 200,
+      })).toThrow(/publicKey must not be empty/)
+
+      expect(store.getEnrollTokenById(token.id)).toEqual(token)
+      expect(store.getDeviceByMachineId('machine-1')).toBeUndefined()
     } finally {
       store.close()
     }
@@ -411,7 +436,7 @@ describe('relay store devices and enrollment', () => {
       expect(store.getDeviceByMachineId('machine-1')?.revokedAt).toBeTypeOf('number')
       expect(store.revokeDevice('machine-1')).toBe(false)
 
-      // The leftover token must not let the revoked machine walk back in.
+      // 遗留令牌不能让已吊销机器重新进入。
       expect(store.consumeEnrollToken({
         tokenHash: spare,
         device: { machineId: 'machine-1', slug: 'pc1', publicKey: 'key-one' },
@@ -460,7 +485,7 @@ describe('relay store devices and enrollment', () => {
 
       const port = store.allocateDeviceBrowserPort({ machineId: 'machine-1', range })
       expect(port).toBe(30_810)
-      // Allocation is idempotent: the second call must not consume a slot.
+      // 分配具有幂等性：第二次调用不能消耗端口名额。
       expect(store.allocateDeviceBrowserPort({ machineId: 'machine-1', range })).toBe(30_810)
       expect(store.getDeviceByMachineId('machine-1')?.browserPort).toBe(30_810)
       expect(store.getDeviceByBrowserPort(30_810)?.machineId).toBe('machine-1')
@@ -477,7 +502,7 @@ describe('relay store devices and enrollment', () => {
         device: { machineId: 'machine-1', slug: 'pc1', publicKey: 'key-two' },
       })
 
-      // The port is what the operator bookmarked, so re-enrolling must reuse it.
+      // 端口就是操作员保存的书签，因此重新注册必须复用它。
       expect(store.getDeviceByMachineId('machine-1')?.browserPort).toBe(30_810)
       expect(store.allocateDeviceBrowserPort({ machineId: 'machine-1', range })).toBe(30_810)
     } finally {
@@ -542,8 +567,8 @@ describe('relay store devices and enrollment', () => {
       })
       expect(store.getEnrollTokenById(stale.id)).toBeDefined()
 
-      // Issuing is the only thing that grows the table, so it is also what
-      // clears it: no timer, and never more than one dead row per slug.
+      // 只有签发会增加表，因此也由签发来
+      // 清理表：无需定时器，且每个 slug 不会留下多于一条死记录。
       const live = store.createEnrollToken({
         tokenHash: hashOpaqueToken('live'),
         requestedSlug: 'pc2',

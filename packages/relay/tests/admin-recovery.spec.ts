@@ -44,7 +44,7 @@ describe('administrator recovery commands', () => {
       if (stored === undefined) throw new Error('admin disappeared')
       await expect(verifyPassword(stored.passwordHash, NEXT_PASSWORD)).resolves.toBe(true)
       await expect(verifyPassword(stored.passwordHash, PASSWORD)).resolves.toBe(false)
-      // The authenticator binding is untouched by a password change.
+      // 修改密码不会影响验证器绑定。
       expect(stored).toMatchObject({ totpEnabled: true, totpSecret: secret })
 
       await expect(auth.verifyAccessToken(tokens.accessToken)).rejects.toThrow()
@@ -118,8 +118,8 @@ describe('administrator recovery commands', () => {
   it('finds the account to recover without being told its name', async () => {
     const store = openRelayStore({ path: ':memory:' })
     try {
-      // The wizard lets the operator rename the account, so the CLI may not
-      // assume `admin`; an empty database has nothing to guess from either.
+      // 向导允许操作员重命名账号，因此 CLI 不能
+      // 假定是 `admin`；空数据库也没有可供猜测的内容。
       expect(() => resolveAdminUsername(store)).toThrow(AdminNotFoundError)
       await initializeAdmin({ store, username: 'Wei.Lu', password: PASSWORD })
       expect(resolveAdminUsername(store)).toBe('Wei.Lu')

@@ -1,15 +1,8 @@
 /**
- * Copy for the models.dev panel. Both dictionaries are complete by
- * construction: `en` defines the key set and `zh` is typed against it, so a
- * missing translation fails the build rather than falling back at runtime.
- *
- * Chinese copy follows the project's own vocabulary table
- * (`docs/01-decisions.md` §2.05): 供应商 for a provider route, 模型 for a model.
- *
- * @module @dsh-remote/dsh-plugin-models-catalog/client/locales
+ * models.dev 面板的文案。`en` 定义 key 集合，`zh` 以它为类型约束；漏翻会在构建期失败。中文遵循项目词表（`docs/01-decisions.md` §2.05），provider route 使用“供应商”，model 使用“模型”。
  */
 
-/** English copy; also the key set of this namespace. */
+/** catalog panel 英文文案；同时作为 key 集合。 */
 export const en = {
   title: 'Model catalog (models.dev)',
   intro: 'dsh ships a snapshot of models.dev. Check for models released since that snapshot and add them yourself.',
@@ -26,20 +19,20 @@ export const en = {
   owned: '{count} added by this plugin',
   reclaimed: '{count} now shipped by dsh; applying hands them back',
   reasoningWarning: 'Reasoning models added this way arrive without thinking levels: the source does not carry them.',
-  blockedMultiProtocol: 'Cannot add here: this provider’s models span several wire protocols, and dsh needs one per route.',
+  blockedNoTemplate: 'Cannot add here: dsh has no native pi-ai catalog or protocol template for this route.',
   blockedNoSource: 'The source describes no provider matching this route.',
-  blockedForeign: 'This provider’s model list was written elsewhere; this plugin will not rewrite it.',
+  blockedForeign: 'Existing model entries are preserved; this plugin only appends and removes entries recorded in its own provenance.',
   failed: 'Failed: {message}',
   more: '+{count} more',
   handedBack: 'dsh now ships {count} model(s) on {name}; this plugin’s copies were removed.',
 } as const
 
-/** One copy key of this namespace. */
+/** 本 namespace 的文案 key 类型。 */
 export type CatalogKey = keyof typeof en
 
-/** Simplified Chinese copy. */
+/** 中文文案，按 `en` 的 key 集合实现。 */
 export const zh: Record<CatalogKey, string> = {
-  title: '模型目录（models.dev）',
+  title: '更新模型目录（models.dev）',
   intro: 'dsh 内置的是 models.dev 的一份快照。这里可以查快照之后新增的模型，并自行加进来。',
   snapshot: '内置快照：{date}',
   fetched: '源读取于：{date}',
@@ -54,20 +47,15 @@ export const zh: Record<CatalogKey, string> = {
   owned: '本插件添加了 {count} 个',
   reclaimed: 'dsh 现在自带 {count} 个；应用后交还给 dsh',
   reasoningWarning: '这样添加的推理模型不会带思考档位：源数据里没有这些信息。',
-  blockedMultiProtocol: '这里不能添加：该供应商的模型跨多种协议，而 dsh 需要每条路由只有一种。',
+  blockedNoTemplate: '这里不能添加：dsh 的 pi-ai 目录里没有这条路由可用的协议模板。',
   blockedNoSource: '源里没有与这条路由对应的供应商。',
-  blockedForeign: '这个供应商的模型列表是别处写的，本插件不会改写它。',
+  blockedForeign: '已有模型条目会原样保留；本插件只追加并删除自己溯源记录中的条目。',
   failed: '失败：{message}',
   more: '还有 {count} 个',
   handedBack: '{name}：dsh 现在自带其中 {count} 个模型，本插件写入的那份已删除。',
 }
 
-/**
- * Fill `{name}` placeholders in one copy string.
- * @param text - the translated string.
- * @param values - placeholder values by name.
- * @returns the filled string; an unknown placeholder is left as written.
- */
+/** 填充文案占位符；未知占位符保持原样。 */
 export function fill(text: string, values: Readonly<Record<string, string | number>>): string {
   return text.replace(/\{(\w+)\}/gu, (match, key: string) =>
     Object.hasOwn(values, key) ? String(values[key]) : match)

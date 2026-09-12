@@ -10,20 +10,19 @@ export const ADMIN_TOKEN_CREATE_PATH = `${ADMIN_PATH_PREFIX}/tokens/create`
 export const ADMIN_PASSWORD_PATH = `${ADMIN_ACCOUNT_PATH}/password`
 export const ADMIN_TOTP_RESET_PATH = `${ADMIN_ACCOUNT_PATH}/totp/reset`
 export const ADMIN_TOTP_CONFIRM_PATH = `${ADMIN_ACCOUNT_PATH}/totp/confirm`
-/** Membership is about THIS machine joining a hub, never about a member of it. */
+/** membership 指的是这台机器加入 hub，而不是 hub 的成员机器。 */
 export const ADMIN_MEMBERSHIP_JOIN_PATH = `${ADMIN_PATH_PREFIX}/membership/join`
 export const ADMIN_MEMBERSHIP_LEAVE_PATH = `${ADMIN_PATH_PREFIX}/membership/leave`
 
 /**
- * The console's three pages, in the order the tab strip shows them.
+ * 控制台的三个页面，按标签栏显示的顺序排列。
  *
- * A tab strip rather than the sidebar dsh uses: these pages carry no script at
- * all (`default-src 'none'`), and unlike dsh's conversation list they are
- * settings visited once in a while, so a permanently docked column would only
- * take width away from a phone.
+ * 使用标签栏而非 dsh 的侧栏：这些页面完全没有脚本（`default-src 'none'`），
+ * 而且不同于 dsh 的会话列表，它们只是偶尔访问的设置页，永久停靠的栏只会
+ * 占用手机宽度。
  *
- * There is no activity page: the audit trail is written for whoever reads
- * `audit_log` and the pino stream on the relay host, not for a phone.
+ * 没有活动页面：审计轨迹是写给读取 relay 主机上的 `audit_log` 和 pino 流的人看的，
+ * 不是给手机看的。
  */
 const TABS: readonly { readonly path: string; readonly label: string }[] = [
   { path: ADMIN_PATH_PREFIX, label: '机器' },
@@ -32,25 +31,22 @@ const TABS: readonly { readonly path: string; readonly label: string }[] = [
 ]
 
 /**
- * How this machine is named on its own console.
+ * 这台机器在自己的控制台上的名称。
  *
- * Every console looks the same, so without a name on the page there is no way
- * to tell which machine's console a browser is looking at — and every sentence
- * about opening one machine from another needs a concrete subject. The slug is
- * the name the tunnel, the audit trail and the machine list already use.
- * @param slug This machine's own slug, absent only in a domain deployment that
- * configured no direct route.
- * @returns The name to put in front of the operator.
+ * 所有控制台看起来都一样，因此页面没有名称就无法判断浏览器正在查看哪台机器的控制台；
+ * 而每句关于从一台机器打开另一台机器的话都需要明确主语。slug 是隧道、审计轨迹和机器列表
+ * 已经使用的名称。
+ * @param slug 这台机器自己的 slug；仅当域名部署未配置 direct route 时缺失。
+ * @returns 展示给操作员的名称。
  */
 export function machineLabel(slug: string | undefined): string {
   return slug ?? '这台机器'
 }
 
 /**
- * The one explanation of what opening a machine actually does, reused verbatim
- * wherever the question comes up.
- * @param machine This machine's name.
- * @returns One sentence of markup.
+ * 对“打开机器”实际含义的唯一说明，在需要处原样复用。
+ * @param machine 这台机器的名称。
+ * @returns 一句 markup。
  */
 export function whereDshRuns(machine: string): string {
   return `每台机器都跑着自己的 dsh，AI 读写文件、执行命令都发生在<strong>被打开的那台机器上</strong>；${escapeHtml(machine)} 只负责把请求转过去，自己什么都不执行。`
@@ -58,10 +54,9 @@ export function whereDshRuns(machine: string): string {
 
 export const CONSOLE_STYLE = `
 main{width:min(100%,640px)}
-/* Top-aligned, unlike the single-page login screen this shell centres.
-   The console is three tabs of one card: with vertical centring the whole card
-   — tab strip included — slides up and down as each page's content changes
-   height, so every tab switch moves the thing that was just clicked. */
+/* 顶部对齐，不同于居中的登录页外壳。
+   控制台的三个标签属于同一张卡片；整体垂直居中会让内容高度变化时，
+   标签栏和刚点击的控件一起上下移动。 */
 body{place-items:start center}
 form{margin:16px 0 0}
 .tabs{display:flex;gap:2px;margin:0 0 18px;padding:3px;border:1px solid var(--line);border-radius:12px;background:var(--inset)}
@@ -111,7 +106,7 @@ h2.section:first-of-type{margin-top:20px}
 ${TOTP_PANEL_STYLE}
 `.trim()
 
-/** Format a unix-ms timestamp the way every console page shows time. */
+/** 按所有控制台页面显示时间的方式格式化 unix-ms 时间戳。 */
 export function formatTime(value: number): string {
   return `${new Date(value).toISOString().slice(0, 16).replace('T', ' ')} UTC`
 }
@@ -125,17 +120,13 @@ function tabStrip(current: string): string {
 }
 
 /**
- * Wrap one console page in the shared chrome: tab strip on top, sign-out in the
- * footer.
+ * 用共享外壳包裹一个控制台页面：顶部是标签栏，底部是退出登录。
  *
- * `heading`, `intro` and `body` are interpolated as markup, not as text: every
- * page needs `<strong>` in its wording. Callers own the escaping of anything
- * that came from a request or the store.
- * @param options The page this is (so its tab reads as current), the heading
- * block, the page body, the appearance to render in, and the signed-in user —
- * null for the D15 loopback exemption, which is authorized by where it comes
- * from rather than by a session and therefore has nothing to sign out of.
- * @returns A complete HTML document.
+ * `heading`、`intro` 和 `body` 会作为 markup 插入，而不是文本：每个页面都可能在文案中需要
+ * `<strong>`。调用方负责转义任何来自请求或 store 的内容。
+ * @param options 当前页面（使其标签显示为当前）、标题区块、页面主体、要渲染的外观和登录用户——
+ * D15 loopback 豁免时为 null；该豁免根据请求来源而不是会话授权，因此没有可退出的会话。
+ * @returns 完整的 HTML 文档。
  */
 export function consolePage(options: {
   current: string
@@ -164,17 +155,13 @@ ${options.body}
 }
 
 /**
- * A full-page confirmation for an action that cannot be undone from here.
+ * 对无法在此撤销的操作显示整页确认。
  *
- * Relay pages carry no scripts at all (`default-src 'none'`), so there is no
- * `confirm()` dialog to fall back on and the guard is a page of its own. The
- * GET that renders it changes nothing, which is what makes it safe to reach
- * from a link, a prefetch or a mistyped URL.
- * @param options Page wording, the consequences spelled out one per line, the
- * POST target that actually performs the action, the CSRF token that request
- * carries, an optional machine the action is scoped to, where cancelling goes
- * back to, and the appearance to render in.
- * @returns A complete HTML document.
+ * relay 页面完全没有脚本（`default-src 'none'`），因此没有可用的 `confirm()` 对话框，
+ * 防护本身就是一个页面。渲染它的 GET 不会改变任何内容，因此可以安全地通过链接、预取或误输入的 URL 到达。
+ * @param options 页面文案、逐行列出的后果、实际执行操作的 POST 目标、请求携带的 CSRF token、
+ * 操作所针对的可选机器、取消后返回的路径以及要渲染的外观。
+ * @returns 完整的 HTML 文档。
  */
 export function confirmPage(options: {
   title: string
@@ -210,12 +197,10 @@ export function confirmPage(options: {
 }
 
 /**
- * The 502 body a browser navigation gets when the target machine has no live
- * control channel.
- * @param slug The machine the browser asked for.
- * @param appearance The appearance to render in; its return path is the URL
- * the browser is already on, so switching the theme redraws this same page.
- * @returns A standalone HTML document.
+ * 目标机器没有活动控制信道时，浏览器导航得到的 502 响应体。
+ * @param slug 浏览器请求的机器。
+ * @param appearance 要渲染的外观；返回路径是浏览器当前所在的 URL，因此外观切换会重新渲染同一页面。
+ * @returns 独立的 HTML 文档。
  */
 export function renderOfflinePage(slug: string, appearance: PageAppearance): string {
   return renderPage({

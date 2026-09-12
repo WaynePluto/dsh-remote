@@ -1,15 +1,15 @@
 import { networkInterfaces } from 'node:os'
 import { LauncherError } from './errors.js'
 
-/** Always reachable from the machine itself. */
+/** 始终可以从机器自身访问。 */
 export const LOOPBACK_TRUSTED_HOSTS = ['127.0.0.1', 'localhost'] as const
 
 /**
- * Canonical form of an authority as dsh computes it.
+ * dsh 计算出的 authority 规范形式。
  *
- * The port is read from parses under both special schemes, so `:80` and `:443`
- * still count as explicitly written; this mirrors `canonicalAuthority` in
- * `@deepseek-ai/dsh-client-connection`.
+ * 端口会在两个特殊 scheme 下解析，因此 `:80` 和 `:443`
+ * 仍算作显式写出；这与
+ * `@deepseek-ai/dsh-client-connection` 中的 `canonicalAuthority` 一致。
  */
 function canonicalAuthority(entry: string): string | undefined {
   let url: URL
@@ -30,31 +30,26 @@ function canonicalAuthority(entry: string): string | undefined {
 }
 
 /**
- * Whether dsh will accept this string as a `--trusted-host` entry.
- *
- * The rule is dsh's own (`assertTrustedAuthority` in
- * `@deepseek-ai/dsh-client-connection`): a bare `host` or `host:port` that
- * survives URL parsing unchanged apart from case. Anything else — a scheme, a
- * path, userinfo, a dangling colon, a zero-padded port — makes dsh fail while
- * loading its plugin tree, long before any request could hint at a bad address.
- * @param entry - the candidate authority, verbatim.
- * @returns True when dsh would accept it.
+ * dsh 是否会接受这个字符串作为 `--trusted-host` 条目。
+ * 规则来自 dsh 自己的 `assertTrustedAuthority`（位于 `@deepseek-ai/dsh-client-connection`）：接受能在除大小写外保持不变地通过 URL 解析的裸 `host` 或 `host:port`，其他内容会在加载插件树时失败。
+ * @param entry - 原样提供的候选 authority。
+ * @returns dsh 会接受它时为 true。
  */
 export function isBareAuthority(entry: string): boolean {
   const canonical = canonicalAuthority(entry)
   return canonical !== undefined && canonical === entry.toLowerCase()
 }
 
-/** Where a rejected authority came from, so the message can say how to fix it. */
+/** 被拒绝的 authority 来源，使消息能说明修复方式。 */
 export interface TrustedHostSource {
   readonly value: string
-  /** Human-readable origin, e.g. `membership.json 里入口机器的浏览器地址`. */
+  /** 可读的来源，例如 `membership.json 里入口机器的浏览器地址`。 */
   readonly origin: string
 }
 
 /**
- * @param entries - candidate authorities with their origins.
- * @throws LauncherError When any entry is not a bare `host[:port]`.
+ * @param entries - 带来源的候选 authority。
+ * @throws LauncherError 任一条目不是裸 `host[:port]` 时抛出。
  */
 export function assertTrustedHosts(entries: readonly TrustedHostSource[]): void {
   for (const entry of entries) {
@@ -67,11 +62,11 @@ export function assertTrustedHosts(entries: readonly TrustedHostSource[]): void 
 }
 
 /**
- * First non-internal IPv4 address of this machine.
+ * 这台机器的第一个非内部 IPv4 地址。
  *
- * APIPA addresses are skipped: an interface that failed to get a lease is never
- * the address a phone on the LAN would type.
- * @returns The address, or undefined when this machine is not on a network.
+ * 跳过 APIPA 地址：未能获得租约的接口永远不是
+ * 局域网手机会输入的地址。
+ * @returns 地址；这台机器未联网时为 undefined。
  */
 export function lanAddress(): string | undefined {
   for (const addresses of Object.values(networkInterfaces())) {
@@ -85,17 +80,11 @@ export function lanAddress(): string | undefined {
 }
 
 /**
- * Every authority a browser may put in the `Host` header of a request that
- * reaches this machine's dsh.
- *
- * Mode A forwards the original Host untouched (铁律 7), so dsh must trust all
- * of them or the request 403s. A port-less entry matches any port, which is why
- * the loopback and LAN entries carry no port.
- * @param options - the LAN address and the hub's browser-facing authority, both
- * optional: a machine may be offline, and a machine that has not joined a hub
- * is only reachable locally.
- * @returns The `--trusted-host` list, deduplicated, in a stable order.
- * @throws LauncherError When an entry is not a bare `host[:port]`.
+ * 浏览器可能放进到达这台机器 dsh 的请求 `Host` header 中的每个 authority。
+ * Mode A 原样转发 Host（铁律 7），因此 dsh 必须信任所有这些 authority，否则请求会得到 403；没有端口的条目匹配任意端口。
+ * @param options - 局域网地址和 hub 面向浏览器的 authority，二者都可选；尚未加入 hub 的机器只能在本地访问。
+ * @returns 去重且顺序稳定的 `--trusted-host` 列表。
+ * @throws LauncherError 条目不是裸 `host[:port]` 时抛出。
  */
 export function trustedHostsFor(options: {
   readonly lanAddress?: string | undefined

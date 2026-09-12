@@ -19,36 +19,30 @@ const (
 )
 
 const (
-	// How long the polite path gets before the job object is used.
+	// 温和路径在改用作业对象前最多等待多久。
 	//
-	// Measured, not guessed: on Windows 10/11 a console control event sent to a
-	// child of a windowless process is accepted by the console
-	// (GenerateConsoleCtrlEvent returns TRUE) and never delivered to the child —
-	// with the child's own console, with a console this process allocates and
-	// shares, handler or no handler. So in practice the fallback below is what
-	// stops the stack, and a long wait would only make 停止 feel broken.
+	// 这是实测值而非猜测：Windows 10/11 中，无窗口进程的子进程收到控制台事件时，
+	// 即使 GenerateConsoleCtrlEvent 返回 TRUE，事件也不会送达子进程——无论使用子进程自己的控制台、
+	// 本进程分配并共享的控制台，还是有无处理器。因此实际停止依靠下方的兜底，等待太久只会让“停止”看起来失灵。
 	//
-	// That costs less than it sounds: on Windows the launcher's own shutdown is
-	// `taskkill /pid <child> /T /F` per child (packages/launcher/src/
-	// supervisor.ts), so the job object reaches the same end state — every
-	// process killed outright. What is lost is the connector → relay → dsh
-	// ordering, which saves the relay a few reconnect errors in its log and
-	// nothing else. The attempt stays because it is the correct thing to ask
-	// for first, and because it costs one call.
+	// 代价没有想象中大：Windows 上 launcher 对每个子进程执行
+	// `taskkill /pid <child> /T /F`（packages/launcher/src/supervisor.ts），作业对象也会直接杀掉全部进程；
+	// 失去的只是 connector → relay → dsh 顺序，relay 日志少几条重连错误而已。
+	// 仍先尝试温和路径，因为这是正确的首选，而且只需一次调用。
 	gracefulStopTimeout = 8 * time.Second
 	forcedStopTimeout   = 10 * time.Second
-	// How long 重启 waits for the previous run to be gone before starting the
-	// next one; the state has to be back at stopped for start to be allowed.
+	// 重启在启动下一次运行前等待上一次运行结束的最长时间；
+	// 状态必须回到 stopped，start 才会被允许。
 	restartSettleTimeout = 30 * time.Second
 )
 
-// stack owns the one `node dist/index.js` child, which in turn owns dsh, the
-// relay and the connector.
+// stack 持有唯一的 `node dist/index.js` 子进程，而它又持有 dsh、
+// relay 和 connector。
 type stack struct {
 	root  string
 	node  string
 	entry string
-	// Extra arguments the user passed to dsh-remote.exe, handed to the launcher.
+	// 用户传给 dsh-remote.exe、再交给 launcher 的额外参数。
 	arguments []string
 	log       *rotatingLog
 	onLine    func(string)
@@ -84,7 +78,7 @@ func (s *stack) notify() {
 	}
 }
 
-// start spawns the launcher unless one is already running or on its way out.
+// start 启动 launcher，除非它已经运行或正在退出。
 func (s *stack) start() {
 	s.mu.Lock()
 	if s.state != stackStopped {
@@ -100,23 +94,19 @@ func (s *stack) start() {
 
 func (s *stack) run() {
 	s.log.printf("启动 %s %s", s.node, s.entry)
-	// One job per run: closing it is what kills whatever the launcher left
-	// behind, and a fresh job keeps a previous run's stragglers out of it.
+	// 每次运行使用一个作业对象：关闭它会杀掉 launcher 遗留的任何进程，
+	// 新作业对象则不会混入上一次运行的残留进程。
 	job, err := createKillOnCloseJob()
 	if err != nil {
 		s.log.printf("创建作业对象失败：%v；停止时改用 taskkill 兜底", err)
 	}
 
 	command := exec.Command(s.node, append([]string{s.entry}, s.arguments...)...)
-	// The launcher looks for dsh-remote.config.json in the working directory, and
-	// which directory a double-click (or an autostart entry) starts from is
-	// unpredictable.
+	// launcher 会在工作目录查找 dsh-remote.config.json，而双击启动或通过开机自启动启动时使用的目录无法预测。
 	command.Dir = s.root
 	command.Stdout = &lineWatcher{sink: s.log, onLine: s.onLine}
 	command.Stderr = &lineWatcher{sink: s.log, onLine: s.onLine}
-	// CREATE_NO_WINDOW, not DETACHED_PROCESS: the child still gets a console of
-	// its own, just an invisible one, and that console is the only way this
-	// windowless process can ever ask it to shut down politely.
+	// 使用 CREATE_NO_WINDOW 而不是 DETACHED_PROCESS：子进程仍会获得自己的控制台，只是不可见；该控制台是无窗口进程请求其温和关闭的唯一方式。
 	command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: createNoWindow, HideWindow: true}
 
 	if err := command.Start(); err != nil {
@@ -133,10 +123,8 @@ func (s *stack) run() {
 
 	pid := command.Process.Pid
 	if job != 0 {
-		// Assigned right after start, so the window in which the launcher could
-		// spawn something outside the job is a few milliseconds wide. Windows
-		// offers no way to create a process already inside a job through
-		// os/exec, and a suspended start would mean reimplementing it.
+		// 启动后立即分配，因此 launcher 在作业对象外生成进程的窗口只有几毫秒。Windows 不允许通过 os/exec 直接创建已属于作业对象的进程；
+		// 挂起启动意味着重新实现这套机制。
 		if err := assignProcessToJob(job, pid); err != nil {
 			s.log.printf("把 Node（pid %d）放进作业对象失败：%v；停止时改用 taskkill 兜底", pid, err)
 			closeJob(job)
@@ -156,7 +144,7 @@ func (s *stack) run() {
 	s.notify()
 
 	if stopWanted {
-		// 停止 was clicked while this run was still spawning.
+		// 运行仍在生成进程时用户点击了“停止”。
 		go s.stop()
 	}
 
@@ -173,14 +161,14 @@ func (s *stack) run() {
 	s.job = 0
 	s.done = nil
 	s.mu.Unlock()
-	// Closed after the state is stopped so that anyone woken by this channel
-	// sees a stack it is allowed to start again.
+	// 在状态变为 stopped 后再关闭，这样被此 channel 唤醒的调用者
+	// 看到的 stack 就可以再次启动。
 	closeJob(job)
 	close(done)
 	s.notify()
 }
 
-// finish resets the state after a start that never produced a process.
+// finish 在启动未产生进程时重置状态。
 func (s *stack) finish() {
 	s.mu.Lock()
 	s.state = stackStopped
@@ -191,8 +179,8 @@ func (s *stack) finish() {
 	s.notify()
 }
 
-// stop asks the launcher to shut down the way Ctrl+C does, and falls back to
-// the job object when it does not.
+// stop 先要求 launcher 像 Ctrl+C 一样关闭，失败时回退到
+// 作业对象。
 func (s *stack) stop() {
 	s.mu.Lock()
 	if s.state != stackRunning && s.state != stackStarting {
@@ -200,7 +188,7 @@ func (s *stack) stop() {
 		return
 	}
 	if s.state == stackStarting {
-		// No process to signal yet; run() picks this up as soon as there is one.
+		// 还没有可发送信号的进程；run() 一旦生成进程就会处理这个请求。
 		s.stopRequested = true
 		s.mu.Unlock()
 		return
@@ -248,9 +236,9 @@ func closeJob(job syscall.Handle) {
 	syscall.CloseHandle(job)
 }
 
-// killTree is the fallback for the rare case where no job object could be
-// created. child.kill() alone would leave the shells dsh spawns holding its
-// port (see packages/launcher/src/supervisor.ts).
+// killTree 用于无法创建作业对象的罕见情况，是最后的兜底。
+// 单独调用 child.kill() 会留下 dsh 生成的 shell，使其继续占用
+// 端口（见 packages/launcher/src/supervisor.ts）。
 func killTree(pid int) {
 	command := exec.Command("taskkill", "/pid", strconv.Itoa(pid), "/T", "/F")
 	command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: createNoWindow, HideWindow: true}

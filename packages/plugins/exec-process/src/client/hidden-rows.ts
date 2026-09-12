@@ -1,41 +1,19 @@
 /**
- * Collapse a fold's rows without touching a single React-owned node.
- *
- * WHY A STYLESHEET AND NOT THE DOM. The rows this plugin folds belong to dsh:
- * they are `ChatNodeSeat` wrappers, mounted and reconciled by dsh's transcript.
- * Writing an attribute on them would work right up until dsh re-rendered that
- * seat — `useSearchableHidden` sets and CLEARS `hidden` on exactly those
- * wrappers (`packages/client/ui-chat/src/client/chat/searchable-hidden.ts`), so
- * an attribute-based fold would be racing dsh's own layout effect for the same
- * element. A stylesheet keyed by the identity dsh already prints on each
- * wrapper (`data-chat-flow-key`, ChatNodeSeat.tsx:129) has no such race: this
- * module owns one `<style>` element and nothing else.
- *
- * WHY NOT `display: none`. dsh finds the reader's position by binary-searching
- * the ordered rows for the first one whose bottom is below the viewport top
- * (`ChatView.tsx:93-104`). `display: none` gives a row an all-zero rect, which
- * breaks the ordering that search assumes and can restore the wrong scroll
- * position after paging. Collapsing to zero height instead keeps every row's
- * top monotonic, so the search still lands where it should — and
- * `content-visibility: hidden` still skips the layout and paint work of the
- * hidden subtree, which is the whole point on a turn with sixty tool cards.
+ * 不触碰任何 React 节点，只用 stylesheet 折叠 dsh 的过程行。
+ * dsh 依靠有序行的 rect 恢复阅读位置，因此整行压到零高度而不是 `display:none`；行内 thinking 盒子才使用 `display:none`。
+ * stylesheet 按 dsh 已写入的 `data-chat-flow-key` 选择器工作，避免和 dsh 自己维护的 `hidden` 属性竞争。
  *
  * @module @dsh-remote/dsh-plugin-exec-process/client/hidden-rows
  */
 
-/** Attribute dsh prints on every Chat node wrapper, carrying the node key. */
+/** dsh 在每个 Chat node wrapper 上打印、携带 node key 的属性。 */
 export const FLOW_KEY_ATTRIBUTE = 'data-chat-flow-key'
 
-/** Marker attribute set on this module's own `<style>`, for diagnostics. */
+/** 本模块自有 `<style>` 上的标记属性，用于诊断。 */
 export const STYLE_MARKER = 'data-dsh-plugin-exec-process'
 
 /**
- * The declarations that collapse one folded row.
- *
- * `!important` throughout because the column's own spacing rule
- * (`.column > :not([hidden])… ~ :not([hidden])…` in ChatView.module.css) has a
- * specificity of 0-7-0 and would otherwise keep a 16px gap for every hidden
- * row — sixty of them would leave a thousand-pixel blank where the fold is.
+ * 折叠一行的 CSS 声明。全部使用 `!important`，以压过 dsh column 的间距规则，避免每个隐藏行留下 16px 空隙。
  */
 const COLLAPSED_DECLARATIONS = [
   'height:0!important',
@@ -49,50 +27,33 @@ const COLLAPSED_DECLARATIONS = [
 ].join(';')
 
 /**
- * dsh's own marker on a reasoning row (`ReasoningRow.tsx:33`).
- *
- * A semantic attribute rather than a hashed CSS-module class, so it survives a
- * rebuild of dsh's stylesheets; only a rename of the variant itself would break
- * it, and the failure mode is a thinking box that stops hiding.
+ * dsh reasoning 行自己的标记（`ReasoningRow.tsx:33`）。使用语义属性而不是带 hash 的 CSS module class，能跨 stylesheet 重建；只有 variant 改名才会导致 thinking 盒子停止隐藏。
  */
 export const THINK_SELECTOR = '[data-variant="think"]'
 
 /**
- * Escape one attribute value for a double-quoted CSS attribute selector.
- * @param value - the raw `data-chat-flow-key` value.
- * @returns the value with `\` and `"` escaped.
+ * 转义双引号 CSS 属性选择器中的一个属性值。
+ * @param value - 原始 `data-chat-flow-key` 值。
+ * @returns 转义后的值。
  */
 export function escapeAttributeValue(value: string): string {
   return value.replace(/\\/gu, '\\\\').replace(/"/gu, '\\"')
 }
 
 /**
- * @param key - Chat node key.
- * @returns the attribute selector matching that row's wrapper.
+ * @param key - Chat node key。
+ * @returns 匹配该行 wrapper 的属性选择器。
  */
 export function flowKeySelector(key: string): string {
   return `[${FLOW_KEY_ATTRIBUTE}="${escapeAttributeValue(key)}"]`
 }
 
 /**
- * Build the stylesheet text for one fold.
- *
- * Two kinds of rule, because a fold hides two kinds of thing. Whole rows are
- * the process itself. The second kind exists because the row that CLOSES a
- * segment — a formal message, or the turn's finalized answer — stays visible
- * while the thinking printed inside it does not: that reasoning is the last
- * step of the work, not part of the answer. dsh draws exactly the same line
- * (`AssistantNodeView.tsx:23-27` hides inline reasoning while its own fold is
- * closed) and simply never reaches it in a long session.
- *
- * `display:none` is right here and wrong for a row: this is an element INSIDE a
- * row, so it never disturbs the ordered row rects dsh binary-searches, and only
- * `display:none` also removes the 16px flex gap dsh's assistant body would keep
- * for an empty box.
- *
- * @param keys - Chat node keys whose entire row collapses, in any order.
- * @param reasoningKeys - Chat node keys whose inline thinking collapses.
- * @returns CSS text; the empty string when there is nothing to collapse.
+ * 构造一个 fold 的 stylesheet 文本。
+ * 整行折叠过程本身；segment 结束行仍可见，但其中的 thinking 需要单独隐藏。行内使用 `display:none` 不会影响 dsh 用于分页的行 rect。
+ * @param keys - 整行折叠的 Chat node keys。
+ * @param reasoningKeys - 折叠行内 thinking 的 Chat node keys。
+ * @returns CSS 文本；没有内容时返回空字符串。
  */
 export function collapsedRowsCss(
   keys: readonly string[],
@@ -104,16 +65,15 @@ export function collapsedRowsCss(
   }
   if (reasoningKeys.length > 0) {
     const scopes = reasoningKeys.map(flowKeySelector)
-    // The wrapper carries the gap, so hide the wrapper where `:has()` exists.
+    // 间距由 wrapper 承担；支持 `:has()` 时隐藏 wrapper。
     rules.push(`${scopes.map(scope => `${scope} div:has(> ${THINK_SELECTOR})`).join(',\n')} {\n  display:none!important;\n}`)
-    // Independent rule, therefore an independent parse: a browser without
-    // `:has()` drops only the rule above and still hides the box itself.
+    // 使用独立规则和独立解析：不支持 `:has()` 的浏览器只丢弃上一条规则，仍会隐藏 box 本身。
     rules.push(`${scopes.map(scope => `${scope} ${THINK_SELECTOR}`).join(',\n')} {\n  display:none!important;\n}`)
   }
   return rules.join('\n\n')
 }
 
-/** The document surface this controller needs; narrowed so tests can fake it. */
+/** 本 controller 所需的 document surface；收窄接口以便测试伪造。 */
 export interface StyleHost {
   createElement(tag: 'style'): {
     textContent: string | null
@@ -123,36 +83,36 @@ export interface StyleHost {
   readonly head: { append(node: never): void } | { appendChild(node: never): void }
 }
 
-/** One live fold registration keyed by an owner id. */
+/** 按 owner id 记录的一项活动 fold 注册。 */
 export interface CollapsedRowsController {
   /**
-   * Publish what one owner currently collapses.
-   * @param owner - stable owner id (one per session, turn and segment).
-   * @param keys - node keys whose entire row collapses; empty clears them.
-   * @param reasoningKeys - node keys whose inline thinking collapses.
+   * 发布一个 owner 当前折叠的内容。
+   * @param owner - 稳定的 owner id（每个 session、turn、segment 一份）。
+   * @param keys - 整行折叠的 node keys；空数组表示清除。
+   * @param reasoningKeys - 折叠行内 thinking 的 node keys。
    */
   set(owner: string, keys: readonly string[], reasoningKeys?: readonly string[]): void
   /**
-   * Drop one owner's registration.
-   * @param owner - the owner id passed to {@link CollapsedRowsController.set}.
+   * 移除一个 owner 的注册。
+   * @param owner - 传给 {@link CollapsedRowsController.set} 的 owner id。
    */
   clear(owner: string): void
-  /** Remove the stylesheet and forget every owner. */
+  /** 移除 stylesheet 并忘记所有 owner。 */
   dispose(): void
-  /** @returns the CSS currently installed; for tests and diagnostics. */
+  /** @returns 当前安装的 CSS；用于测试和诊断。 */
   css(): string
 }
 
-/** What one owner hides. */
+/** 一个 owner 隐藏的内容。 */
 interface OwnerEntry {
   readonly rows: readonly string[]
   readonly reasoning: readonly string[]
 }
 
 /**
- * @param left - the entry already registered, when any.
- * @param right - the entry being registered.
- * @returns whether both hide exactly the same keys in the same order.
+ * @param left - 已注册的条目（若有）。
+ * @param right - 正在注册的条目。
+ * @returns 两者是否按相同顺序隐藏完全相同的 key。
  */
 function sameEntry(left: OwnerEntry | undefined, right: OwnerEntry): boolean {
   return left !== undefined
@@ -163,14 +123,10 @@ function sameEntry(left: OwnerEntry | undefined, right: OwnerEntry): boolean {
 }
 
 /**
- * Create the single stylesheet every「执行过程」row writes its fold into.
- *
- * One element for all folds rather than one per row: a session with forty
- * turns would otherwise add forty `<style>` nodes to `<head>`, and the browser
- * re-resolves style against all of them on every toggle.
- *
- * @param host - the document; injected so tests need no DOM.
- * @returns the controller, or a no-op one when there is no document.
+ * 创建所有「执行过程」行共享的单个 stylesheet。
+ * 每行一个 `<style>` 会让长会话堆积节点并反复触发样式解析；集中到一个节点可避免该开销。
+ * @param host - document；注入以便测试无需 DOM。
+ * @returns controller；没有 document 时返回 no-op controller。
  */
 export function createCollapsedRowsController(host: StyleHost | undefined): CollapsedRowsController {
   if (host === undefined) {
@@ -205,9 +161,7 @@ export function createCollapsedRowsController(host: StyleHost | undefined): Coll
         return
       }
       const next: OwnerEntry = { rows: [...keys], reasoning: [...reasoningKeys] }
-      // A streaming turn republishes its node list on every animation frame;
-      // without this the sheet would be rebuilt sixty times a second only to
-      // find it had not changed.
+      // 流式 turn 每个 animation frame 都会重新发布 node 列表；没有此检查，stylesheet 会每秒重建几十次却发现内容未变。
       if (sameEntry(owners.get(owner), next)) return
       owners.set(owner, next)
       render()

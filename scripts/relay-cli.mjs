@@ -1,10 +1,9 @@
 /**
- * Run the relay CLI against the local development database.
+ * 使用本地开发数据库运行 relay CLI。
  *
- * `node scripts/relay-cli.mjs <subcommand> [...args]` forwards everything to
- * `dsh-remote-relay`, filling in `.dev/relay.db` and the local secrets. In
- * production the same subcommands are available directly on the installed
- * `dsh-remote-relay` binary.
+ * `node scripts/relay-cli.mjs <subcommand> [...args]` 将所有内容转发给
+ * `dsh-remote-relay`，并填入 `.dev/relay.db` 与本地密钥。生产环境中相同的
+ * 子命令也可以直接通过已安装的 `dsh-remote-relay` 可执行文件使用。
  */
 
 import { spawnSync } from 'node:child_process'
@@ -29,7 +28,7 @@ const result = spawnSync(
   [
     ...relayCliArguments(built),
     ...forwarded,
-    // An explicit --data always wins; this only supplies the local default.
+    // 显式提供的 --data 始终优先；这里只提供本地默认值。
     ...forwarded.includes('--data') ? [] : ['--data', RELAY_DATABASE],
   ],
   {

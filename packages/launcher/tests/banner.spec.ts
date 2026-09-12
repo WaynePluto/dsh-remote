@@ -11,7 +11,7 @@ const HUB: MembershipHub = {
 
 const LOCAL = { dshPort: 3080, relayPort: 30_809, lanAddress: '10.1.2.87' } as const
 
-/** The frame is only convincing when every row really is the same width. */
+/** 只有每一行确实等宽时，边框才有说服力。 */
 function boxLines(banner: string): string[] {
   return banner.split('\n').filter(line => /[┌│└]/u.test(line))
 }

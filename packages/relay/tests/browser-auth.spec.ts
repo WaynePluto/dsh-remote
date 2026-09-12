@@ -1,6 +1,5 @@
 import type { IncomingMessage } from 'node:http'
 import { once } from 'node:events'
-import pino from 'pino'
 import { WebSocket } from 'ws'
 import { describe, expect, it } from 'vitest'
 import {
@@ -8,7 +7,6 @@ import {
   BrowserAuthenticator,
   BrowserCookiePolicy,
   createAuthenticationService,
-  createRelayServer,
   generateTotp,
   initializeAdmin,
   isLoopbackAddress,
@@ -19,7 +17,18 @@ import {
   type RelayStore,
   type SessionTokens,
 } from '../src/index.js'
-import { cookieHeader, httpRequest as browserRequest, setCookieArray } from './helpers.js'
+import {
+  closeFixtures,
+  cookieHeader,
+  httpRequest as browserRequest,
+  openAuthenticatedPage,
+  openCsrfPage,
+  postCsrfForm,
+  postForm,
+  setCookieArray,
+  startAuthenticatedRelayFixture,
+  startRelayFixture,
+} from './helpers.js'
 
 const JWT_SECRET = new Uint8Array(32).fill(0x51)
 const NOW = 1_800_000_015_000
@@ -202,47 +211,50 @@ describe('browser authenticator', () => {
 
 describe('relay authentication endpoints', () => {
   it('redirects navigation to login, enforces CSRF, and writes authenticated cookies', async () => {
-    const store = openRelayStore({ path: ':memory:' })
-    const initialized = await initializeAdmin({
-      store,
-      username: 'admin',
-      password: 'Correct horse battery staple 1',
+    let enrollmentSecret = ''
+    const fixture = await startRelayFixture({
+      jwtSecret: JWT_SECRET,
+      relay: {
+        publicDomain: 'dsh.test',
+        publicScheme: 'https',
+        browserAuth: { cookieMode: 'domain-https' },
+      },
+      loggerLevel: 'silent',
+      prepare: async ({ store }) => {
+        const initialized = await initializeAdmin({
+          store,
+          username: 'admin',
+          password: 'Correct horse battery staple 1',
+        })
+        enrollmentSecret = initialized.enrollment.secret
+      },
     })
-    const authentication = await createAuthenticationService({ store, jwtSecret: JWT_SECRET })
-    const relay = createRelayServer({
-      host: '127.0.0.1',
-      port: 0,
-      publicDomain: 'dsh.test',
-      publicScheme: 'https',
-      browserAuth: { cookieMode: 'domain-https' },
-    }, { authentication, logger: pino({ level: 'silent' }), store })
-    const address = await relay.listen()
 
     try {
       const navigation = await browserRequest({
-        port: address.port,
+        port: fixture.port,
         path: '/conversation?id=1',
         headers: { host: 'pc1.dsh.test' },
       })
       expect(navigation.status).toBe(302)
       expect(navigation.headers.location).toContain('/_auth/login?returnTo=')
 
-      const login = await browserRequest({
-        port: address.port,
+      const login = await openCsrfPage(fixture, {
         path: '/_auth/login?returnTo=%2Fconversation%3Fid%3D1',
-        headers: { host: 'pc1.dsh.test' },
+        host: 'pc1.dsh.test',
+        label: 'login',
       })
       expect(login.status).toBe(200)
       expect(login.body).toContain('建立安全控制链路')
-      // no-referrer makes Chromium serialize form POST Origin as "null",
-      // causing every real-browser login to fail the same-origin check.
+      // no-referrer 会让 Chromium 将表单 POST Origin 序列化为 "null"，
+      // 导致真实浏览器的每次登录都无法通过同源检查。
       expect(login.headers['referrer-policy']).toBe('same-origin')
-      // The login page names its own icon, so the CSP has to allow it.
+      // 登录页声明使用自己的图标，因此 CSP 必须允许它。
       expect(login.headers['content-security-policy']).toContain("img-src 'self'")
       expect(login.body).toContain('/_icon/dsh-remote.svg')
 
-      // Icons are fetched without cookies too, and the login page needs one
-      // before anybody can log in.
+      // 图标获取也不携带 cookie，登录页需要在登录前
+      // 能够获取图标。
       const icons = await Promise.all(([
         ['/_icon/dsh-remote.svg', 'image/svg+xml'],
         ['/_icon/dsh-remote.ico', 'image/x-icon'],
@@ -251,7 +263,7 @@ describe('relay authentication endpoints', () => {
         iconPath,
         iconType,
         response: await browserRequest({
-          port: address.port,
+          port: fixture.port,
           path: iconPath,
           headers: { host: 'pc1.dsh.test' },
         }),
@@ -262,10 +274,10 @@ describe('relay authentication endpoints', () => {
         expect(Number(response.headers['content-length'])).toBeGreaterThan(0)
       }
 
-      // A browser fetches the manifest without cookies, so relay must answer it
-      // directly instead of redirecting to the HTML login page.
+      // 浏览器获取 manifest 时不携带 cookie，因此 relay 必须直接
+      // 响应它，而不是重定向到 HTML 登录页。
       const manifest = await browserRequest({
-        port: address.port,
+        port: fixture.port,
         path: '/manifest.webmanifest',
         headers: { host: 'pc1.dsh.test' },
       })
@@ -276,44 +288,29 @@ describe('relay authentication endpoints', () => {
         start_url: '/',
         icons: [{ src: '/_icon/dsh-remote.svg' }, { src: '/_icon/dsh-remote.png' }],
       })
-      const csrfSetCookie = setCookieArray(login.headers)[0]
-      if (csrfSetCookie === undefined) throw new Error('login did not set a CSRF cookie')
-      const csrfPair = csrfSetCookie.split(';', 1)[0]
-      const csrf = readCookie(csrfPair, '__Secure-dsh_csrf')
-      if (csrf === undefined) throw new Error('could not parse CSRF cookie')
-
-      const form = new URLSearchParams({
+      const { csrf, csrfPair } = login
+      const form = {
         username: 'admin',
         password: 'Correct horse battery staple 1',
-        totp: await generateTotp(initialized.enrollment.secret),
+        totp: await generateTotp(enrollmentSecret),
         csrf,
         returnTo: '/conversation?id=1',
-      }).toString()
-      const badCsrf = await browserRequest({
-        port: address.port,
+      }
+      const badCsrf = await postCsrfForm(fixture, {
         path: '/_auth/login',
-        method: 'POST',
-        headers: {
-          host: 'pc1.dsh.test',
-          origin: 'https://pc1.dsh.test',
-          cookie: csrfPair,
-          'content-type': 'application/x-www-form-urlencoded',
-        },
-        body: form.replace(`csrf=${encodeURIComponent(csrf)}`, 'csrf=wrong'),
+        host: 'pc1.dsh.test',
+        origin: 'https://pc1.dsh.test',
+        csrfPair,
+        fields: { ...form, csrf: 'wrong' },
       })
       expect(badCsrf.status).toBe(403)
 
-      const loggedIn = await browserRequest({
-        port: address.port,
+      const loggedIn = await postCsrfForm(fixture, {
         path: '/_auth/login',
-        method: 'POST',
-        headers: {
-          host: 'pc1.dsh.test',
-          origin: 'https://pc1.dsh.test',
-          cookie: csrfPair,
-          'content-type': 'application/x-www-form-urlencoded',
-        },
-        body: form,
+        host: 'pc1.dsh.test',
+        origin: 'https://pc1.dsh.test',
+        csrfPair,
+        fields: form,
       })
       expect(loggedIn.status).toBe(303)
       expect(loggedIn.headers.location).toBe('/conversation?id=1')
@@ -325,7 +322,7 @@ describe('relay authentication endpoints', () => {
       expect(sessionCookies.every(header => header.includes('Domain=.dsh.test'))).toBe(true)
 
       const authenticated = await browserRequest({
-        port: address.port,
+        port: fixture.port,
         path: '/',
         headers: {
           host: 'pc1.dsh.test',
@@ -336,146 +333,122 @@ describe('relay authentication endpoints', () => {
       expect(authenticated.body).toContain('machine pc1 is offline')
 
       const apiWithoutCookie = await browserRequest({
-        port: address.port,
+        port: fixture.port,
         path: '/api/session.list',
         method: 'POST',
         headers: { host: 'pc1.dsh.test' },
       })
       expect(apiWithoutCookie.status).toBe(401)
     } finally {
-      await relay.close()
-      store.close()
+      await closeFixtures([fixture])
     }
   })
 
   it('signs out through a confirmation page and revokes the session server-side', async () => {
-    const store = openRelayStore({ path: ':memory:' })
-    const user = store.createUser({
-      id: 'logout-test-user',
-      username: 'admin',
-      passwordHash: 'test-password-hash',
-      totpSecret: 'test-totp-secret',
-      totpEnabled: true,
-    })
-    const authentication = await createAuthenticationService({ store, jwtSecret: JWT_SECRET })
-    const tokens = await authentication.sessions.issue({
-      user,
+    const fixture = await startAuthenticatedRelayFixture({
+      jwtSecret: JWT_SECRET,
+      account: {
+        kind: 'existing-user',
+        input: {
+          id: 'logout-test-user',
+          username: 'admin',
+          passwordHash: 'test-password-hash',
+          totpSecret: 'test-totp-secret',
+          totpEnabled: true,
+        },
+      },
       sourceIp: '192.168.1.20',
+      loggerLevel: 'silent',
     })
-    const cookies = new BrowserCookiePolicy({ mode: 'domain-https', domain: 'dsh.test' })
-    const sessionCookie = cookieHeader(cookies.sessionHeaders(tokens))
-    const relay = createRelayServer({
-      host: '127.0.0.1',
-      port: 0,
-      publicDomain: 'dsh.test',
-      publicScheme: 'https',
-      browserAuth: { cookieMode: 'domain-https' },
-    }, { authentication, logger: pino({ level: 'silent' }), store })
-    const address = await relay.listen()
 
     try {
-      // The console is the entry point, and it must offer the way out.
-      const consolePage = await browserRequest({
-        port: address.port,
+      // 控制台是入口，也必须提供退出路径。
+      const consolePage = await openAuthenticatedPage(fixture, {
         path: '/_admin',
-        headers: { host: 'pc1.dsh.test', accept: 'text/html', cookie: sessionCookie },
+        host: 'pc1.dsh.test',
       })
       expect(consolePage.status, consolePage.body).toBe(200)
       expect(consolePage.body).toContain('/_auth/logout?returnTo=%2F_admin')
 
-      const confirm = await browserRequest({
-        port: address.port,
+      const confirm = await openCsrfPage(fixture, {
         path: '/_auth/logout?returnTo=%2F_admin',
-        headers: { host: 'pc1.dsh.test', accept: 'text/html', cookie: sessionCookie },
+        host: 'pc1.dsh.test',
+        cookie: fixture.sessionCookie,
+        label: 'logout page',
       })
       expect(confirm.status).toBe(200)
       expect(confirm.body).toContain('退出登录？')
       expect(confirm.body).toContain('action="/_auth/logout"')
       expect(confirm.body).toContain('href="/_admin"')
-      const csrfSetCookie = setCookieArray(confirm.headers)[0]
-      if (csrfSetCookie === undefined) throw new Error('the logout page did not set a CSRF cookie')
-      const csrfPair = csrfSetCookie.split(';', 1)[0] ?? ''
-      const csrf = readCookie(csrfPair, '__Secure-dsh_csrf')
-      if (csrf === undefined) throw new Error('could not parse the CSRF cookie')
+      const { csrf, csrfPair } = confirm
 
-      const withoutCsrf = await browserRequest({
-        port: address.port,
+      const withoutCsrf = await postForm(fixture, {
         path: '/_auth/logout',
-        method: 'POST',
-        headers: {
-          host: 'pc1.dsh.test',
-          origin: 'https://pc1.dsh.test',
-          accept: 'text/html',
-          cookie: sessionCookie,
-          'content-type': 'application/x-www-form-urlencoded',
-        },
-        body: 'csrf=wrong',
+        host: 'pc1.dsh.test',
+        origin: 'https://pc1.dsh.test',
+        accept: 'text/html',
+        cookie: fixture.sessionCookie,
+        fields: { csrf: 'wrong' },
       })
       expect(withoutCsrf.status).toBe(403)
 
-      const loggedOut = await browserRequest({
-        port: address.port,
+      const loggedOut = await postCsrfForm(fixture, {
         path: '/_auth/logout',
-        method: 'POST',
-        headers: {
-          host: 'pc1.dsh.test',
-          origin: 'https://pc1.dsh.test',
-          accept: 'text/html',
-          cookie: `${sessionCookie}; ${csrfPair}`,
-          'content-type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({ csrf }).toString(),
+        host: 'pc1.dsh.test',
+        origin: 'https://pc1.dsh.test',
+        accept: 'text/html',
+        sessionCookie: fixture.sessionCookie,
+        csrfPair,
+        fields: { csrf },
       })
-      // A form navigation lands on the login page; the cookies are all cleared.
+      // 表单导航会落到登录页；所有 cookie 都会清除。
       expect(loggedOut.status).toBe(303)
       expect(loggedOut.headers.location).toBe('/_auth/login')
       const cleared = setCookieArray(loggedOut.headers)
       expect(cleared).toHaveLength(3)
       expect(cleared.every(header => header.includes('Max-Age=0'))).toBe(true)
 
-      // Server-side revocation, not just a cookie wipe: replaying the very same
-      // cookies must not get back in.
-      const replayed = await browserRequest({
-        port: address.port,
+      // 这是服务端吊销，而不只是清除 cookie：重放完全相同的
+      // cookie 也不能再次进入。
+      const replayed = await openAuthenticatedPage(fixture, {
         path: '/_admin',
-        headers: { host: 'pc1.dsh.test', accept: 'text/html', cookie: sessionCookie },
+        host: 'pc1.dsh.test',
       })
       expect(replayed.status).toBe(302)
       expect(replayed.headers.location).toContain('/_auth/login?returnTo=')
-      expect(store.listAudit()).toContainEqual(
+      expect(fixture.store.listAudit()).toContainEqual(
         expect.objectContaining({ event: 'logout', success: true }),
       )
     } finally {
-      await relay.close()
-      store.close()
+      await closeFixtures([fixture])
     }
   })
 
   it('rejects unauthenticated WebSocket upgrades before allocating a tunnel', async () => {
-    const store = openRelayStore({ path: ':memory:' })
-    await initializeAdmin({ store, username: 'admin', password: 'Correct horse battery staple 1' })
-    const authentication = await createAuthenticationService({ store, jwtSecret: JWT_SECRET })
-    const relay = createRelayServer({
-      host: '127.0.0.1',
-      port: 0,
-      publicDomain: 'dsh.test',
-      publicScheme: 'https',
-      browserAuth: { cookieMode: 'domain-https' },
-    }, { authentication, logger: pino({ level: 'silent' }), store })
-    const address = await relay.listen()
+    const fixture = await startRelayFixture({
+      jwtSecret: JWT_SECRET,
+      relay: {
+        publicDomain: 'dsh.test',
+        publicScheme: 'https',
+        browserAuth: { cookieMode: 'domain-https' },
+      },
+      loggerLevel: 'silent',
+      prepare: async ({ store }) => {
+        await initializeAdmin({ store, username: 'admin', password: 'Correct horse battery staple 1' })
+      },
+    })
 
     try {
-      const ws = new WebSocket(`ws://127.0.0.1:${String(address.port)}/api/events.mux`, {
+      const ws = new WebSocket(`ws://127.0.0.1:${String(fixture.port)}/api/events.mux`, {
         headers: { host: 'pc1.dsh.test', origin: 'https://pc1.dsh.test' },
       })
       ws.on('error', () => {})
       const [, response] = await once(ws, 'unexpected-response')
       expect((response as IncomingMessage).statusCode).toBe(401)
-      expect(relay.tunnel.registry.machines()).toHaveLength(0)
+      expect(fixture.relay.tunnel.registry.machines()).toHaveLength(0)
       ws.terminate()
     } finally {
-      await relay.close()
-      store.close()
+      await closeFixtures([fixture])
     }
   })
 })

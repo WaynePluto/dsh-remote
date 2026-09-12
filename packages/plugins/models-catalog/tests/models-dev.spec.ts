@@ -1,8 +1,4 @@
-/**
- * Reading the upstream document. Every case here is a shape the parser must
- * survive rather than trust, because `api.json` is third-party data that
- * changes without telling us.
- */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`api.json`） */
 
 import { describe, expect, it } from 'vitest'
 import { readCatalog, readModel } from '../src/models-dev.js'

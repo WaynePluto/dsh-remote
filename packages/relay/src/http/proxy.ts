@@ -25,8 +25,7 @@ function sendError(res: ServerResponse, status: number, message: string): void {
 }
 
 /**
- * Only a top-level browser navigation gets an HTML error body; API and XHR
- * callers keep the machine-readable text they already parse.
+ * 只有顶层浏览器导航得到 HTML 错误体；API 和 XHR 调用方继续获得它们已经在解析的机器可读文本。
  */
 function wantsHtmlPage(req: IncomingMessage): boolean {
   if (req.method !== 'GET' && req.method !== 'HEAD') return false
@@ -75,22 +74,20 @@ function responseHeaders(
   return result
 }
 
-/** Paths dsh renders its index at; the only ones its 401 is worth answering. */
+/** dsh 渲染 index 的路径；只有这些路径的 401 值得处理。 */
 const DSH_INDEX_PATHS: ReadonlySet<string> = new Set(['/', '/index.html'])
 
-/** Query parameter dsh exchanges for its own browser cookie. */
+/** dsh 用于交换自身浏览器 cookie 的查询参数。 */
 const DSH_TOKEN_PARAM = 'token'
 
 /**
- * Whether this request is the one dsh's login exchange can rescue.
+ * 此请求是否可以通过 dsh 登录交换恢复。
  *
- * dsh 0.1.2 authenticates browsers itself and answers an index request without
- * its cookie with a bare 401. Only a top-level index GET is redirected into the
- * token exchange: an `/api` 401 belongs to the page's own error handling, and a
- * request that already carries a token must never be redirected again, or a
- * rejected token would become an endless loop.
- * @param req The browser request.
- * @returns The URL to redirect to, or undefined when the 401 must pass through.
+ * dsh 0.1.2 自己认证浏览器，没有自身 cookie 的 index 请求会返回裸 401。
+ * 只有顶层 index GET 会被重定向进入令牌交换：`/api` 的 401 属于页面自己的错误处理，
+ * 且已携带令牌的请求绝不能再次重定向，否则被拒绝的令牌会造成无限循环。
+ * @param req 浏览器请求。
+ * @returns 要重定向到的 URL；401 应原样通过时返回 undefined。
  */
 function dshLoginRedirect(req: IncomingMessage, token: string | undefined): string | undefined {
   if (token === undefined || req.method !== 'GET') return undefined
@@ -117,7 +114,7 @@ function sendDshLoginRedirect(
   res.writeHead(303, {
     'cache-control': 'no-store',
     location,
-    // The token rides in the URL; no third party may learn it from a referrer.
+    // 令牌位于 URL 中；第三方不得通过 referrer 得到它。
     'referrer-policy': 'no-referrer',
     'content-length': 0,
     ...setCookieHeaders.length === 0 ? {} : { 'set-cookie': [...setCookieHeaders] },
@@ -131,7 +128,7 @@ export async function proxyHttpRequest(options: {
   slug: string
   registry: MachineRegistry
   logger: Logger
-  /** Appearance for the offline page, which is the only page this can render. */
+  /** 离线页面使用的外观；这是此处唯一能渲染的页面。 */
   appearance: PageAppearance
   setCookieHeaders?: readonly string[]
 }): Promise<void> {
@@ -168,8 +165,8 @@ export async function proxyHttpRequest(options: {
   let answered = false
   upstream.once('response', (upstreamResponse) => {
     answered = true
-    // dsh's own browser authentication: swap its 401 index for one trip through
-    // the token exchange, which mints dsh's cookie and returns to a clean URL.
+    // dsh 自己的浏览器认证：将 index 的 401 换成一次令牌交换；
+    // 该交换会签发 dsh cookie 并返回干净 URL。
     if (upstreamResponse.statusCode === 401) {
       const location = dshLoginRedirect(req, registry.getBySlug(slug)?.dshToken)
       if (location !== undefined) {
@@ -189,8 +186,8 @@ export async function proxyHttpRequest(options: {
   })
   upstream.once('error', (error) => {
     logger.warn({ err: error, slug, path: req.url }, 'upstream HTTP request failed')
-    // The ClientRequest already surfaced and logged this socket failure. Destroy
-    // without re-emitting the same error on a tunnel that may have no listener.
+    // ClientRequest 已经报告并记录此 socket 失败。直接销毁，而不要在可能没有 listener 的隧道上
+    // 再次发出同一错误。
     tunnel.destroy()
     if (!answered) sendError(res, 502, 'upstream request failed')
   })

@@ -28,7 +28,7 @@ interface CachedRefresh {
   timer?: NodeJS.Timeout
 }
 
-/** Enough overlap for parallel static/API requests carrying the same old cookie. */
+/** 为携带同一个旧 cookie 的并行静态/API 请求提供足够的重叠时间。 */
 const REFRESH_RACE_GRACE_MS = 5_000
 
 export class BrowserAuthenticator {

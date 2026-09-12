@@ -1,57 +1,25 @@
-/**
- * The banner, rendered full width above the composer.
- *
- * WHY THE INPUT DOCK AND NOT THE TRANSCRIPT. The obvious home for this would
- * be under the red row dsh already draws for a failed turn — but that row is a
- * keyed Chat node whose `turn-error` key belongs to dsh itself
- * (`packages/client/ui-chat/src/client/chat/register-node-renderers.ts:41`),
- * and a second registration under an occupied key throws. `conversation.input.dock`
- * is a list seat with a stable published contract
- * (`packages/client/ui-conversation/src/client/contract/slots.ts:127`), it
- * takes any number of registrants, and — the part that actually matters on a
- * phone — it is pinned above the composer instead of somewhere up the
- * scrollback the user has to go find.
- *
- * TWO THINGS KEEP IT INSIDE THE PAGE. A provider's failure message is not a
- * field anyone here controls: a rejected request body or an HTML error page
- * arrives as one enormous string, and the banner used to grow to fit it in both
- * directions.
- *
- * - WIDTH is not the text's fault at all. A dock entry that states no width of
- *   its own stretches to the entire conversation column, which is wider than
- *   the input card and wider still than the transcript. So the banner now
- *   restates dsh's shared width axis exactly the way dsh's own dock entries do
- *   — see {@link bannerStyle}.
- * - HEIGHT is the text's fault. The message gets a container of its own with a
- *   hard `maxHeight` and its own scrollbar, every box in the column carries
- *   `minWidth: 0`, and the action sits on the title row where its position
- *   does not depend on how long the message is. The Host clamps the string as
- *   well (`MESSAGE_LIMIT`), because scrolling a megabyte is not a feature
- *   either.
- *
- * The banner reads one host-computed value and owns no state beyond the click
- * in flight: `useProjection('turnRetry')` is fed by the Host fold, so a reload,
- * a reconnect, or a phone that was asleep all still show the same banner.
- *
- * @module @dsh-remote/dsh-plugin-turn-retry/client/RetryDock
- */
+/** composer 上方的 retry/resume banner。它只在 projection 报告未完成 turn 且 session 不在运行时显示；失败原因可展开查看，按钮操作经 RPC 回到 Host。 */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-// dsh's own 14px glyph set, taken from the page's frozen module table rather
-// than bundled — see the dock-card convention in this repository's AGENTS.md.
-import { IconRefreshOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+// 使用 dsh primitives 和本插件的 dialog resize helper；布局保持 dock-card 约定。
+import { Button, IconRefreshOutline14, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { RetryResult, TurnRetryState } from '../shared.js'
 import { fill } from './locales.js'
 import type { RetryKey } from './locales.js'
+import {
+  REASON_DIALOG_BODY_HEIGHT_PROP, REASON_DIALOG_CLASS, REASON_DIALOG_HEIGHT, REASON_DIALOG_MIN_BODY_HEIGHT_PX, REASON_DIALOG_MIN_WIDTH_PX, REASON_DIALOG_OFFSET_X_PROP, REASON_DIALOG_OFFSET_Y_PROP, REASON_DIALOG_ROOT_PADDING_PX, REASON_DIALOG_WIDTH_PROP, publishReasonDialogWidth, reasonDialogRule,
+  reasonDialogWidth,
+} from './reason-dialog.js'
+import { ReasonMoveHandle, ReasonResizeHandle, useReasonDialogResize } from './dialog-resize.js'
 
-/** What this plugin injects into its own registration. */
+/** 注入 banner 的 Host 操作。 */
 export interface RetryDockInjected {
-  /** Ask the Host to re-drive this session's unfinished turn. */
+  /** 请求 Host 继续/重试当前 pending turn。 */
   onRetry: () => Promise<RetryResult>
 }
 
-/** Copy key reporting each refusal the Host can answer with. */
+/** RetryResult.reason 到本地化 key 的映射。 */
 const REFUSAL_KEYS = {
   busy: 'busy',
   'pending-input': 'pendingInput',
@@ -60,39 +28,33 @@ const REFUSAL_KEYS = {
   subagent: 'subagent',
 } as const satisfies Record<NonNullable<RetryResult['reason']>, RetryKey>
 
-/**
- * dsh's own dock-card geometry, copied deliberately.
- *
- * `conversation.input.dock` entries are children of a plain column flex stack
- * (`ui-conversation/src/client/skeleton/ConversationRoot.module.css:281-289`),
- * so an entry with no width of its own stretches to the WHOLE conversation
- * column — wider than the input card by two 16px clearances and wider than the
- * transcript's text column on top of that. That is why this banner used to
- * stick out past the messages. dsh's own two entries solve it by restating the
- * shared width axis, and this is `TodoPanel.module.css:1-21` verbatim: the
- * column minus both side clearances and four dock insets, capped at the card
- * width minus four insets, centred with `margin: 0 auto`. The fallbacks are the
- * same numbers `.root` declares (`:32-34`) for the case where a future dsh
- * renames the variables — a banner one inset too wide beats a banner as wide as
- * the window.
- */
+/** 安装 reason dialog stylesheet。 */
+function installReasonDialogStyles(): () => void {
+  const element = document.createElement('style')
+  element.dataset['dshTurnRetryReasonDialog'] = ''
+  element.textContent = reasonDialogRule()
+  document.head.append(element)
+  return () => { element.remove(); document.documentElement.style.removeProperty(REASON_DIALOG_WIDTH_PROP) }
+}
+
+/** 将 dialog 宽度发布到 `<html>` 供 stylesheet 使用。 */
+function publishReasonWidth(width: number): void {
+  publishReasonDialogWidth(
+    (name, value) => { document.documentElement.style.setProperty(name, value) },
+    width,
+  )
+}
+
+/** 复用 dsh dock-card 的 width axis、圆角和边框；reason dialog 只在打开时测量宽度。 */
 const CLEARANCE = 'var(--dsh-composer-side-clearance, 16px)'
 const INSET = 'var(--dsh-composer-dock-inset, 8px)'
 const CARD_MAX = 'var(--dsh-composer-card-max-width, 952px)'
 
 /**
- * The card surface, taken from dsh's own todo panel rather than invented.
- *
- * `--dsw-specific-tip` is the ELEVATED surface rung dsh's dock cards and menus
- * use — `rgb(245,246,247)` in light, `rgb(53,54,56)` in dark
- * (`ui-conversation/.../TodoPanel.module.css:22-24`). The first version used
- * `--dsw-alias-bg-layer-2`, which in the light palette is the SAME white as the
- * page, so the banner dissolved into the background beside dsh's own todo strip.
- * `0.5px` / `12px` are dsh's own numbers for this card, not rounded versions: a
- * 1px border and a 10px radius read as a different component rather than a
- * sibling. The fallback is a neutral translucent grey, which darkens a light
- * surface and lightens a dark one, so a renamed token still leaves a visible
- * card in BOTH themes.
+ * 界面契约：banner 的接口、边界和生命周期沿用 dsh dock-card 公共约定。
+ * 布局、主题 token、尺寸和 DOM 接缝与 `ui-conversation/.../TodoPanel.module.css:22-24` 对齐。
+ * 主题 token 包括 `--dsw-specific-tip`（浅色 `rgb(245,246,247)`、深色 `rgb(53,54,56)`）
+ * 及 `--dsw-alias-bg-layer-2`；`0.5px` 边框、`12px` 圆角和 clearance/inset/card-max 尺寸保持一致。
  */
 const bannerStyle: CSSProperties = {
   display: 'flex',
@@ -138,7 +100,7 @@ const headerRowStyle: CSSProperties = {
 const GLYPH_OPTICAL_SHIFT = 'translateY(0.115em)'
 
 /**
- * The header's leading glyph cell — centres the icon in the stretched row.
+ * 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。
  * `line-height: 0` 让这一格的高度只由 svg 决定，行盒的半行距不会把图标顶偏。
  */
 const leadStyle: CSSProperties = {
@@ -151,7 +113,7 @@ const leadStyle: CSSProperties = {
   color: 'var(--dsw-alias-label-tertiary, #6b7280)',
 }
 
-/** The header title — a flex cell so a wrapped title still centres as a whole. */
+/** 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。*/
 const titleStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -163,24 +125,12 @@ const titleStyle: CSSProperties = {
   overflowWrap: 'anywhere',
 }
 
-/**
- * The failure text's own scroll container.
- *
- * `maxHeight` is in `em` so it tracks the reader's font size: about six lines
- * either way. `overscrollBehavior: contain` keeps a flick inside the box from
- * scrolling the transcript behind it once it hits the end — the mobile failure
- * mode this whole box exists to avoid.
- *
- * The tint is a literal neutral rather than a `--dsw-alias-bg-layer-*` token on
- * purpose: in dsh's light palette layers 1-3 are all the same white
- * (`ui-theme/src/styles/design-platform.css:158-160`), so a layer token would
- * make this box invisible against the banner in exactly half the themes. A
- * translucent grey darkens a light surface and lightens a dark one.
- */
-const messageBoxStyle: CSSProperties = {
-  maxHeight: '7.5em',
+/** reason dialog 内的固定高度滚动框；保持 `overscrollBehavior: contain`，并复用 dsh 的 surface tokens。 */
+const reasonBoxStyle: CSSProperties = {
+  height: REASON_DIALOG_HEIGHT,
+  flex: 'none',
   overflowY: 'auto',
-  overflowX: 'hidden',
+  overflowX: 'auto',
   overscrollBehavior: 'contain',
   padding: '6px 8px',
   borderRadius: '8px',
@@ -190,10 +140,10 @@ const messageBoxStyle: CSSProperties = {
   fontFamily: 'var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
   fontSize: '12px',
   lineHeight: 1.5,
-  // Provider messages carry their own newlines, and a stack trace or a JSON
-  // blob has no spaces to break at.
-  whiteSpace: 'pre-wrap',
-  overflowWrap: 'anywhere',
+  // 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。
+  // 实现说明：此处记录相关接口、边界和生命周期约束。
+  whiteSpace: 'pre',
+  overflowWrap: 'normal',
   minWidth: 0,
   maxWidth: '100%',
   boxSizing: 'border-box',
@@ -213,54 +163,35 @@ const errorStyle: CSSProperties = {
   overflowWrap: 'anywhere',
 }
 
-const buttonStyle: CSSProperties = {
-  padding: '5px 12px',
-  borderRadius: '8px',
-  border: '1px solid var(--dsw-alias-border-l1, rgba(128,128,128,0.3))',
-  background: 'transparent',
-  color: 'inherit',
-  cursor: 'pointer',
-  font: 'inherit',
-  whiteSpace: 'nowrap',
-  flex: '0 0 auto',
-  // The row stretches its cells; the button keeps its own height instead of
-  // growing when a long title wraps to two lines.
-  alignSelf: 'center',
-}
-
-const primaryButtonStyle: CSSProperties = {
-  ...buttonStyle,
-  border: '1px solid transparent',
-  background: 'var(--dsw-alias-button-primary-fill, #1f2937)',
-  color: 'var(--dsw-alias-label-primary-inverted, #fff)',
-}
-
-/** Everything the banner reads. */
+/** retry banner 的渲染 props。 */
 export interface RetryDockOwnProps {
-  /** The unfinished turn the Host is reporting for this session, if any. */
+  /** 当前 projection；undefined 表示尚未收到。 */
   pending: TurnRetryState | undefined
-  /** Whether the session is currently running a turn. */
+  /** session 是否仍在运行。 */
   running: boolean
-  /** Ask the Host to retry; absent before the registration binds. */
+  /** 请求 Host 继续/重试当前 pending turn。 */
   onRetry?: RetryDockInjected['onRetry'] | undefined
-  /** Locale seat bound to this plugin's namespace. */
+  /** 本插件的 locale 函数。 */
   t?: ((key: RetryKey) => string) | undefined
 }
 
-/**
- * The banner body, free of any slot plumbing so tests can render it directly.
- * @param props - the pending turn, the session's run state, and the retry verb.
- * @returns the banner, or nothing when there is nothing to pick up.
- */
+/** reason dialog resize 配置；测试和浏览器共用同一选择器与尺寸 contract。 */
+const REASON_RESIZE_CONFIG = { dialogClass: REASON_DIALOG_CLASS, bodySelector: '[data-dsh-turn-retry-reason-body]', widthProp: REASON_DIALOG_WIDTH_PROP, bodyHeightProp: REASON_DIALOG_BODY_HEIGHT_PROP, offsetXProp: REASON_DIALOG_OFFSET_X_PROP, offsetYProp: REASON_DIALOG_OFFSET_Y_PROP, rootPaddingPx: REASON_DIALOG_ROOT_PADDING_PX, minWidthPx: REASON_DIALOG_MIN_WIDTH_PX, minBodyHeightPx: REASON_DIALOG_MIN_BODY_HEIGHT_PX }
 export function RetryBanner({ pending, running, onRetry, t }: RetryDockOwnProps) {
   const translate = useCallback((key: RetryKey): string => t?.(key) ?? key, [t])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [reasonOpen, setReasonOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const { onPointerDown: onReasonResizePointerDown, onMovePointerDown: onReasonMovePointerDown, reset: resetReasonResize } = useReasonDialogResize(REASON_RESIZE_CONFIG)
+  useEffect(() => installReasonDialogStyles(), [])
   const turn = pending?.turn
   useEffect(() => {
     setError(null)
     setBusy(false)
-  }, [turn])
+    resetReasonResize()
+    setReasonOpen(false)
+  }, [resetReasonResize, turn])
 
   const retry = useCallback(() => {
     if (onRetry === undefined) return
@@ -269,9 +200,7 @@ export function RetryBanner({ pending, running, onRetry, t }: RetryDockOwnProps)
     void (async () => {
       try {
         const result = await onRetry()
-        // A started retry is not settled here: the Host's `turn/start` clears
-        // the projection, which unmounts this banner. Only a refusal has to be
-        // shown.
+        // Host 成功创建 notice 后，projection 会在 `turn/start` 清除 pending；失败结果在此处展示。
         if (result.started) return
         const key = result.reason === undefined ? 'failed' : REFUSAL_KEYS[result.reason]
         setError(translate(key))
@@ -285,6 +214,13 @@ export function RetryBanner({ pending, running, onRetry, t }: RetryDockOwnProps)
     })()
   }, [onRetry, translate])
 
+  const closeReason = useCallback(() => { resetReasonResize(); setReasonOpen(false) }, [resetReasonResize])
+  const openReason = useCallback(() => {
+    const measured = rootRef.current?.getBoundingClientRect().width ?? 0
+    publishReasonWidth(reasonDialogWidth(measured))
+    setReasonOpen(true)
+  }, [])
+
   if (pending === null || pending === undefined) return null
   if (running) return null
 
@@ -292,36 +228,59 @@ export function RetryBanner({ pending, running, onRetry, t }: RetryDockOwnProps)
   const title = failed
     ? 'title'
     : pending.cause === 'user' ? 'stoppedTitle' : 'interruptedTitle'
-  // A stop is picked up, not retried: "重试" would suggest re-running something
-  // that went wrong, and nothing went wrong.
+  // 停止的轮次是继续接手而不是重试：“重试”会让人以为要重新运行。
   const action = failed ? (busy ? 'retrying' : 'retry') : (busy ? 'resuming' : 'resume')
+  const hasDetails = failed || error !== null
 
   return (
-    <div style={bannerStyle} role="status">
+    <div ref={rootRef} style={bannerStyle} role="status">
       <div style={headerRowStyle}>
-        {/* dsh's dock cards all lead their title with a 14px outline glyph
-            (todo: checklist, queue: queue). A retry banner's verb is refresh. */}
+        {/* 使用 refresh 图标：retry banner 的动作是重新驱动上一轮，而不是新增普通消息。 */}
         <span aria-hidden style={leadStyle}><IconRefreshOutline14 /></span>
         <span style={titleStyle}>{translate(title)}</span>
-        <button
-          type="button"
-          style={primaryButtonStyle}
+        {hasDetails && (
+          <Button
+            variant="outline"
+            size="sm"
+            aria-haspopup="dialog"
+            aria-expanded={reasonOpen}
+            onClick={openReason}
+          >
+            {translate('details')}
+          </Button>
+        )}
+        <Button
+          variant="primary"
+          size="sm"
           disabled={busy || onRetry === undefined}
           onClick={retry}
         >
           {translate(action)}
-        </button>
+        </Button>
       </div>
-      {pending.kind === 'failed' && (
-        <div style={messageBoxStyle} data-turn-retry="reason">
-          {fill(translate('reason'), { code: pending.code, message: pending.message })}
-        </div>
-      )}
+
       {pending.kind === 'failed' && !pending.retryable && (
         <span style={hintStyle}>{translate('hopeless')}</span>
       )}
       {pending.kind === 'stopped' && <span style={hintStyle}>{translate('stoppedHint')}</span>}
       {error !== null && <span style={errorStyle}>{error}</span>}
+
+      <Modal
+        open={reasonOpen}
+        onClose={closeReason}
+        title={translate('detailsTitle')}
+        closeLabel={translate('close')}
+        className={REASON_DIALOG_CLASS}
+      >
+        <div style={reasonBoxStyle} data-turn-retry="reason-dialog" data-dsh-turn-retry-reason-body="">
+          {failed && (
+            <div>{fill(translate('reason'), { code: pending.code, message: pending.message })}</div>
+          )}
+          {error !== null && <div style={errorStyle}>{error}</div>}
+        </div>
+        <ReasonMoveHandle onPointerDown={onReasonMovePointerDown} />
+        {['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'].map(direction => <ReasonResizeHandle key={direction} direction={direction as 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw'} onPointerDown={onReasonResizePointerDown} />)}
+      </Modal>
     </div>
   )
 }

@@ -1,30 +1,7 @@
-/**
- * The Proxy settings page.
- *
- * It is a whole `settings.section` rather than a row in General because it
- * owns three fields, a live status line, and a connectivity test — dsh's own
- * guidance reserves `settings.general.item` for a single compact preference.
- *
- * Writes are explicit. The switch commits immediately (it is one bit), while
- * the two text fields are drafted locally and committed by Save: one settings
- * write per keystroke would be both noisy in `settings.yaml` and a stream of
- * validator failures while an address is half-typed.
- *
- * ⚠️ A REFUSED WRITE LOOKS LIKE A SUCCESSFUL ONE unless this page checks.
- * `SettingsScope.mutate` RESOLVES when the Host refuses — it reloads the stored
- * document and returns normally
- * (`packages/client/ui-settings/src/client/settings-scope.ts:132-135`), so
- * `catch` never runs and the only visible effect is every field snapping back
- * to its old value. This page therefore does two things instead of trusting the
- * promise: it applies the shared rules (`proxyFault`) BEFORE writing, so the
- * common mistakes are named where the person can still see what they typed; and
- * it VERIFIES afterwards that the value actually landed, keeping the draft when
- * it did not.
- *
- * @module @dsh-remote/dsh-plugin-proxy/client/ProxySection
- */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。（涉及：`settings.section`、`settings.general.item`、`settings.yaml`、`SettingsScope.mutate`、`packages/client/ui-settings/src/client/settings-scope.ts:132-135`、`catch`、`proxyFault`） */
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { Button, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CSSProperties, ReactNode } from 'react'
 import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { DEFAULT_SETTINGS, DEFAULT_TEST_URL, proxyFault } from '../shared.js'
@@ -32,20 +9,20 @@ import type { ProxySettings, ProxyTestResult } from '../shared.js'
 import { fill } from './locales.js'
 import type { ProxyKey } from './locales.js'
 
-/** The section's three fields, in write order. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 const FIELDS = ['enabled', 'url', 'bypass'] as const
 
-/** What this plugin injects into its own registration. */
+/** 本插件注册时注入的内容。 */
 export interface ProxySectionInjected {
-  /** The bound `proxy` settings scope. */
+  /** 绑定的 `proxy` settings scope。 */
   scope: SettingsScope<ProxySettings>
-  /** Call the Host's test endpoint. */
+  /** 调用宿主测试端点。 */
   test: (url: string) => Promise<ProxyTestResult>
 }
 
-/** Everything the component reads. */
+/** 组件读取的全部内容。 */
 export type ProxySectionProps = Partial<ProxySectionInjected> & {
-  /** Locale seat bound to this plugin's namespace. */
+  /** 绑定到本插件命名空间的 locale 槽位。 */
   t?: (key: ProxyKey) => string
 }
 
@@ -57,56 +34,56 @@ const label: CSSProperties = { fontWeight: 600 }
 
 const muted: CSSProperties = { color: 'var(--dsw-alias-label-secondary, #6b7280)' }
 
-/**
- * A muted paragraph with no margin of its own.
- *
- * The page is a flex column with its own gap; a `<p>`'s default margin stacks
- * on top of that and doubles every gap it appears in.
- */
+/** 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。（涉及：`<p>`） */
 const note: CSSProperties = { ...muted, margin: 0 }
 
 const intro: CSSProperties = { display: 'flex', flexDirection: 'column', gap: '4px' }
 
-const input: CSSProperties = {
-  padding: '6px 10px',
-  borderRadius: '8px',
-  border: '1px solid var(--dsw-alias-border-l1, rgba(128,128,128,0.3))',
-  background: 'transparent',
-  color: 'inherit',
-  font: 'inherit',
+const CONTROL_CLASS = 'dshx-proxy-control'
+const CONTROL_ERROR_CLASS = 'dshx-proxy-control-error'
+const CONTROL_STYLES = `
+.${CONTROL_CLASS} {
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
 }
+.${CONTROL_CLASS}:focus {
+  outline: none;
+  border-color: var(--dsw-alias-brand-primary);
+}
+.${CONTROL_CLASS}:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  opacity: 0.6;
+  cursor: default;
+}
+.${CONTROL_ERROR_CLASS} { border-color: var(--dsw-alias-state-error-primary); }
+.${CONTROL_CLASS}.${CONTROL_ERROR_CLASS}:focus { border-color: var(--dsw-alias-state-error-primary); }
+.${CONTROL_CLASS}[data-multiline] {
+  height: auto;
+  min-height: 70px;
+  padding: 6px 10px;
+  resize: vertical;
+}
+`
 
 const row: CSSProperties = { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }
-
-const button: CSSProperties = {
-  padding: '6px 12px',
-  borderRadius: '8px',
-  border: '1px solid var(--dsw-alias-border-l1, rgba(128,128,128,0.3))',
-  background: 'transparent',
-  color: 'inherit',
-  cursor: 'pointer',
-  font: 'inherit',
-}
-
-const primary: CSSProperties = {
-  ...button,
-  border: '1px solid transparent',
-  background: 'var(--dsw-alias-button-primary-fill, #1f2937)',
-  color: 'var(--dsw-alias-label-primary-inverted, #fff)',
-}
 
 const errorStyle: CSSProperties = { color: 'var(--dsw-alias-state-error-primary, #dc2626)' }
 
 const okStyle: CSSProperties = { color: 'var(--dsw-alias-state-success-primary, #16a34a)' }
 
-/** The section's own status, kept apart from the settings snapshot. */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 type Busy = 'idle' | 'saving' | 'testing'
 
-/**
- * The page.
- * @param props - injected scope and test caller, plus the locale seat.
- * @returns the page, or a short notice when there is nothing to configure.
- */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 export function ProxySection(props: ProxySectionProps): ReactNode {
   const { scope, test, t } = props
   const snapshot: SettingsScopeSnapshot<ProxySettings> | undefined = useSyncExternalStore(
@@ -124,14 +101,14 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
   const [testUrl, setTestUrl] = useState(DEFAULT_TEST_URL)
   const [needsUrl, setNeedsUrl] = useState(false)
   const urlRef = useRef<HTMLInputElement>(null)
-  /** The section this page last wrote successfully, so its own echo is not read as an outside edit. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   const committed = useRef<ProxySettings | undefined>(undefined)
 
-  // The stored section is the source of truth until someone types; a draft is
-  // discarded when the document changes underneath it (another window, a hand
-  // edit of settings.yaml). The change this page just made itself is not such
-  // an edit — without that exception the "Saved." note is wiped by the very
-  // update that proves the save worked.
+  // 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。
+  // 被其他位置修改时丢弃（另一个窗口或手工
+  // 编辑 settings.yaml）。本页面刚做的修改不属于
+  // 外部编辑；没有例外时，证明保存成功的更新会清掉“Saved.”提示
+  // 。
   useEffect(() => {
     setDraft(undefined)
     const echo = committed.current
@@ -151,14 +128,7 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
     }))
   }, [settings.url, settings.bypass])
 
-  /**
-   * Commit one whole intended section.
-   *
-   * Three guards, in the order that keeps the person's work: refuse locally
-   * what the Host would refuse (naming the field, draft untouched); write only
-   * the fields that actually differ; then confirm the write landed, because a
-   * refused `mutate` resolves like a successful one.
-   */
+  /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。（涉及：`mutate`） */
   const commit = useCallback(async (next: ProxySettings): Promise<void> => {
     if (scope === undefined) return
     setFailure(undefined)
@@ -183,8 +153,8 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
     setBusy('saving')
     try {
       await scope.mutate(ops)
-      // Not `catch`: a Host refusal resolves. The stored section is the only
-      // honest answer to "did it save".
+      // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`catch`）
+      // 能诚实回答“是否保存”。
       const stored = scope.getSnapshot().value
       if (stored === undefined || !FIELDS.every(key => stored[key] === next[key])) {
         setFailure(t?.('rejected') ?? 'rejected')
@@ -214,14 +184,7 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
     }
   }, [test, testUrl])
 
-  /**
-   * Flip the switch.
-   *
-   * Switching ON carries the address beside it, because the Host refuses "on
-   * with no address" — and on a fresh page that refusal would land on the only
-   * action there is to take. `commit` does the refusing now, locally and with
-   * the field named, so this is just "the whole section as it would be".
-   */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`commit`） */
   const toggle = useCallback((next: boolean): void => {
     void commit({ enabled: next, url, bypass })
   }, [commit, url, bypass])
@@ -235,6 +198,7 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
 
   return (
     <section style={page}>
+      <style>{CONTROL_STYLES}</style>
       <div style={intro}>
         <div style={label}>{t('title')}</div>
         <p style={note}>{t('intro')}</p>
@@ -250,15 +214,16 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
       {!writable ? <p style={note}>{t('readOnly')}</p> : null}
 
       <div style={field}>
-        <label style={row}>
-          <input
-            type="checkbox"
+        <div style={row}>
+          <Switch
             checked={settings.enabled}
             disabled={disabled}
-            onChange={(event) => { toggle(event.target.checked) }}
+            label={t('enable')}
+            title={!writable ? t('readOnly') : undefined}
+            onChange={toggle}
           />
           <span>{t('enable')}</span>
-        </label>
+        </div>
         {!settings.enabled ? <span style={muted}>{t('enableHint')}</span> : null}
       </div>
 
@@ -266,17 +231,16 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
         <span style={label}>{t('url')}</span>
         <input
           ref={urlRef}
-          style={needsUrl ? { ...input, borderColor: 'var(--dsw-alias-state-error-primary, #dc2626)' } : input}
+          className={`${CONTROL_CLASS}${needsUrl ? ` ${CONTROL_ERROR_CLASS}` : ''}`}
           type="text"
           value={url}
+          aria-invalid={needsUrl}
           placeholder="127.0.0.1:7890"
           aria-label={t('url')}
           disabled={disabled}
           onChange={(event) => { setNeedsUrl(false); setFailure(undefined); edit({ url: event.target.value }) }}
         />
-        {/* The refusal belongs beside the field it is about. An earlier version
-            put it at the very bottom of the page, where nobody connected it to
-            the address they had just typed. */}
+        {/** 实现说明：此处记录相关接口、边界和生命周期约束。 */}
         <span style={needsUrl ? errorStyle : muted}>
           {needsUrl && failure !== undefined ? failure : t('urlHint')}
         </span>
@@ -285,7 +249,8 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
       <div style={field}>
         <span style={label}>{t('bypass')}</span>
         <textarea
-          style={{ ...input, minHeight: '56px', resize: 'vertical' }}
+          className={CONTROL_CLASS}
+          data-multiline="true"
           value={bypass}
           aria-label={t('bypass')}
           disabled={disabled}
@@ -295,14 +260,14 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
       </div>
 
       <div style={row}>
-        <button
-          type="button"
-          style={primary}
+        <Button
+          variant="primary"
+          size="sm"
           disabled={disabled || !dirty}
           onClick={() => { void commit({ enabled: settings.enabled, url, bypass }) }}
         >
           {busy === 'saving' ? t('saving') : t('save')}
-        </button>
+        </Button>
         {saved && !dirty ? <span style={muted}>{t('saved')}</span> : null}
       </div>
 
@@ -310,16 +275,17 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
         <span style={label}>{t('testUrl')}</span>
         <div style={row}>
           <input
-            style={{ ...input, flex: '1 1 260px' }}
+            className={CONTROL_CLASS}
+            style={{ flex: '1 1 260px' }}
             type="text"
             value={testUrl}
             aria-label={t('testUrl')}
             disabled={busy !== 'idle'}
             onChange={(event) => { setTestUrl(event.target.value) }}
           />
-          <button type="button" style={button} disabled={busy !== 'idle'} onClick={() => { void runTest() }}>
+          <Button variant="outline" size="sm" disabled={busy !== 'idle'} onClick={() => { void runTest() }}>
             {busy === 'testing' ? t('testing') : t('test')}
-          </button>
+          </Button>
         </div>
         {result === undefined
           ? null

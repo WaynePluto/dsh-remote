@@ -1,30 +1,7 @@
-/**
- * dsh-remote plugin: one place to configure the forward proxy, for the whole
- * dsh process.
- *
- * WHY THIS PLUGIN EXISTS. On a machine whose only route out is a corporate
- * proxy, dsh reaches nothing — and says so in a way that names neither the host
- * nor the proxy. The cause is narrow and verified: Node's global `fetch`
- * ignores `HTTP(S)_PROXY`, and neither dsh nor pi-ai ever supplies a dispatcher
- * (`docs/02-dsh-facts.md` §8.4a). So the proxy every other tool on the machine
- * already knows about is the one thing dsh cannot use.
- *
- * WHAT IT DOES. It registers a `proxy` settings namespace, renders a Proxy page
- * in Settings, and points undici's global dispatcher wherever that section
- * says. One switch, one address, one bypass list — and every outbound request
- * in the process follows it: model calls, OAuth device flows, the web
- * fetch/search tools, and other plugins' own reads.
- *
- * WHAT IT DELIBERATELY DOES NOT DO. It never reads the environment. A proxy
- * inherited from `HTTPS_PROXY` would be a behavior nobody can see in the UI,
- * which is the confusion this plugin was built to remove; every undici option
- * is therefore passed explicitly, empty string included.
- *
- * @module @dsh-remote/dsh-plugin-proxy
- */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 
 import type { Context } from '@deepseek-ai/cordis'
-// Type-only: activates the `ctx.settings` and `ctx.connection` Context merges.
+// 仅类型：启用 `ctx.settings` 和 `ctx.connection` Context 合并。
 import type {} from '@deepseek-ai/dsh-settings'
 import type { ConnectionRpcResult } from '@deepseek-ai/dsh-client-connection'
 import { ProxyDispatcher } from './dispatcher.js'
@@ -37,34 +14,22 @@ export type { ProxySettings, ProxyTestResult } from './shared.js'
 export { assertServiceable, normalizeBypass, parseProxyUrl, Settings } from './settings.js'
 export { ProxyDispatcher } from './dispatcher.js'
 
-/** Cordis plugin name, as it appears in dsh's plugin tree and its diagnostics. */
+/** Cordis 插件名；它会出现在 dsh 插件树和诊断信息中。 */
 export const name = 'dsh-remote-proxy'
 
-/**
- * Required services. `settings` holds the section and is where the page writes;
- * `connection` carries the test channel.
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`settings`、`connection`） */
 export const inject = ['settings', 'connection']
 
-/** The failure code this channel reports for an unknown endpoint. */
+/** 本通道对未知端点报告的故障码。 */
 export const UNKNOWN_ENDPOINT_CODE = 'proxy/unknown-endpoint'
 
-/** The failure code this channel reports for a malformed payload. */
+/** 本通道对载荷错误报告的故障码。 */
 export const BAD_PAYLOAD_CODE = 'proxy/bad-payload'
 
-/** How long a connectivity test may take before it is abandoned. */
+/** 连通性测试等待多久后放弃。 */
 export const TEST_TIMEOUT_MS = 15_000
 
-/**
- * Try one request through whatever the process is currently doing.
- *
- * Deliberately plain `fetch`: the question a person asks this button is "will
- * dsh reach the internet now", and dsh reaches the internet through the global
- * dispatcher. A request made any other way would answer a different question.
- * @param dispatcher - the live proxy state, reported beside the result.
- * @param url - absolute http(s) URL to try.
- * @returns what happened, never throwing — a failed test is an answer.
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`fetch`） */
 export async function runTest(dispatcher: ProxyDispatcher, url: string): Promise<ProxyTestResult> {
   const started = Date.now()
   const via = dispatcher.current().via
@@ -74,8 +39,8 @@ export async function runTest(dispatcher: ProxyDispatcher, url: string): Promise
       throw new Error('the test address must be http or https')
     }
     const response = await fetch(parsed, { signal: AbortSignal.timeout(TEST_TIMEOUT_MS) })
-    // The body is never read: reachability is the question, and the default
-    // target is a multi-megabyte document.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // target 是多 MB 文档。
     await response.body?.cancel()
     return { ok: true, url, via, status: response.status, elapsedMs: Date.now() - started }
   } catch (error: unknown) {
@@ -84,15 +49,7 @@ export async function runTest(dispatcher: ProxyDispatcher, url: string): Promise
   }
 }
 
-/**
- * Dispatch one decoded RPC call.
- *
- * Exported for tests, which drive the endpoint without an HTTP carrier.
- * @param dispatcher - the live dispatcher owner.
- * @param endpoint - channel-relative endpoint name.
- * @param payload - the browser's payload.
- * @returns the test result, or a coded failure.
- */
+/** 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。 */
 export async function dispatch(
   dispatcher: ProxyDispatcher,
   endpoint: string,
@@ -110,10 +67,7 @@ export async function dispatch(
   return { ok: true, value: await runTest(dispatcher, payload.url) }
 }
 
-/**
- * Mount the settings namespace, the dispatcher, and the test channel.
- * @param ctx - Host plugin context.
- */
+/** 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。 */
 export function apply(ctx: Context): void {
   const dispatcher = new ProxyDispatcher()
   const scope = ctx.settings.register(NAMESPACE, Settings, {
@@ -138,8 +92,8 @@ export function apply(ctx: Context): void {
   )
   ctx.effect(() => async () => {
     await dispose()
-    // Restored last: a test still in flight should finish through the agent it
-    // started on.
+    // 测试契约：此处说明本测试锁定的行为和回归边界。
+    // 启动时使用的 agent。
     await dispatcher.dispose()
   }, 'proxy: channel and global dispatcher')
 }

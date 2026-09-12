@@ -7,18 +7,18 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { LauncherError } from './errors.js'
 
-/** File name of the relay's JWT signing secret inside the dsh-remote home. */
+/** dsh-remote home 中 relay JWT 签名密钥的文件名。 */
 export const JWT_SECRET_FILE_NAME = 'relay-jwt.secret'
 
-/** Environment variable the relay CLI reads the secret from. */
+/** relay CLI 读取密钥的环境变量。 */
 export const JWT_SECRET_ENV_NAME = 'DSH_REMOTE_JWT_SECRET'
 
-/** `decodeJwtSecret` in the relay refuses anything shorter than this. */
+/** relay 中的 `decodeJwtSecret` 拒绝短于此长度的内容。 */
 export const JWT_SECRET_MIN_BYTES = 32
 
 /**
- * @param home - the dsh-remote home directory.
- * @returns Absolute path of this machine's relay JWT secret file.
+ * @param home - dsh-remote home 目录。
+ * @returns 这台机器 relay JWT 密钥文件的绝对路径。
  */
 export function jwtSecretFilePath(home: string): string {
   return join(home, JWT_SECRET_FILE_NAME)
@@ -35,10 +35,10 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * Windows ignores the POSIX mode bits, so the 0o600 below is cosmetic there:
- * without this the secret stays readable by every other local account. Same
- * approach as `device-key.ts` in the connector, which guards the sibling file
- * in this very directory.
+ * Windows 会忽略 POSIX mode 位，因此下面的 0o600 在那里只是表面设置：
+ * 没有下面的处理，其他本地账号仍可读取密钥。处理方式与 connector 中
+ * 的 `device-key.ts` 相同，它会保护
+ * 同一目录中的兄弟文件。
  */
 function restrictWindowsAcl(path: string, warn: (message: string) => void): void {
   const domain = process.env.USERDOMAIN
@@ -57,7 +57,7 @@ function restrictWindowsAcl(path: string, warn: (message: string) => void): void
   }
 }
 
-/** @returns True when the text decodes to a secret the relay will accept. */
+/** @returns 文本解码后是 relay 可接受的密钥时为 true。 */
 function usable(secret: string): boolean {
   return secret !== '' && Buffer.from(secret, 'base64url').byteLength >= JWT_SECRET_MIN_BYTES
 }
@@ -66,9 +66,9 @@ function generate(path: string, warn: (message: string) => void): string {
   const secret = randomBytes(JWT_SECRET_MIN_BYTES).toString('base64url')
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
   try {
-    // 'wx' loses the race deliberately: a second launcher starting at the same
-    // moment must adopt the first secret, or one of the two relays would sign
-    // sessions the other rejects.
+    // 'wx' 有意在竞争中失败：同时启动的第二个 launcher
+    // 必须采用第一个密钥，否则两个 relay 之一会签发
+    // 另一个 relay 会拒绝的会话。
     writeFileSync(path, `${secret}\n`, { mode: 0o600, flag: 'wx' })
   } catch (error) {
     if (errorCode(error) === 'EEXIST') return readFileSync(path, 'utf8').trim()
@@ -83,16 +83,13 @@ function generate(path: string, warn: (message: string) => void): string {
 }
 
 /**
- * Load this machine's relay JWT secret, creating it on first run.
- *
- * A green package has to reach a working console without the user typing a
- * command, so the secret is generated here rather than demanded from the
- * environment. It is never printed: it signs every console session, and one
- * leaked line in a shared terminal log would hand over the login.
- * @param path - absolute path of the secret file.
- * @param warn - sink for non-fatal hardening failures; defaults to stderr.
- * @returns The base64url secret, stable across runs.
- * @throws LauncherError When the file exists but is unusable, or cannot be written.
+ * 加载这台机器的 relay JWT 密钥，并在首次运行时创建。
+ * 绿色包必须无需用户输入命令就能访问可用控制台，因此密钥在这里生成；它从不打印，
+ * 因为它签名每个控制台会话，共享终端日志泄漏一行就会交出登录权限。
+ * @param path - 密钥文件的绝对路径。
+ * @param warn - 非致命加固失败的输出目标；默认为 stderr。
+ * @returns 跨运行保持稳定的 base64url 密钥。
+ * @throws LauncherError 文件存在但不可用，或无法写入时抛出。
  */
 export function loadOrCreateJwtSecret(
   path: string,

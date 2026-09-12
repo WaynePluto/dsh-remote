@@ -12,8 +12,8 @@ export interface BrowserCookieNames {
 }
 
 /**
- * How long a remembered appearance lives. Chromium caps any cookie at 400
- * days, so asking for more would only be silently trimmed.
+ * 记住外观设置的时长。Chromium 将 cookie 上限设为 400
+ * 天，要求更长时间只会被静默截短。
  */
 const THEME_MAX_AGE_SECONDS = 400 * 24 * 60 * 60
 
@@ -48,7 +48,7 @@ function serializeCookie(options: {
   return attributes.join('; ')
 }
 
-/** Reject duplicate names rather than accepting an attacker-controlled cookie ordering. */
+/** 拒绝重复名称，而不是接受攻击者控制的 cookie 顺序。 */
 export function readCookie(header: string | undefined, name: string): string | undefined {
   if (header === undefined) return undefined
   const values: string[] = []
@@ -100,14 +100,14 @@ export class BrowserCookiePolicy {
   }
 
   /**
-   * Remember one appearance choice.
+   * 记住一个外观选择。
    *
-   * HttpOnly because relay pages carry no script at all — nothing in a browser
-   * has any use for this value — and domain-scoped alongside the session in a
-   * domain deployment, so one choice covers every machine's subdomain instead
-   * of having to be repeated on each.
-   * @param value The preference to store, already validated by the caller.
-   * @returns The Set-Cookie header.
+   * 使用 HttpOnly，因为 relay 页面完全没有脚本——浏览器中的任何内容
+   * 都不需要这个值；在域名部署中，它与会话一起按域限定，
+   * 因此一次选择可以覆盖每台机器的子域，而不是
+   * 必须在每台机器上重复设置。
+   * @param value 要存储的偏好，调用方已完成校验。
+   * @returns Set-Cookie header。
    */
   themeHeader(value: string): string {
     return serializeCookie({
@@ -148,7 +148,7 @@ export class BrowserCookiePolicy {
       maxAgeSeconds,
       httpOnly: false,
       secure: this.#secure,
-      // CSRF stays host-only; access and refresh intentionally span machine subdomains.
+      // CSRF 保持 host-only；access 和 refresh 有意跨机器子域共享。
     })
   }
 

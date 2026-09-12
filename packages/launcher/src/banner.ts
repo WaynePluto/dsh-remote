@@ -4,8 +4,8 @@ import { DSH_BIND_HOST } from './dsh.js'
 import { LAUNCHER_VERSION } from './version.js'
 
 /**
- * Ranges whose characters occupy two columns in a terminal. Only these decide
- * the width of the address box; getting it wrong tilts the frame.
+ * 在终端中占两列的字符范围。只有这些范围决定
+ * 地址框的宽度；计算错误会使边框倾斜。
  */
 const WIDE_RANGES: readonly (readonly [number, number])[] = [
   [0x1100, 0x115f], [0x2e80, 0x303e], [0x3041, 0x33ff], [0x3400, 0x4dbf],
@@ -14,8 +14,8 @@ const WIDE_RANGES: readonly (readonly [number, number])[] = [
 ]
 
 /**
- * @param text - the text to measure.
- * @returns Its width in terminal columns, counting CJK characters as two.
+ * @param text - 要测量的文本。
+ * @returns 文本在终端中的列宽，CJK 字符按两列计算。
  */
 export function displayWidth(text: string): number {
   let width = 0
@@ -26,11 +26,11 @@ export function displayWidth(text: string): number {
   return width
 }
 
-/** One `标签  值  备注` row inside the address box. */
+/** 地址框中的一行“标签  值  备注”。 */
 interface AddressRow {
   readonly label: string
   readonly value: string
-  /** Says who may use this address; the whole point of the box now. */
+  /** 说明谁可以使用此地址；这正是地址框现在存在的意义。 */
   readonly note?: string | undefined
 }
 
@@ -38,7 +38,7 @@ function pad(text: string, width: number): string {
   return `${text}${' '.repeat(Math.max(0, width - displayWidth(text)))}`
 }
 
-/** Draw one frame around already laid out lines, padded to a single width. */
+/** 为已排版的行绘制一个边框，并填充到统一宽度。 */
 function frame(lines: readonly string[]): string[] {
   const inner = Math.max(...lines.map(line => displayWidth(line))) + 4
   return [
@@ -57,7 +57,7 @@ function box(rows: readonly AddressRow[]): string[] {
   }))
 }
 
-/** One `✓ 标签   细节` status line, aligned as a column. */
+/** 一行“✓ 标签   细节”状态信息，按列对齐。 */
 interface StatusRow {
   readonly mark: string
   readonly label: string
@@ -70,34 +70,34 @@ function statusLines(rows: readonly StatusRow[]): string[] {
 }
 
 /**
- * Browser scheme of the machine a connector dials: an address reached over
- * `wss://` terminates TLS, so its browser side is HTTPS.
+ * Connector 拨号连接的机器所使用的浏览器 scheme：通过
+ * `wss://` 终止 TLS，因此浏览器侧是 HTTPS。
  */
 function hubScheme(relayUrl: string): 'http' | 'https' {
   return relayUrl.startsWith('wss://') ? 'https' : 'http'
 }
 
-/** A relay bound to loopback is deliberately unreachable from the LAN. */
+/** 绑定 loopback 的 relay 有意不允许从局域网访问。 */
 function loopbackBind(host: string): boolean {
   return host === '::1' || host === '0:0:0:0:0:0:0:1' || host.startsWith('127.')
 }
 
 export interface BannerOptions {
   readonly dshPort: number
-  /** Port of this machine's own console. */
+  /** 这台机器自己的控制台端口。 */
   readonly relayPort: number
-  /** The relay's bind address; defaults to the packaged default. */
+  /** relay 的绑定地址；默认为包内默认值。 */
   readonly relayHost?: string | undefined
-  /** This machine's own name, the one its console and the tunnel both use. */
+  /** 这台机器自己的名称，控制台和隧道都使用它。 */
   readonly machine?: string | undefined
-  /** This machine's LAN IPv4 address, when it has one. */
+  /** 这台机器的局域网 IPv4 地址（如果有）。 */
   readonly lanAddress?: string | undefined
-  /** The remote entry this machine hangs off, or undefined when it has none. */
+  /** 这台机器挂靠的远程入口；没有时为 undefined。 */
   readonly hub?: MembershipHub | undefined
   /**
-   * Whether the console already has its administrator. False means the browser
-   * setup wizard is still waiting; defaults to true, so a caller that only
-   * cares about addresses gets the normal block.
+   * 控制台是否已有管理员。false 表示浏览器
+   * 设置向导仍在等待；默认为 true，因此只
+   * 关心地址的调用方会得到普通地址块。
    */
   readonly adminReady?: boolean | undefined
   readonly nodeVersion?: string | undefined
@@ -105,12 +105,12 @@ export interface BannerOptions {
 }
 
 /**
- * The hand-off for a console that has no administrator yet.
+ * 尚未设置管理员的控制台的交接说明。
  *
- * Setup happens in the browser now, and the wizard only answers on loopback —
- * so this one URL, opened on this machine, is the whole next step. It is
- * printed and never opened (D6), which is why it has to stand out on its own
- * line rather than sit inside a sentence.
+ * 现在通过浏览器完成设置，向导只在 loopback 上响应——
+ * 因此在这台机器上打开这个 URL 就是下一步。它会被
+ * 打印但从不自动打开（D6），所以必须单独占据
+ * 一行，而不是嵌在句子中。
  */
 function setupLines(consoleUrl: string): string[] {
   return [
@@ -131,16 +131,11 @@ function setupLines(consoleUrl: string): string[] {
 }
 
 /**
- * The address block printed once the local stack is up.
- *
- * The launcher never opens a browser (D6); this text is the whole hand-off to
- * the user, so it has to say what works right now, what needs a login, and what
- * to do about what does not work yet. Until the browser setup wizard has been
- * completed there is nothing to log into, so that single instruction replaces
- * the address box rather than competing with it.
- * @param options - the local ports, the LAN address, this machine's name and
- * remote entry, and whether the console already has an administrator.
- * @returns The block to print, without a trailing newline.
+ * 本地栈启动后打印的地址块。
+ * launcher 从不打开浏览器（D6）；这段文字是交给用户的全部说明，需说明当前可用、需要登录以及尚不可用的内容。
+ * 浏览器设置向导完成前没有可登录对象，因此这条说明会替代地址框。
+ * @param options - 本地端口、局域网地址、这台机器的名称、远程入口，以及控制台是否已有管理员。
+ * @returns 要打印的地址块，不带末尾换行符。
  */
 export function renderBanner(options: BannerOptions): string {
   const relayHost = options.relayHost ?? DEFAULT_RELAY_HOST
@@ -178,10 +173,10 @@ export function renderBanner(options: BannerOptions): string {
   } else {
     rows.push({ label: '局域网访问', value: `http://${options.lanAddress}:${relayPort}`, note: '需登录' })
   }
-  // dsh's own address is deliberately not offered as a way in: dsh 0.1.2
-  // authenticates browsers itself with a token that changes on every start, so
-  // a bare URL only leads to its 401. Everyone goes through the console, which
-  // performs that token exchange for them.
+  // dsh 自己的地址不会被作为入口提供：dsh 0.1.2
+  // 使用每次启动都会变化的 token 自行认证浏览器，因此
+  // 裸 URL 只会得到 401。所有人都通过控制台，控制台会
+  // 为他们执行 token 交换。
 
   if (hub === undefined) {
     status.push({ mark: '○', label: '没有远程入口', detail: `${machine} 只能从本机和局域网打开` })

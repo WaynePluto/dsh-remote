@@ -14,7 +14,7 @@ export const SELF_NAMESPACE = 'dsh-plugin-skills-inspector'
  *
  * ⚠️ 端点是**路径段**：浏览器 `rpc.call(CHANNEL, 'snapshot', …)` 实际 POST 到
  * `/skills-inspector/snapshot`，宿主的 handler 收到的是 `'snapshot'` 这个段。
- * 只打 `/skills-inspector` 一律 404（docs/02 §10.8）。
+ * 只打 `/skills-inspector` 一律 404（docs/dsh/transport.md）。
  */
 export const CHANNEL = '/skills-inspector'
 
@@ -35,7 +35,7 @@ export const INTERNAL_CODE = 'skills-inspector/internal'
 
 /**
  * 技能的来源桶，直接取自 dsh 的 `SkillSummary.source`
- * （dsh `packages/skill/skill/src/index.ts:40`）。
+ * 来源类型定义见 dsh `packages/skill/skill/src/index.ts:40`。
  *
  * 这就是「技能是全局还是项目级」的**权威答案**，不需要我们自己按路径猜：
  * 每个桶对应 `skill-filesystem` 里一个写死的根目录（`skill-filesystem/src/index.ts:246-258`）。
@@ -56,8 +56,8 @@ export type SkillSource =
 /**
  * 已知来源的展示顺序：项目级在前，全局级在后，内置垫底。
  *
- * 依据是 dsh 自己的优先级排序（rank 越小越优先，`skill-filesystem` 里
- * project-dsh < project-agents < custom < user-dsh < user-agents < bundled），
+ * 依据是 dsh 自己的优先级排序（rank 越小越优先，`skill-filesystem` 里的顺序
+ * 是 project-dsh < project-agents < custom < user-dsh < user-agents < bundled），
  * 所以这个顺序同时也是「同名技能谁会赢」的顺序 —— 用户看到的排列与实际生效
  * 的覆盖关系一致，不会产生误导。
  *
@@ -84,15 +84,9 @@ export function sourceOrder(source: SkillSource): number {
 }
 
 /**
- * 技能被加载进上下文的方式。
- *
- * dsh 有且只有两条加载路径，都会在会话日志里留下持久化事件
- * （dsh `packages/skill/tool-skill/src/index.ts`）：
- * - `model`：模型自己调 `skill` 工具 → `tool/call`，`name === 'skill'`；
- * - `user`：用户输入 `/技能名` → `agent/pre-step` 注入一条 `user/message`，
- *   其 `source.kind === 'skill-invocation'`。
- *
- * 这个区分对用户很有价值：「是我塞给它的，还是它自己判断要去拿的」。
+ * 技能加载方；两条路径都会在会话日志留下持久化事件（`packages/skill/tool-skill/src/index.ts`）。
+ * `model`：模型调用 `skill` 工具产生 `tool/call`；`user`：输入 `/技能名` 产生
+ * `user/message`，其 `source.kind === 'skill-invocation'`。
  */
 export type LoadedBy = 'model' | 'user'
 
@@ -119,8 +113,10 @@ export interface LoadRecord {
 export interface SkillEntry {
   /** 技能名，如 `dsh-source`。 */
   readonly name: string
-  /** 路由描述；已截断到 {@link MAX_DESCRIPTION}。 */
+  /** 路由描述；已截断到 {@link MAX_DESCRIPTION}，用于列表单行展示。 */
   readonly description: string
+  /** 路由描述的完整原始文本；展开行展示，不做截断。 */
+  readonly fullDescription: string
   /** `whenToUse` 附加指引；已截断。展开行才显示。 */
   readonly whenToUse?: string
   /** 来源桶，回答「全局还是项目级」。 */

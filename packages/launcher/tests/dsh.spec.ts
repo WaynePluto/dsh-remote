@@ -7,7 +7,7 @@ import { LauncherError } from '../src/errors.js'
 
 const DSH_BIN = join('C:', 'green', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
 
-/** An `exists` predicate accepting every plugin's overlay and its built artifacts. */
+/** 接受每个插件 overlay 及其构建产物的 `exists` 谓词。 */
 const installedAt = (roots: Readonly<Record<string, string>>) => (path: string): boolean =>
   DSH_PLUGIN_PACKAGES.some(({ name, artifacts }) => {
     const root = roots[name]
@@ -53,18 +53,18 @@ describe('dsh arguments', () => {
       trustedHosts: ['127.0.0.1'],
       patchFiles: [overlay],
     })
-    // --patch is a dsh launcher flag: after --profile, ahead of --no-open and
-    // everything else the web app parses itself.
+    // --patch 是 dsh launcher flag：位于 --profile 之后、--no-open 之前，
+    // 其余内容由 web app 自己解析。
     expect(args.slice(0, 6)).toEqual([
       DSH_BIN, '--profile', 'dsh-remote-web', '--patch', overlay, '--no-open',
     ])
   })
 
   it('never preloads anything: the proxy is the plugin\'s business, not the launcher\'s', () => {
-    // A launcher-installed environment proxy was a SECOND source of that fact,
-    // invisible in the UI, and it produced a real failure: switching the proxy
-    // off in Settings still went out through the environment's proxy while the
-    // page reported a direct connection (docs/proxy-plugin-design.md).
+    // launcher 安装的环境 proxy 是该事实的第二个来源，
+    // 在 UI 中不可见，并导致真实失败：在 Settings 中关闭 proxy
+    // 后仍然通过环境 proxy，而
+    // 页面却报告直连（docs/dsh/models.md）。
     const args = dshArguments({
       dshBin: DSH_BIN,
       profile: 'dsh-remote-web',
@@ -131,10 +131,10 @@ describe('dsh plugin overlays', () => {
   const packed = join('C:', 'green', 'dist')
   const source = join('D:', 'dev', 'dsh-remote', 'packages', 'launcher', 'src')
   const bareName = (name: string): string => (name.split('/')[1] ?? name).replace(/^dsh-plugin-/u, '')
-  /** Where each plugin sits in a green package. */
+  /** 每个插件在绿色包中的位置。 */
   const deployedRoots = Object.fromEntries(DSH_PLUGIN_PACKAGES.map(({ name }) =>
     [name, join(packed, '..', 'node_modules', ...name.split('/'))]))
-  /** Where each plugin sits in the workspace. */
+  /** 每个插件在 workspace 中的位置。 */
   const workspaceRoots = Object.fromEntries(DSH_PLUGIN_PACKAGES.map(({ name }) =>
     [name, join(source, '..', '..', 'plugins', bareName(name))]))
 
@@ -153,16 +153,16 @@ describe('dsh plugin overlays', () => {
   })
 
   it('refuses an overlay whose plugin was never built', () => {
-    // The overlay names ./dist/index.js; without it dsh fails deep inside its
-    // loader with a bare module-resolution error nobody can act on.
+    // overlay 指定 ./dist/index.js；缺少它时 dsh 会在其
+    // loader 深处以无人可处理的裸 module-resolution 错误失败。
     const overlays = DSH_PLUGIN_PACKAGES.map(({ name }) => join(deployedRoots[name] as string, PLUGIN_OVERLAY_FILE))
     expect(() => resolveDshPluginOverlays(packed, path => overlays.includes(path))).toThrow(LauncherError)
   })
 
   it('refuses a plugin whose browser bundle is missing, which would fail dsh\'s whole web UI', () => {
-    // dsh's client module scan aggregates a missing bundle into one loud throw
-    // that FAILS the fiber serving the page, so the check cannot stop at the
-    // Host module.
+    // dsh 的 client module scan 会将缺少 bundle 汇总成一个明确的 throw
+    //，使提供页面的 fiber 失败，因此检查不能只停在
+    // Host 模块。
     const withoutClientBundle = (path: string): boolean =>
       installedAt(deployedRoots)(path) && !path.endsWith(join('dist', 'client.js'))
     expect(DSH_PLUGIN_PACKAGES.some(({ artifacts }) =>

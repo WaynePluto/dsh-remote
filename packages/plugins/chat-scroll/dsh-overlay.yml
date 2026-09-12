@@ -1,0 +1,8 @@
+# dsh-remote 的 dsh 插件叠加层，由 launcher 用 `dsh --patch <这个文件>` 传给 dsh。
+# `./` 开头的路径由 dsh 锚定到本文件所在目录；不能写绝对路径。
+#
+# 本插件的行为全部在浏览器半：宿主半只是让 dsh 的客户端模块系统顺着
+# overlay 找到 package.json，再把 dist/client.js 下发到页面。
+- insert:
+    - id: chat-scroll
+      name: './dist/index.js'

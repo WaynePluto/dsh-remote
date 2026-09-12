@@ -8,22 +8,14 @@ import { formatSnapshot, logsOf, refresh, restartService, snapshot, stopService 
 
 const roots: string[] = []
 
-/**
- * Create a throwaway project directory.
- * @returns its absolute path.
- */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 function project(): string {
   const root = mkdtempSync(join(tmpdir(), 'dsh-services-mgr-'))
   roots.push(root)
   return root
 }
 
-/**
- * Build a service row rooted in one project.
- * @param root - the project directory.
- * @param over - fields to override.
- * @returns the row.
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 function record(root: string, over: Partial<ServiceRecord> = {}): ServiceRecord {
   const name = over.name ?? 'web'
   return {
@@ -37,21 +29,12 @@ function record(root: string, over: Partial<ServiceRecord> = {}): ServiceRecord 
   }
 }
 
-/**
- * A verdict function that answers from a name→verdict table.
- * @param table - verdicts by service name.
- * @returns the injected identify function.
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 function verdicts(table: Record<string, Identity>): (row: ServiceRecord) => Identity {
   return row => table[row.name] ?? 'gone'
 }
 
-/**
- * Write a log file for one service.
- * @param root - the project directory.
- * @param name - the service name.
- * @param body - the file contents.
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 function log(root: string, name: string, body: string): void {
   mkdirSync(join(root, '.agents', 'logs'), { recursive: true })
   writeFileSync(join(root, '.agents', 'logs', `${name}.log`), body, 'utf8')
@@ -67,7 +50,7 @@ describe('refresh', () => {
     writeRegistry(root, [record(root, { name: 'web' }), record(root, { name: 'dead' })])
     const live = refresh(root, { identify: verdicts({ web: 'ours', dead: 'gone' }) })
     expect(live.map(entry => entry.record.name)).toEqual(['web'])
-    // The repair is written back, so the next reader does not redo the probe.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(readRegistry(root).services.map(row => row.name)).toEqual(['web'])
   })
 
@@ -98,7 +81,7 @@ describe('snapshot', () => {
       port: 5173,
       identity: 'ours',
     }])
-    // `api` has a log but no process, so it is offered for reading only.
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`api`）
     expect(value.stoppedLogs).toEqual(['api'])
   })
 
@@ -125,7 +108,7 @@ describe('stopService', () => {
     expect(result.ok).toBe(false)
     expect(result.message).toContain('4242')
     expect(result.message).toMatch(/taskkill|kill --/u)
-    // Refusing must NOT drop the row: the service may well still be running.
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
     expect(readRegistry(root).services).toHaveLength(1)
   })
 
@@ -143,7 +126,7 @@ describe('restartService', () => {
     const result = await restartService(root, 'web', undefined, { identify: verdicts({ web: 'unknown' }) })
     expect(result.ok).toBe(false)
     expect(result.message).toContain('重启中止')
-    // The original row survives, because nothing was actually stopped.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(readRegistry(root).services).toHaveLength(1)
   })
 

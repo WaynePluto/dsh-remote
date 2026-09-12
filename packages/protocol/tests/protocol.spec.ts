@@ -234,8 +234,8 @@ describe('device challenge message', () => {
   })
 
   it('keeps field boundaries unambiguous when a field contains delimiters', () => {
-    // Delimiter-joined encodings would collapse these two identities into one
-    // message, letting a signature for one machine authenticate another.
+    // 用分隔符连接的编码会把这两个身份折叠成同一条
+    // 消息，使一台机器的签名能够认证另一台机器。
     const smuggled = Buffer.from(deviceChallengeMessage({
       nonce: 'nonce-value',
       machineId: 'machine-01\npc1',
@@ -281,8 +281,8 @@ describe('membership contract', () => {
     }
   })
 
-  // A malformed file must not silently read as "never joined": that would drop
-  // this machine off its hub without telling anyone.
+  // 格式错误的文件不能被静默读取为“从未加入”：否则会让
+  // 这台机器脱离 hub，却不通知任何人。
   it('throws on malformed contents instead of resetting membership', () => {
     expect(() => parseMembership('{')).toThrow()
     expect(() => parseMembership('{"version":99}')).toThrow()

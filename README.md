@@ -70,6 +70,8 @@ pnpm install
 pnpm build
 ```
 
+> 源码开发要求 pnpm >=10。项目不固定本地 pnpm 版本，直接使用你已安装的版本；CI 为保持可复现性固定使用 pnpm 10.17.0。
+
 ## 第一次启动
 
 在**你想当入口机器的那台机器**上：
@@ -157,6 +159,7 @@ node dist/relay.js totp reset    # 重置验证器，重新扫码
 - **不要在没有 HTTPS 的情况下暴露到公网。** 局域网 HTTP 是权衡后可接受的（启动时会打印高危警告）；公网必须套 HTTPS（Caddy 之类自动证书）。
 - dsh 自己没有任何认证，只听 `127.0.0.1`；所有门都在控制台这层——**控制台账号被突破等于机器沦陷**（能开会话就能跑命令）。
 - 登录连错 5 次锁 15 分钟。
+- **默认是固定 YOLO 模式**：`dsh-remote-web` 隐藏权限选择器，`bash` / `pwsh` / `write` / `edit` 直接按 dsh 进程用户权限执行，合法的权限请求自动允许；停用 `yolo-mode` 插件并重启 dsh 才能恢复 dsh 原生权限保护。`ask_user_question` 仍会向你提问。
 - **安全记录不在网页里**：登录成败、机器挂载/移除、改密码/重置验证器等事件同时写 relay 日志（JSON 行，`"audit":true`）和 `relay.db` 的 `audit_log` 表，永不自动过期；要查就在跑 relay 的机器上查。
 - 威胁模型与已知取舍见 [docs/04-security.md](docs/04-security.md)。
 
@@ -174,7 +177,9 @@ node dist/relay.js totp reset    # 重置验证器，重新扫码
 | 文档 | 内容 |
 |---|---|
 | [AGENTS.md](AGENTS.md) | 给 AI 助手的约定与铁律 |
-| [docs/01-decisions.md](docs/01-decisions.md) | 已定决策、已废弃方案清单 |
+| [docs/README.md](docs/README.md) | 文档导航与维护规则 |
+| [docs/plugins.md](docs/plugins.md) | 插件功能、使用入口与各包 README |
+| [docs/01-decisions.md](docs/01-decisions.md) | 当前决策、术语与产品边界 |
 | [docs/02-dsh-facts.md](docs/02-dsh-facts.md) | dsh 源码核实结论（每条带文件路径） |
 | [docs/03-architecture.md](docs/03-architecture.md) | 组件划分、隧道协议、请求流程 |
 | [docs/04-security.md](docs/04-security.md) | 认证方案、威胁模型、显式接受的风险 |
@@ -183,11 +188,11 @@ node dist/relay.js totp reset    # 重置验证器，重新扫码
 
 ## 当前进度
 
-M0–M2 已完成；M3 绿色包与启动器已可用。详见 [docs/05-roadmap.md](docs/05-roadmap.md)。
+隧道、认证、绿色包与 21 个内置插件已实现；实机验收和后续任务见 [docs/05-roadmap.md](docs/05-roadmap.md)。
 
 | 项 | 值 |
 |---|---|
-| dsh 版本 | `0.1.2-alpha.4`（developer preview，**会有破坏性变更**） |
+| dsh 版本 | `0.1.5-rc.2`（developer preview，**会有破坏性变更**） |
 | dsh 要求 Node | `^22.19.0 \|\| >=24.0.0` |
 | 运行时策略 | 使用用户本机 Node，不携带 Node 二进制 |
 | 原生模块 | 自身零原生模块（口令哈希用 Node 内置 scrypt）；dsh 自带按平台安装的二进制，所以发行包分平台 |

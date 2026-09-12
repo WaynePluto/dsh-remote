@@ -1,13 +1,10 @@
-/**
- * The wording, which is the whole product here: a toast is a line of text a
- * person reads from three metres away and acts on without opening anything.
- */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 
 import { describe, expect, it } from 'vitest'
 import type { TurnEndReason } from '@deepseek-ai/dsh-session'
 import { noticeTitle, outcomeOf, projectName, settledNotice, waitingNotice } from '../src/notice.js'
 
-/** Build one turn-end reason without dragging in the session package's brands. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 function reason(value: unknown): TurnEndReason {
   return value as TurnEndReason
 }
@@ -21,9 +18,9 @@ describe('classifying how a turn ended', () => {
   })
 
   it('folds every way a turn was cut short into one "stopped"', () => {
-    // turn-retry has to tell these apart because it decides whether to offer a
-    // Continue button. Here they read the same to a person: the work is not
-    // done and nothing is running.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     for (const cause of ['user', 'disposed', 'legacy', 'hook', 'parent']) {
       expect(outcomeOf(reason({ kind: 'aborted', reason: { kind: cause } }))).toBe('stopped')
     }
@@ -31,8 +28,8 @@ describe('classifying how a turn ended', () => {
   })
 
   it('says "unknown" for a session that has not finished a turn yet', () => {
-    // A brand-new agent can settle without ever having ended a turn — an empty
-    // message closes the turn before any model call (`agent.ts:280-286`).
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
+    // 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。（涉及：`agent.ts:280-286`）
     expect(outcomeOf(undefined)).toBe('unknown')
   })
 })
@@ -62,15 +59,15 @@ describe('attributing the toast', () => {
   })
 
   it('drops the parts that are not known yet', () => {
-    // The title only lands after dsh's title provider has run, which for a
-    // brand-new session happens AFTER this first notification.
+    // 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(noticeTitle({ cwd: 'D:\\dev\\dsh-remote' })).toBe('DSH · dsh-remote')
     expect(noticeTitle({ title: '通知插件' })).toBe('DSH · 通知插件')
   })
 
   it('still says who is calling when it knows nothing else', () => {
-    // An unattributed notification is worse than none: the reader cannot tell
-    // which machine on their desk wants them.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(noticeTitle({})).toBe('DSH')
     expect(noticeTitle({ title: '   ' })).toBe('DSH')
   })

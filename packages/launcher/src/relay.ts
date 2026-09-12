@@ -5,63 +5,59 @@ import { machineSlugSchema } from '@dsh-remote/protocol'
 import { launcherDirectory } from './dsh.js'
 import { LauncherError } from './errors.js'
 
-/** Used when the host name holds nothing that can become a DNS label. */
+/** 主机名中没有可转为 DNS label 的内容时使用。 */
 export const FALLBACK_MACHINE_SLUG = 'dsh-remote-machine'
 
-/** A slug is one DNS label, so it can later become one subdomain (D16). */
+/** slug 是一个 DNS label，之后可以成为一个子域名（D16）。 */
 const DNS_LABEL_MAX_LENGTH = 63
 
 /**
- * This machine's own name on its own console.
+ * 这台机器在自己控制台上的名称。
  *
- * Derived from the host name exactly like the connector derives its machine id
- * (`defaultMachineId` in `@dsh-remote/connector`), so the console, the tunnel and
- * the audit log all call one machine by the same name without configuration.
- * @param host - the host name; injected in tests.
- * @returns A valid machine slug.
+ * 与 connector 推导 machine id
+ *（`@dsh-remote/connector` 中的 `defaultMachineId`）完全相同，因此控制台、隧道和
+ * 审计日志无需配置就会使用同一个机器名。
+ * @param host - 主机名；测试中注入。
+ * @returns 有效的机器 slug。
  */
 export function defaultMachineSlug(host: string = hostname()): string {
   const label = host.toLowerCase()
     .replaceAll(/[^a-z0-9-]+/gu, '-')
     .slice(0, DNS_LABEL_MAX_LENGTH)
-    // After the slice, so a truncation that lands on a hyphen is cleaned up too.
+    // 在截断之后处理，因此落在连字符上的截断也会被清理。
     .replace(/^-+|-+$/gu, '')
   return machineSlugSchema.safeParse(label).success ? label : FALLBACK_MACHINE_SLUG
 }
 
-/** Where the relay lives and how it has to be started. */
+/** Relay 所在位置及其启动方式。 */
 export interface RelayEntry {
   readonly path: string
-  /** True for a TypeScript source, which needs tsx preloaded to run. */
+  /** TypeScript 源文件为 true，运行时需要预加载 tsx。 */
   readonly needsTsx: boolean
 }
 
 /**
- * Locate the relay relative to the launcher's own installed location.
- *
- * Every machine runs a relay (D16), so it ships inside the desktop package;
- * the candidate list mirrors the connector's for the same reason: one launcher
- * has to work from the checkout and from an unzipped package anywhere on disk.
- * @param directory - the launcher's directory; injected in tests.
- * @param exists - existence predicate; injected in tests.
- * @returns The first candidate that exists.
- * @throws LauncherError When no relay can be found.
+ * 相对于 launcher 自己的安装位置定位 relay。
+ * 每台机器都运行 relay（D16），因此它随桌面包提供；候选列表仿照 connector，保证 launcher 既能从 checkout 运行，也能从任意位置解压的包运行。
+ * @param directory - launcher 目录；测试中注入。
+ * @param exists - 存在性谓词；测试中注入。
+ * @returns 第一个存在的候选路径。
+ * @throws LauncherError 找不到 relay 时抛出。
  */
 export function resolveRelayEntry(
   directory: string = launcherDirectory(),
   exists: (path: string) => boolean = existsSync,
 ): RelayEntry {
   const candidates = [
-    // Green package, and the workspace too: the relay is a real dependency of
-    // the launcher, so both layouts put it at <root>/node_modules/@dsh-remote/relay.
-    // It is started in place rather than copied out to a flat dist/relay.js,
-    // because a bundle only resolves its own dependencies correctly from its own
-    // directory: pnpm is free to nest a version-conflicting transitive package
-    // underneath this one, and a copy elsewhere would never look there.
+    // 绿色包和 workspace 都是如此：relay 是 launcher 的真实依赖，
+    // 因此两种布局都会把它放在 <root>/node_modules/@dsh-remote/relay。
+    // 它会原地启动，而不是复制到扁平的 dist/relay.js，
+    // 因为 bundle 只有从自己的目录才能正确解析依赖：pnpm 可以将版本冲突的传递依赖嵌套
+    // 在该目录下，而其他位置的副本永远不会在那里查找。
     join(directory, '..', 'node_modules', '@dsh-remote', 'relay', 'dist', 'cli.js'),
-    // Workspace, built: packages/launcher/{dist,src} -> packages/relay/dist.
+    // Workspace，已构建：packages/launcher/{dist,src} -> packages/relay/dist。
     join(directory, '..', '..', 'relay', 'dist', 'cli.js'),
-    // Workspace, sources only.
+    // Workspace，仅源码。
     join(directory, '..', '..', 'relay', 'src', 'cli.ts'),
   ]
   const found = candidates.find(candidate => exists(candidate))
@@ -74,30 +70,25 @@ export function resolveRelayEntry(
   return { path: found, needsTsx: found.endsWith('.ts') }
 }
 
-/** Everything the relay child needs that is not fixed by dsh-remote's own rules. */
+/** relay 子进程需要、但未由 dsh-remote 自己规则固定的全部内容。 */
 export interface RelayArgumentOptions {
-  /** Bind address; `0.0.0.0` so a phone on the LAN can reach the console. */
+  /** 绑定地址；使用 `0.0.0.0` 使局域网手机可以访问控制台。 */
   readonly host: string
   readonly port: number
-  /** This machine's slug, used as the relay's `--direct-slug` route. */
+  /** 这台机器的 slug，用作 relay 的 `--direct-slug` 路由。 */
   readonly slug: string
-  /** SQLite file holding admin, sessions, devices and the audit log. */
+  /** 保存管理员、会话、设备和审计日志的 SQLite 文件。 */
   readonly data: string
-  /** dsh-remote home this machine shares with its connector. */
+  /** 这台机器与 connector 共享的 dsh-remote home。 */
   readonly home: string
 }
 
 /**
- * Build the argv of the relay child process.
- *
- * The shape follows the development stack (`scripts/dev-stack.mjs`), which is
- * the configuration the LAN path has actually been exercised with: plain HTTP
- * on the LAN, and `--lan-http` to say so explicitly — that flag is what turns
- * on browser authentication, so every non-loopback request still has to log in
- * (铁律 11).
- * @param entry - the resolved relay entry point.
- * @param options - bind address, port, slug, database and home.
- * @returns The arguments to pass to `node`.
+ * 构建 relay 子进程的 argv。
+ * 结构遵循开发栈（`scripts/dev-stack.mjs`），该配置已实际验证局域网路径：普通 HTTP 配合 `--lan-http`，明确开启浏览器认证，因此每个非 loopback 请求仍必须登录（铁律 11）。
+ * @param entry - 已解析的 relay 入口点。
+ * @param options - 绑定地址、端口、slug、数据库和 home。
+ * @returns 要传给 `node` 的参数。
  */
 export function relayArguments(entry: RelayEntry, options: RelayArgumentOptions): string[] {
   return [

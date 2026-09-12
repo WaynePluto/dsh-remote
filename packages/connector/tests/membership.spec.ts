@@ -1,5 +1,5 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -24,9 +24,13 @@ const HUB: MembershipHub = {
 }
 
 const homes: string[] = []
+/** Windows fs.watch 以文本比较监视路径和事件路径；os.tmpdir() 可能是 8.3 短路径。 */
+const TEST_TEMP_DIR = process.platform === 'win32'
+  ? join(homedir(), 'AppData', 'Local', 'Temp')
+  : tmpdir()
 
 function newHome(): string {
-  const home = mkdtempSync(join(tmpdir(), 'dsh-remote-membership-'))
+  const home = mkdtempSync(join(TEST_TEMP_DIR, 'dsh-remote-membership-'))
   homes.push(home)
   return home
 }
@@ -69,7 +73,7 @@ describe('membership file', () => {
     const { enrollToken: _spent, ...rest } = HUB
     expect(read(path)).toEqual({ version: 1, hub: rest })
     expect(readFileSync(path, 'utf8')).not.toContain(HUB.enrollToken ?? 'unreachable')
-    // Nothing left to clear: a second call must not rewrite the file.
+    // 没有剩余内容可清除：第二次调用不能重写文件。
     expect(clearSpentEnrollToken(path, HUB)).toBe(false)
   })
 
@@ -127,7 +131,7 @@ async function waitFor(check: () => boolean, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     if (check()) return
-    // eslint-disable-next-line no-await-in-loop -- the poll interval must pause the loop
+    // eslint-disable-next-line no-await-in-loop -- 轮询间隔必须暂停循环
     await delay(50)
   }
   throw new Error(`condition not met within ${String(timeoutMs)}ms`)

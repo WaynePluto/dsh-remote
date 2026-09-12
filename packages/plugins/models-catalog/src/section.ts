@@ -1,72 +1,58 @@
-/**
- * The settings side: reading what the pi-ai section currently says, and
- * writing a plan back into it.
- *
- * TWO NAMESPACES, ONE WRITE ORDER. The models live in `llm-pi-ai`, which dsh
- * owns and validates; the provenance lives in this plugin's own namespace.
- * Provenance is written FIRST on purpose. If the model write then fails — dsh
- * refuses a route it could not serve — provenance claims ids that are not in
- * the list, and {@link planRoute} drops a claim whose id is absent, so the next
- * pass self-heals. The other order would leave a list nobody admits to owning,
- * which every later pass would refuse to touch.
- *
- * @module @dsh-remote/dsh-plugin-models-catalog/section
- */
+/** settings section 的 provenance 读写与 models list facts。 */
 
 import z from '@deepseek-ai/schemastery'
 import type { Context } from '@deepseek-ai/cordis'
-// Type-only: activates the `ctx.settings` and `ctx.llm` Context merges.
+// 仅类型：读取 settings scope 和 llm provider display names。
 import type { SettingsPathOp } from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-llm'
 import { installedRoute } from './installed.js'
 import type { ModelEntry, RouteFacts, RoutePlan } from './planning.js'
 import { PI_AI_NAMESPACE, SELF_NAMESPACE } from './shared.js'
+import type { RuntimeModelSpec } from './shared.js'
 
-/** What this plugin recorded about one route it wrote. */
+/** 一个 route 的本插件 provenance。 */
 export interface RouteProvenance {
-  /** Ids this plugin added to that route's `models` list. */
+  /** 本插件添加的 model ids。 */
   addedIds: string[]
-  /** When the last write happened, as an ISO timestamp, for the panel and for humans reading settings.yaml. */
+  /** 动态 model 的 runtime specs。 */
+  models?: Record<string, RuntimeModelSpec>
+  /** 最近一次 provenance 更新的 ISO 时间。 */
   updatedAt: string
 }
 
-/** This plugin's whole settings section: provenance and nothing else. */
+/** 本插件 namespace 下全部 route provenance。 */
 export interface Provenance {
-  /** One entry per route this plugin has written, keyed by route. */
+  /** route 到 provenance 的映射。 */
   overlays: Record<string, RouteProvenance>
 }
 
-/**
- * Runtime schema of {@link Provenance}.
- *
- * A settings namespace rather than a file under the dsh home: it is persisted,
- * versioned, and rolled back by the same machinery as the overlay it describes,
- * and a human debugging "why did this model appear" finds both halves of the
- * answer in one document.
- */
+/** runtime model spec 的 settings schema。 */
+const runtimeModel = z.object({
+  id: z.string().required(),
+  name: z.string().required(),
+  api: z.string().required(),
+  route: z.string().required(),
+  contextWindow: z.number().step(1).min(1),
+  maxTokens: z.number().step(1).min(1),
+  input: z.array(z.union(['text', 'image'])),
+})
+
 export const Provenance: z<Provenance> = z.object({
   overlays: z.dict(z.object({
     addedIds: z.array(z.string()),
+    models: z.dict(runtimeModel),
     updatedAt: z.string(),
   })),
 })
 
-/** A record, or undefined for anything else. */
+/** 从 settings JSON 读取普通 record。 */
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined
 }
 
-/**
- * The `models` entries of one profile, as they are stored.
- *
- * Read defensively and carried verbatim: this plugin re-writes the list, so
- * anything it cannot parse must still survive the round trip. An entry with no
- * usable id is dropped, because it cannot be matched against anything.
- * @param profile - one provider profile.
- * @returns the entries, or an empty list when the profile carries no list.
- */
+/** 只读取形状有效的 `models` entries。 */
 function modelEntries(profile: Record<string, unknown>): readonly ModelEntry[] {
   const models = profile['models']
   if (!Array.isArray(models)) return []
@@ -79,7 +65,7 @@ function modelEntries(profile: Record<string, unknown>): readonly ModelEntry[] {
   })
 }
 
-/** The route keys the pi-ai section configures, in document order. */
+/** 从 `llm-pi-ai.providers` 读取 configured route profiles。 */
 function configuredRoutes(ctx: Context): ReadonlyMap<string, Record<string, unknown>> {
   const section = record(ctx.settings.get(PI_AI_NAMESPACE))
   const providers = record(section?.['providers'])
@@ -91,7 +77,7 @@ function configuredRoutes(ctx: Context): ReadonlyMap<string, Record<string, unkn
   return routes
 }
 
-/** Display names the llm directory holds, by route. */
+/** 从 llm service 读取 provider display names。 */
 function displayNames(ctx: Context): ReadonlyMap<string, string> {
   const names = new Map<string, string>()
   for (const entry of ctx.llm.listConfigurableProviders()) {
@@ -100,16 +86,7 @@ function displayNames(ctx: Context): ReadonlyMap<string, string> {
   return names
 }
 
-/**
- * Describe every route this plugin may act on.
- *
- * Only routes the pi-ai section actually configures: the directory also lists
- * every dormant catalog provider, and offering to add models to a provider
- * nobody has signed into would be offering to configure it by accident.
- * @param ctx - the plugin context.
- * @param provenance - the current provenance section.
- * @returns one fact set per configured route, in document order.
- */
+/** 合并 settings、provenance、内置 catalog，构造 planning 所需的 RouteFacts。 */
 export function readRouteFacts(ctx: Context, provenance: Provenance): readonly RouteFacts[] {
   const names = displayNames(ctx)
   return [...configuredRoutes(ctx)].map(([route, profile]) => {
@@ -119,45 +96,41 @@ export function readRouteFacts(ctx: Context, provenance: Provenance): readonly R
       route,
       displayName: names.get(route) ?? route,
       hasConfiguredApi: typeof profile['api'] === 'string' && profile['api'].length > 0,
+      ...typeof profile['api'] === 'string' && profile['api'].length > 0 ? { configuredApi: profile['api'] } : {},
+      shipped: installed.shipped,
       hasModelsList: Array.isArray(profile['models']) && (profile['models']).length > 0,
       configuredEntries: modelEntries(profile),
       ownedIds: recorded?.addedIds ?? [],
+      ownedModels: Object.values(recorded?.models ?? {}),
       managed: recorded !== undefined,
+      installedModels: installed.models,
       installedIds: installed.ids,
       installedApis: installed.apis,
     }
   })
 }
 
-/**
- * One path edit. dsh's own union, not a restatement of it: `set` carries a
- * value and `unset` must not, and borrowing the type is what keeps a future
- * op kind from silently type-checking here.
- */
+/** SettingsPathOp 的本地别名。 */
 type PathOp = SettingsPathOp
 
-/**
- * The provenance edits one plan implies.
- * @param plan - a planned route.
- * @param now - timestamp to record.
- * @returns the ops, or an empty list when provenance does not change.
- */
+/** 生成本插件 provenance 的 set/unset operations。 */
 function provenanceOps(plan: RoutePlan, now: string): readonly PathOp[] {
   const route = plan.preview.route
   if (plan.next === undefined) return []
   if (plan.nextOwnedIds.length === 0) return [{ op: 'unset', path: ['overlays', route] }]
+  const models = Object.fromEntries(plan.nextOwnedModels.map(model => [model.id, { ...model }]))
   return [{
     op: 'set',
     path: ['overlays', route],
-    value: { addedIds: [...plan.nextOwnedIds], updatedAt: now },
+    value: {
+      addedIds: [...plan.nextOwnedIds],
+      ...Object.keys(models).length === 0 ? {} : { models },
+      updatedAt: now,
+    },
   }]
 }
 
-/**
- * The model-list edits one plan implies.
- * @param plan - a planned route.
- * @returns the ops, or an empty list when the list does not change.
- */
+/** 生成 `llm-pi-ai.providers.<route>.models` 的 set/unset operations。 */
 function modelOps(plan: RoutePlan): readonly PathOp[] {
   const path = ['providers', plan.preview.route, 'models']
   if (plan.next === undefined) return []
@@ -165,24 +138,13 @@ function modelOps(plan: RoutePlan): readonly PathOp[] {
   return [{ op: 'set', path, value: plan.next.map(entry => ({ ...entry })) }]
 }
 
-/**
- * Commit a set of plans.
- *
- * Every route travels in ONE `mutate` call so the write is all-or-nothing:
- * dsh validates the whole resolved section, and a route it could not serve
- * must not leave the others half-applied.
- * @param ctx - the plugin context.
- * @param plans - the plans to commit; ones implying no write are ignored.
- * @returns whether anything was written.
- * @throws Error when dsh refuses the resulting section.
- */
+/** 先写 provenance，再写 pi-ai models；没有 models operation 时不 mutate。 */
 export async function commitPlans(ctx: Context, plans: readonly RoutePlan[]): Promise<boolean> {
   const now = new Date().toISOString()
   const provenance = plans.flatMap(plan => [...provenanceOps(plan, now)])
   const models = plans.flatMap(plan => [...modelOps(plan)])
   if (models.length === 0) return false
-  // Provenance first; see this module's header for why the order is not
-  // interchangeable.
+  // settings mutate 使用两个 namespace；operation 形状由 dsh SettingsScope 校验。
   await ctx.settings.mutate(SELF_NAMESPACE, provenance)
   await ctx.settings.mutate(PI_AI_NAMESPACE, models)
   return true

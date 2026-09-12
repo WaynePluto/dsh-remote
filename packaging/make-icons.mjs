@@ -1,26 +1,12 @@
-// 由 packaging/dsh-remote.svg 生成所有图标产物：
-//
-//   packaging/dsh-remote.ico                          图标文件（不进发行包，供外部使用与预览）
-//   packaging/win-launcher/rsrc_windows_amd64.syso  链进 dsh-remote.exe 的资源：
-//                                                     • 图标（托盘 / 资源管理器 / Alt-Tab）
-//                                                     • 应用程序清单（高 DPI 感知）
-//   packages/relay/src/icons.ts                     relay 控制台页面的 favicon（生成代码）
-//
-//   node packaging/make-icons.mjs [--keep]
-//
-// 三个都是源码资产：生成一次后提交，构建期不重新生成。改图标时改 SVG，重跑本脚本。
-// go build 会自动把包目录下的 *.syso 链进去，不需要任何 Go 模块依赖
-// （不用 rsrc / goversioninfo）。relay 侧把图标字节内联成 TS 模块，而不是运行时读文件：
-// 绿色包里的 relay 就地跑在 node_modules 里，多一个需要解析路径的资源文件只会多一个坏点。
-//
-// 清单里最要紧的是 DPI：不声明的话进程是 DPI unaware，Windows 会把托盘右键菜单、
-// MessageBox 连同里面的字一起位图拉伸，在 150% / 200% 缩放的屏幕上就是糊的。
-//
-// 为什么走 Chrome：SVG 里的鲸鱼取自 dsh 官方 favicon，是一条复杂路径，
-// 自己写光栅化器不划算；Node 侧又不引原生依赖（铁律 3）。Chrome 只在
-// 重新生成资源时需要，普通构建和运行都不需要它。
-//
-// --keep 保留中间产物（临时目录里的 PNG）用于排查。
+// 由 packaging/dsh-remote.svg 生成所有图标产物。
+// packaging/dsh-remote.ico：图标文件（不进发行包，供外部使用与预览）。
+// packaging/win-launcher/rsrc_windows_amd64.syso：链进 dsh-remote.exe 的托盘/资源图标和高 DPI 清单。
+// packages/relay/src/icons.ts：relay 控制台 favicon（生成代码）。
+// 命令：node packaging/make-icons.mjs [--keep]。
+// 三个是源码资产，生成一次后提交；go build 自动链入 *.syso，不需 Go 模块（不用 rsrc/goversioninfo）。
+// relay 将图标字节内联到 TS，避免绿色包运行时解析 node_modules 外的资源路径。
+// SVG 复杂路径由 Chrome 在重生成时光栅化，避免自写光栅器和 Node 原生依赖；普通构建/运行不需 Chrome。
+// 清单必须声明 DPI，否则 150%/200% 高分屏的托盘菜单和 MessageBox 会被位图拉伸；--keep 保留临时 PNG 供排查。
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -49,15 +35,11 @@ const webIcoSizes = [16, 32, 48]
 const webPngSize = 256
 
 /**
- * 应用程序清单。两件事：
- *
- * 1. **DPI 感知**。`dpiAware=true/pm` 给 Win8.1，`dpiAwareness=permonitorv2,permonitor`
- *    给 Win10 1703+；两行都写是官方推荐的写法，新系统读后者，旧系统读前者。
- *    不声明的话托盘菜单和 MessageBox 会被系统位图拉伸，高分屏上发糊。
- * 2. **asInvoker**。阻止 Windows 的安装程序启发式检测把它当成安装器而弹 UAC。
- *
- * 故意不声明对 comctl32 v6 的依赖：这个程序一个公共控件都不用，
- * 而 SxS 依赖解析失败是会直接启动不了的。
+ * 应用程序清单同时保证 DPI 感知和不被误判为安装器。
+ * `dpiAware=true/pm` 覆盖 Win8.1，`dpiAwareness=permonitorv2,permonitor` 覆盖 Win10 1703+；
+ * 两行是官方推荐写法，不声明会让托盘菜单和 MessageBox 在高分屏被位图拉伸。
+ * `asInvoker` 阻止安装程序启发式检测弹 UAC。
+ * 故意不声明 comctl32 v6：程序不用公共控件，SxS 依赖解析失败会直接阻止启动。
  */
 function applicationManifest(version) {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -79,9 +61,9 @@ function applicationManifest(version) {
   </application>
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
     <application>
-      <!-- Windows 10 / 11 -->
+      <!-- Windows 10 / 11 系统 -->
       <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
-      <!-- Windows 8.1 -->
+      <!-- Windows 8.1 系统 -->
       <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>
     </application>
   </compatibility>
@@ -299,22 +281,13 @@ const alignTo8 = value => (value + 7) & ~7
 
 /**
  * 把同一批图像写成 COFF 资源对象文件（.syso），go build 会直接链入。
- *
- * 为什么自己写而不用 rsrc / goversioninfo：那两个工具要引 Go 模块，
- * 而本仓对这个 exe 的约束是“不用 cgo、不引 Go 模块依赖”（docs/06 §5）；
- * 图像字节又已经在手上，剩下的只是一个固定格式的容器。
- *
- * 结构：
- *   IMAGE_FILE_HEADER
- *   一个 .rsrc 节（资源目录树 + IMAGE_RESOURCE_DATA_ENTRY + 图像原文）
- *   每个 data entry 一条重定位（ADDR32NB）：OffsetToData 必须是链接后的 RVA，
- *     只能交给链接器填；字段里预先写“节内偏移”当加数，符号指向节本身
- *   符号表：一个静态节符号 + 它的辅助记录；字符串表为空（4 字节长度）
- *
- * 图标资源的约定：RT_ICON 存每张图的原文（与 .ico 里的条目字节完全一致），
- * RT_GROUP_ICON 存一张“目录”把它们串起来；Windows 拿 ID 最小的 group 当程序图标。
- * 清单是 RT_MANIFEST（类型 24）ID 1，即 CREATEPROCESS_MANIFEST_RESOURCE_ID，
- * 内容是不带 BOM 的 UTF-8 XML。
+ * 不用 rsrc / goversioninfo：它们要引 Go 模块，而本仓 exe 约束是不使用 cgo/Go 模块（docs/06 §5）；
+ * 图像字节已在手上，剩下的是固定格式容器。
+ * 结构：IMAGE_FILE_HEADER、一个 .rsrc 节（目录树、IMAGE_RESOURCE_DATA_ENTRY、图像原文）、
+ * data entry 的 ADDR32NB 重定位（OffsetToData 留节内偏移，交给链接器补 RVA，符号指向本节）。
+ * 符号表含静态节符号及辅助记录，字符串表仅含 4 字节长度。
+ * RT_ICON 存各图原文，RT_GROUP_ICON 串成目录，Windows 取 ID 最小的 group 作程序图标。
+ * RT_MANIFEST（类型 24）ID 1 是 CREATEPROCESS_MANIFEST_RESOURCE_ID，内容为无 BOM UTF-8 XML。
  */
 function buildResourceObject(entries, manifestXml) {
   const RT_ICON = 3
@@ -335,7 +308,7 @@ function buildResourceObject(entries, manifestXml) {
     groupHeader[at + 1] = size & 0xff
     groupHeader[at + 2] = 0 // 颜色数（0 = 256 色以上）
     groupHeader[at + 3] = 0
-    groupHeader.writeUInt16LE(1, at + 4) // planes
+    groupHeader.writeUInt16LE(1, at + 4) // planes（平面数）
     groupHeader.writeUInt16LE(32, at + 6) // 位深
     groupHeader.writeUInt32LE(bytes.length, at + 8)
     groupHeader.writeUInt16LE(index + 1, at + 12) // 对应的 RT_ICON 资源 ID
@@ -383,10 +356,10 @@ function buildResourceObject(entries, manifestXml) {
   const section = Buffer.alloc(sectionSize)
 
   const writeDirectory = (offset, count) => {
-    section.writeUInt32LE(0, offset) // Characteristics
-    section.writeUInt32LE(0, offset + 4) // TimeDateStamp
-    section.writeUInt16LE(0, offset + 8) // MajorVersion
-    section.writeUInt16LE(0, offset + 10) // MinorVersion
+    section.writeUInt32LE(0, offset) // Characteristics（特征字段）
+    section.writeUInt32LE(0, offset + 4) // TimeDateStamp（时间戳）
+    section.writeUInt16LE(0, offset + 8) // MajorVersion（主版本）
+    section.writeUInt16LE(0, offset + 10) // MinorVersion（次版本）
     section.writeUInt16LE(0, offset + 12) // 命名条目：一个都没有
     section.writeUInt16LE(count, offset + 14)
   }
@@ -412,8 +385,8 @@ function buildResourceObject(entries, manifestXml) {
       // OffsetToData 先写节内偏移，重定位会把它加成 RVA。
       section.writeUInt32LE(item.dataOffset, item.dataEntryOffset)
       section.writeUInt32LE(item.bytes.length, item.dataEntryOffset + 4)
-      section.writeUInt32LE(0, item.dataEntryOffset + 8) // CodePage
-      section.writeUInt32LE(0, item.dataEntryOffset + 12) // Reserved
+      section.writeUInt32LE(0, item.dataEntryOffset + 8) // CodePage（代码页）
+      section.writeUInt32LE(0, item.dataEntryOffset + 12) // Reserved（保留字段）
       item.bytes.copy(section, item.dataOffset)
     })
   })
@@ -426,7 +399,7 @@ function buildResourceObject(entries, manifestXml) {
     const at = RELOCATION_BYTES * index
     relocations.writeUInt32LE(item.dataEntryOffset, at) // 要修补的字段位置
     relocations.writeUInt32LE(0, at + 4) // 符号表下标：0 = .rsrc 节符号
-    relocations.writeUInt16LE(3, at + 8) // IMAGE_REL_AMD64_ADDR32NB
+    relocations.writeUInt16LE(3, at + 8) // 重定位类型：IMAGE_REL_AMD64_ADDR32NB
   })
 
   const HEADER_BYTES = 20
@@ -436,33 +409,33 @@ function buildResourceObject(entries, manifestXml) {
   const symbolOffset = relocationOffset + relocations.length
 
   const header = Buffer.alloc(HEADER_BYTES)
-  header.writeUInt16LE(0x8664, 0) // IMAGE_FILE_MACHINE_AMD64
+  header.writeUInt16LE(0x8664, 0) // IMAGE_FILE_MACHINE_AMD64（AMD64 文件类型）
   header.writeUInt16LE(1, 2) // 节数
-  header.writeUInt32LE(0, 4) // TimeDateStamp：写 0，保证可重现构建
+  header.writeUInt32LE(0, 4) // TimeDateStamp（时间戳）：写 0，保证可重现构建
   header.writeUInt32LE(symbolOffset, 8)
   header.writeUInt32LE(2, 12) // 符号数：节符号 + 它的辅助记录
   header.writeUInt16LE(0, 16) // 可选头大小：对象文件没有
-  header.writeUInt16LE(0, 18) // Characteristics
+  header.writeUInt16LE(0, 18) // Characteristics（特征字段）
 
   const sectionHeader = Buffer.alloc(SECTION_HEADER_BYTES)
   sectionHeader.write('.rsrc', 0, 'latin1')
-  sectionHeader.writeUInt32LE(0, 8) // VirtualSize
-  sectionHeader.writeUInt32LE(0, 12) // VirtualAddress
+  sectionHeader.writeUInt32LE(0, 8) // VirtualSize（虚拟大小）
+  sectionHeader.writeUInt32LE(0, 12) // VirtualAddress（虚拟地址）
   sectionHeader.writeUInt32LE(section.length, 16)
   sectionHeader.writeUInt32LE(sectionDataOffset, 20)
   sectionHeader.writeUInt32LE(relocationOffset, 24)
   sectionHeader.writeUInt32LE(0, 28) // 行号表
   sectionHeader.writeUInt16LE(items.length, 32)
   sectionHeader.writeUInt16LE(0, 34)
-  // CNT_INITIALIZED_DATA | ALIGN_8BYTES | MEM_READ
+  // CNT_INITIALIZED_DATA | ALIGN_8BYTES | MEM_READ（资源节属性）
   sectionHeader.writeUInt32LE(0x40000040 | 0x00400000, 36)
 
   const symbols = Buffer.alloc(SYMBOL_BYTES * 2)
   symbols.write('.rsrc', 0, 'latin1')
-  symbols.writeUInt32LE(0, 8) // Value
+  symbols.writeUInt32LE(0, 8) // Value（值）
   symbols.writeInt16LE(1, 12) // SectionNumber（1 基）
-  symbols.writeUInt16LE(0, 14) // Type
-  symbols[16] = 3 // IMAGE_SYM_CLASS_STATIC
+  symbols.writeUInt16LE(0, 14) // Type（类型）
+  symbols[16] = 3 // IMAGE_SYM_CLASS_STATIC（静态符号类）
   symbols[17] = 1 // 辅助记录数
   symbols.writeUInt32LE(section.length, SYMBOL_BYTES) // 辅助：节长度
   symbols.writeUInt16LE(items.length, SYMBOL_BYTES + 4) // 辅助：重定位数

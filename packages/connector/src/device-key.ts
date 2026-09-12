@@ -11,7 +11,7 @@ import { userInfo } from 'node:os'
 import { dirname, join } from 'node:path'
 import { defaultDshRemoteHome } from './membership.js'
 
-/** The device key file is unusable and no retry can fix it without operator action. */
+/** 设备密钥文件不可用，必须由操作者处理，重试无法修复。 */
 export class DeviceKeyError extends Error {
   constructor(message: string, options?: { cause: unknown }) {
     super(message, options)
@@ -19,28 +19,28 @@ export class DeviceKeyError extends Error {
   }
 }
 
-/** Only the shape the loader needs, so callers may pass a pino logger or a stub. */
+/** 仅保留加载器需要的形状，因此调用方可以传入 pino logger 或 stub。 */
 export interface DeviceKeyLogger {
   warn(context: Record<string, unknown>, message: string): void
 }
 
 export interface DeviceKey {
-  /** Absolute path the private key was loaded from or written to. */
+  /** 加载或写入私钥的绝对路径。 */
   readonly path: string
-  /** Raw 32-byte Ed25519 public key, base64url without padding (43 chars). */
+  /** 原始 32 字节 Ed25519 公钥，无填充的 base64url（43 个字符）。 */
   readonly publicKey: string
   /**
-   * Sign challenge bytes with this device's private key.
-   * @param message Bytes from `deviceChallengeMessage`.
-   * @returns The raw 64-byte signature, base64url without padding.
+   * 使用此设备的私钥签名 challenge 字节。
+   * @param message 来自 `deviceChallengeMessage` 的字节。
+   * @returns 原始 64 字节签名，无填充的 base64url。
    */
   sign(message: Uint8Array): string
 }
 
-/** File name of the Ed25519 identity inside the dsh-remote home. */
+/** dsh-remote home 中 Ed25519 身份的文件名。 */
 export const DEVICE_KEY_FILE_NAME = 'device.key'
 
-/** `~/.dsh-remote/device.key`; one identity per OS user, not per checkout. */
+/** `~/.dsh-remote/device.key`；每个 OS 用户一个身份，而不是每个 checkout 一个。 */
 export function defaultDeviceKeyPath(): string {
   return join(defaultDshRemoteHome(), DEVICE_KEY_FILE_NAME)
 }
@@ -56,8 +56,8 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * Windows ignores the POSIX mode bits, so the 0o600 above is cosmetic there:
- * without this the key stays readable by every other local account.
+ * Windows 会忽略 POSIX mode 位，因此上面的 0o600 在那里只是表面设置：
+ * 没有下面的处理，其他本地账号仍可读取密钥。
  */
 function restrictWindowsAcl(path: string, logger: DeviceKeyLogger): void {
   const domain = process.env.USERDOMAIN
@@ -98,8 +98,8 @@ function readPrivateKey(pem: string, path: string): KeyObject {
 }
 
 function exportRawPublicKey(privateKey: KeyObject, path: string): string {
-  // The JWK `x` member is the raw 32-byte point in base64url already; slicing
-  // SPKI DER by offset would silently break if the encoding ever changed.
+  // JWK 的 `x` 成员已经是 base64url 编码的原始 32 字节点；按偏移截取
+  // SPKI DER 会在编码变化时静默失效。
   const jwk = createPublicKey(privateKey).export({ format: 'jwk' })
   const { x } = jwk
   if (jwk.kty !== 'OKP' || jwk.crv !== 'Ed25519' || typeof x !== 'string') {
@@ -115,8 +115,8 @@ function generate(path: string, logger: DeviceKeyLogger): string {
 
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
   try {
-    // 'wx' loses the race deliberately: a second connector starting at the same
-    // moment must adopt the first key instead of overwriting a registered one.
+    // 'wx' 有意在竞争中失败：同时启动的第二个 connector
+    // 必须采用第一个密钥，而不是覆盖已注册的密钥。
     writeFileSync(path, pem, { mode: 0o600, flag: 'wx' })
   } catch (error) {
     if (errorCode(error) === 'EEXIST') return readFileSync(path, 'utf8')
@@ -137,17 +137,17 @@ const fallbackLogger: DeviceKeyLogger = {
 }
 
 export interface LoadDeviceKeyOptions {
-  /** Defaults to `defaultDeviceKeyPath()`. */
+  /** 默认为 `defaultDeviceKeyPath()`。 */
   readonly path?: string | undefined
   readonly logger?: DeviceKeyLogger | undefined
 }
 
 /**
- * Load this machine's Ed25519 identity, creating it on first run.
+ * 加载这台机器的 Ed25519 身份，并在首次运行时创建。
  *
- * @param options Key file location and a logger for non-fatal hardening failures.
- * @returns The loaded identity; the same file always yields the same public key.
- * @throws DeviceKeyError When the file exists but is not a usable Ed25519 key.
+ * @param options 密钥文件位置，以及用于记录非致命加固失败的 logger。
+ * @returns 加载的身份；同一个文件始终产生同一个公钥。
+ * @throws DeviceKeyError 文件存在但不是可用的 Ed25519 密钥时抛出。
  */
 export function loadOrCreateDeviceKey(options: LoadDeviceKeyOptions = {}): DeviceKey {
   const path = options.path ?? defaultDeviceKeyPath()

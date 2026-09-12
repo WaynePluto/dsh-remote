@@ -1,0 +1,8 @@
+# dsh-remote 的 dsh 插件叠加层，由 launcher 用 `dsh --patch <这个文件>` 传给 dsh。
+# `./` 开头的路径由 dsh 锚定到本文件所在目录；不能写绝对路径。
+#
+# 宿主半没有业务逻辑；它存在是为了让 dsh 的客户端模块扫描器发现本包的
+# `dsh.client` 声明，并把 dist/client.js 下发到浏览器。
+- insert:
+    - id: user-message-fork
+      name: './dist/index.js'

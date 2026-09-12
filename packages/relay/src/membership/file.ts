@@ -9,7 +9,7 @@ import {
   type Membership,
 } from '@dsh-remote/protocol'
 
-/** The membership file exists but cannot be used; only an operator can fix it. */
+/** membership 文件存在但无法使用；只有操作员可以修复它。 */
 export class MembershipFileError extends Error {
   constructor(message: string, options?: { cause: unknown }) {
     super(message, options)
@@ -28,12 +28,11 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * Read this machine's membership.
- * @param path - absolute path of the membership file.
- * @returns The parsed membership, or undefined when the file does not exist.
- * @throws MembershipFileError When the file exists but is unreadable or
- * malformed. Silently treating that as "no membership" would strand the machine
- * while telling the operator everything is fine.
+ * 读取这台机器的 membership。
+ * @param path - membership 文件的绝对路径。
+ * @returns 解析后的 membership；文件不存在时返回 undefined。
+ * @throws MembershipFileError 文件存在但不可读或格式错误时抛出。静默将其视为“没有 membership”
+ * 会让机器失去联系，同时还会误导操作员以为一切正常。
  */
 export function readMembershipFile(path: string): Membership | undefined {
   let raw: string
@@ -57,16 +56,14 @@ export function readMembershipFile(path: string): Membership | undefined {
 }
 
 /**
- * Persist this machine's membership, replacing whatever was there.
+ * 持久化这台机器的 membership，替换原有内容。
  *
- * The write is atomic (temp file in the same directory, then rename) because
- * the connector may read the file at any moment: a torn write would leave this
- * machine unable to parse its own membership and therefore unable to dial any
- * hub, which is exactly the state nobody can recover from remotely.
- * @param path - absolute path of the membership file.
- * @param membership - the membership to persist; validated before it is written
- * so a file that `parseMembership` would reject can never reach the disk.
- * @throws MembershipFileError When the file could not be written.
+ * 写入是原子的（同目录临时文件，然后 rename），因为 connector 可能随时读取文件：写入撕裂会
+ * 让这台机器无法解析自己的 membership，因而无法拨号到任何 hub，这正是无人能从远程恢复的状态。
+ * @param path - membership 文件的绝对路径。
+ * @param membership - 要持久化的 membership；写入前先校验，因此 `parseMembership` 会拒绝的文件
+ * 永远不会落盘。
+ * @throws MembershipFileError 无法写入文件时抛出。
  */
 export function writeMembershipFile(path: string, membership: Membership): void {
   const validated = membershipSchema.parse(membership)
@@ -74,9 +71,9 @@ export function writeMembershipFile(path: string, membership: Membership): void 
   const temporary = join(directory, `.${MEMBERSHIP_FILE_NAME}.${randomBytes(6).toString('hex')}.tmp`)
   try {
     mkdirSync(directory, { recursive: true, mode: 0o700 })
-    // 'wx' never overwrites: the random suffix makes a collision a bug, not a race.
+    // 'wx' 永不覆盖：随机后缀让冲突成为 bug，而不是竞态。
     writeFileSync(temporary, serializeMembership(validated), { mode: 0o600, flag: 'wx' })
-    // writeFileSync's mode is still subject to the process umask.
+    // writeFileSync 的 mode 仍会受进程 umask 影响。
     chmodSync(temporary, 0o600)
     renameSync(temporary, path)
   } catch (error) {
@@ -89,11 +86,11 @@ export function writeMembershipFile(path: string, membership: Membership): void 
 }
 
 /**
- * Drop this machine out of its hub.
- * @param path - absolute path of the membership file.
+ * 让这台机器退出其 hub。
+ * @param path - membership 文件的绝对路径。
  */
 export function clearMembershipFile(path: string): void {
-  // A hub-less file rather than an unlink: the connector then reads a definite
-  // "not a member" instead of having to tell a deleted file from a missing home.
+  // 保留无 hub 的文件而不是 unlink：connector 之后会读到明确的
+  // “not a member”，而不必区分文件被删除还是 home 缺失。
   writeMembershipFile(path, { version: 1 })
 }

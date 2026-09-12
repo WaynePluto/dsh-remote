@@ -1,8 +1,8 @@
 {
-  // The browser half is checked in its own program on purpose: both halves of
-  // dsh's connection package merge a `ctx.connection` into cordis's Context —
-  // the Host registry in one, the browser caller in the other — and one program
-  // holding both would see them collide.
+  // 浏览器半特意使用独立的 program： 两半的
+  // dsh 的 connection 包会把 `ctx.connection` 合并进 cordis 的 Context——
+  // 一个 program 中是宿主注册表，另一个中是浏览器调用方；若放进同一个 program
+  // 两者就会发生冲突。
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",

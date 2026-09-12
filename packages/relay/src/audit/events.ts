@@ -1,65 +1,57 @@
 /**
- * The relay's audit vocabulary.
+ * relay 的审计词表。
  *
- * Event names are data an operator greps for months later, so they live here as
- * a closed set: a typo in a call site fails typecheck instead of silently
- * forking the trail into two spellings nobody notices.
+ * 事件名是操作员数月后用 grep 检索的数据，因此集中放在这里作为
+ * 封闭集合：调用处的拼写错误会导致 typecheck 失败，而不是悄悄
+ * 把审计轨迹分裂成两个无人察觉的拼写。
  */
 export const AUDIT_EVENTS = {
-  /** The sole v1 administrator was created by `dsh-remote-relay init`. */
+  /** 通过 `dsh-remote-relay init` 创建了唯一的 v1 管理员。 */
   adminInitialized: 'admin.initialized',
-  /** The administrator password was replaced; every session was revoked. */
+  /** 管理员密码已替换；所有会话均已吊销。 */
   adminPasswordChanged: 'admin.password-changed',
-  /** A fresh TOTP secret was staged after a lost authenticator; sessions revoked. */
+  /** 验证器丢失后已暂存新的 TOTP secret；会话均已吊销。 */
   adminTotpReset: 'admin.totp-reset',
-  /** A staged TOTP secret was confirmed by a code from the authenticator. */
+  /** 验证器生成的动态码已确认暂存的 TOTP secret。 */
   totpEnrollmentConfirmed: 'totp.enrollment-confirmed',
-  /** Password plus TOTP accepted; a session was issued. */
+  /** 密码和 TOTP 均通过；已签发会话。 */
   loginSucceeded: 'login.succeeded',
-  /** A browser login attempt was rejected (bad user, password, or code). */
+  /** 浏览器登录尝试被拒绝（账号、密码或动态码错误）。 */
   loginFailed: 'login.failed',
-  /** A refresh token was revoked on the operator's request. */
+  /** 按操作员请求吊销了 refresh token。 */
   logout: 'logout',
-  /** A registered machine passed the Ed25519 signature challenge. */
+  /** 已注册机器通过 Ed25519 签名挑战。 */
   deviceAuthenticated: 'device.authenticated',
-  /** A machine spent an enrollment token and registered its public key. */
+  /** 机器使用注册令牌并登记了公钥。 */
   deviceEnrolled: 'device.enrolled',
-  /** A control-channel handshake was rejected (bad signature, revoked, bad token). */
+  /** 控制信道握手被拒绝（签名错误、已吊销或令牌错误）。 */
   deviceAuthFailed: 'device.auth-failed',
-  /** A single-use enrollment token was minted for one machine slug. */
+  /** 为一个机器 slug 签发了一次性注册令牌。 */
   deviceEnrollTokenCreated: 'device.enroll-token-created',
-  /** A machine's registration was revoked and its unused tokens burned. */
+  /** 机器注册已吊销，其未使用令牌也已作废。 */
   deviceRevoked: 'device.revoked',
-  /** This machine joined another relay's hub (D16). */
+  /** 这台机器加入了另一个 relay 的 hub（D16）。 */
   membershipJoined: 'membership.joined',
-  /** This machine left its hub and stopped being reachable through it. */
+  /** 这台机器已离开自己的 hub，不再能通过该 hub 访问。 */
   membershipLeft: 'membership.left',
 } as const
 
-/** Every event name the relay may record. */
+/** relay 可能记录的所有事件名。 */
 export type AuditEvent = (typeof AUDIT_EVENTS)[keyof typeof AUDIT_EVENTS]
 
 /**
- * Runtime list of every event name.
+ * 所有事件名的运行时列表。
  *
- * It exists so a test can assert the level rule covers the whole vocabulary,
- * and so whoever greps the trail has one authoritative list to copy names from.
+ * 它让测试可以断言级别规则覆盖完整词表，
+ * 也让检索审计轨迹的人有一份可复制事件名的权威列表。
  */
 export const AUDIT_EVENT_NAMES: readonly AuditEvent[] = Object.freeze(Object.values(AUDIT_EVENTS))
 
 /**
- * Successful events that still deserve a warn line.
+ * 成功但仍应记录 warn 行的事件。
  *
- * The level rule an operator can rely on:
- * - routine success (`login.succeeded`, `device.authenticated`, ...) -> `info`;
- * - any failure -> `warn`, because a failed security operation is never routine;
- * - the events below -> `warn` even when they succeed, because they change
- *   security state (a machine loses access, a credential is replaced, a machine
- *   leaves its hub). These are exactly the lines someone investigating an
- *   incident scrolls for, and they must not be buried in the info stream.
- *
- * Nothing is logged at `error` by the level rule: `error` is reserved for the
- * relay failing to record an event at all (see AuditRecorder).
+ * 失败始终记录为 `warn`，常规成功为 `info`；会改变安全状态的成功事件
+ * 也记录为 `warn`，便于调查。`error` 只表示 relay 无法记录事件。
  */
 const ALWAYS_WARN_EVENTS: ReadonlySet<AuditEvent> = new Set<AuditEvent>([
   AUDIT_EVENTS.adminPasswordChanged,
@@ -68,7 +60,7 @@ const ALWAYS_WARN_EVENTS: ReadonlySet<AuditEvent> = new Set<AuditEvent>([
   AUDIT_EVENTS.membershipLeft,
 ])
 
-/** Level rule from the comment above, in one place so it cannot drift. */
+/** 将上面的级别规则集中在此处，避免规则漂移。 */
 export function auditLogLevel(event: AuditEvent, success: boolean): 'info' | 'warn' {
   if (!success) return 'warn'
   return ALWAYS_WARN_EVENTS.has(event) ? 'warn' : 'info'

@@ -15,7 +15,7 @@ function authorityOf(host: string): URL | undefined {
   }
 }
 
-/** An IP literal or `localhost`: the Host shapes a port-routed hub is reached by. */
+/** IP 字面量或 `localhost`：Host 决定如何到达端口路由的 hub。 */
 function isAddressLiteralHostname(hostname: string): boolean {
   const unbracketed = hostname.startsWith('[') && hostname.endsWith(']')
     ? hostname.slice(1, -1)
@@ -32,17 +32,14 @@ function subdomainSlug(hostname: string, config: RelayConfig): string | undefine
 }
 
 /**
- * Validate original browser routing headers and resolve the target machine.
+ * 校验浏览器的原始路由 header 并解析目标机器。
  *
- * D16 fixes the resolution order: subdomain, then the dedicated member port the
- * request arrived on, then `directSlug` for a bare IP/localhost Host. A member
- * listener therefore wins over `directSlug`, which keeps answering for the hub's
- * own machine on the main port.
- * @param req The browser request, headers untouched.
- * @param config Resolved relay configuration.
- * @param memberSlug The machine this listener is dedicated to, when the request
- * arrived on a member port.
- * @returns The resolved slug and original authority, or the status to answer.
+ * D16 固定了解析顺序：子域名，然后请求到达的专用成员端口，最后是裸 IP/localhost Host 的
+ * `directSlug`。成员 listener 因此优先于 `directSlug`，后者继续为 hub 自有机器在主端口上服务。
+ * @param req 浏览器请求，header 保持不变。
+ * @param config 已解析的 relay 配置。
+ * @param memberSlug 此 listener 专用的机器；请求到达成员端口时提供。
+ * @returns 已解析的 slug 和原始 authority，或应返回的状态码。
  */
 export function checkBrowserRequest(
   req: IncomingMessage,
@@ -63,14 +60,14 @@ export function checkBrowserRequest(
       slug = config.directSlug
     }
   } else if (fromSubdomain === undefined) {
-    // Same Host discipline as directSlug: a port-routed hub is reached by IP or
-    // localhost, and an unrecognized name must not be routed anywhere.
+    // 与 directSlug 遵循相同的 Host 规则：端口路由的 hub 通过 IP 或 localhost 到达，
+    // 无法识别的名称不得路由到任何地方。
     if (isAddressLiteralHostname(hostname)) slug = memberSlug
   } else if (fromSubdomain === memberSlug) {
     slug = memberSlug
   }
-  // A member port serves exactly one machine, so a subdomain naming a different
-  // machine is refused rather than silently cross-routed onto this listener.
+  // 成员端口只服务一台机器，因此指向其他机器的子域名会被拒绝，
+  // 而不会静默跨路由到此 listener。
   if (slug === undefined) return { ok: false, status: 404, message: 'not found' }
 
   if (req.headers['sec-fetch-site'] === 'cross-site') {
@@ -93,15 +90,14 @@ export function checkBrowserRequest(
 }
 
 /**
- * Headers to send upstream: the browser's own, untouched (模式 A).
+ * 要发送到上游的 header：浏览器自己的 header，保持不变（模式 A）。
  *
- * dsh sees the authority the browser actually used and accepts it through its
- * own `--trusted-host` declaration, so the relay never rewrites Host or Origin
- * (铁律 7). There is no mode B: dsh 0.1.2 dropped the loopback-pinned
- * privileged-method list that used to be the only reason to forge a loopback
- * Host, and forging one would only disable dsh's DNS-rebinding defense.
- * @param req The browser request.
- * @returns A copy of the incoming headers.
+ * dsh 会看到浏览器实际使用的 authority，并通过自己的 `--trusted-host` 声明接受它，
+ * 因此 relay 绝不重写 Host 或 Origin（铁律 7）。不存在模式 B：dsh 0.1.2 删除了以前唯一
+ * 需要伪造 loopback Host 的 loopback 固定 privileged-method 列表，伪造 Host 只会关闭 dsh 的
+ * DNS rebinding 防护。
+ * @param req 浏览器请求。
+ * @returns 入站 header 的副本。
  */
 export function upstreamHeaders(req: IncomingMessage): OutgoingHttpHeaders {
   return { ...req.headers }

@@ -6,19 +6,16 @@ import { hashOpaqueToken } from './token-hash.js'
 import type { EnrollTokenRecord } from './types.js'
 
 /**
- * How long an enrollment token stays usable.
+ * 注册令牌保持可用的时长。
  *
- * Fixed rather than configurable, and short like an SMS code: the operator
- * issues it on one machine and pastes it into another machine's console right
- * away, so a longer window buys nothing and only widens the time a bearer
- * secret is worth stealing.
+ * 固定而非可配置，并且像短信验证码一样短：操作员在一台机器上签发后立即粘贴到另一台机器的
+ * 控制台，因此更长的窗口没有收益，只会延长 bearer secret 值得被窃取的时间。
  */
 export const ENROLL_TOKEN_TTL_MINUTES = 5
 
 /**
- * The two sentences every issuing surface must repeat verbatim. The CLI and the
- * admin console show the same plaintext exactly once, so they must also make the
- * same promise about what happens if the operator loses it.
+ * 所有签发界面都必须逐字重复的两句话。CLI 和管理控制台只显示同一明文一次，
+ * 因此也必须对令牌丢失后的处理方式作出同样承诺。
  */
 export const ENROLL_TOKEN_SHOWN_ONCE_NOTICE
   = '这是唯一一次显示：数据库只保存哈希，关闭窗口后无法找回，丢失只能重新签发。'
@@ -26,19 +23,17 @@ export const ENROLL_TOKEN_SINGLE_USE_NOTICE
   = `令牌只能用一次，${String(ENROLL_TOKEN_TTL_MINUTES)} 分钟内有效：对方首次连上来注册设备公钥后即失效，记录当场从数据库删除；没用掉的过期后也会被清掉。`
 
 export interface IssuedEnrollToken {
-  /** Plaintext token; never log it, never put it in a URL, never store it. */
+  /** 明文令牌；绝不记录日志、放入 URL 或存储。 */
   readonly token: string
   readonly record: EnrollTokenRecord
 }
 
 /**
- * Mint a single-use connector enrollment token and write its audit row.
+ * 签发一次性 connector 注册令牌并写入审计行。
  *
- * Both the CLI and the admin console go through here so hashing, storage, the
- * lifetime and the audit event stay in one place; only the plaintext return
- * value differs in how it is displayed.
- * @param options Target slug, and who issued it from where.
- * @returns The plaintext token and the stored record (which holds only a hash).
+ * CLI 和管理控制台都经过这里，使哈希、存储、有效期和审计事件集中维护；只有明文返回值的展示方式不同。
+ * @param options 目标 slug，以及签发者和来源。
+ * @returns 明文令牌和存储记录（其中只保存哈希）。
  */
 export function issueDeviceEnrollToken(options: {
   store: RelayStore

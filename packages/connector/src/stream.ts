@@ -10,12 +10,12 @@ import {
 } from '@dsh-remote/protocol'
 
 export interface WorkStreamDeps {
-  /** Normalized relay WebSocket origin. */
+  /** 规范化后的 relay WebSocket origin。 */
   readonly relayUrl: string
   readonly dshHost: string
   readonly dshPort: number
   readonly logger: Logger
-  /** Report a local dsh failure on the control channel (LOCAL_DSH_UNAVAILABLE). */
+  /** 在控制信道报告本地 dsh 失败（LOCAL_DSH_UNAVAILABLE）。 */
   readonly reportLocalUnavailable: (message: string) => void
 }
 
@@ -77,9 +77,9 @@ function connectLocalDsh(host: string, port: number, signal: AbortSignal): Promi
 }
 
 /**
- * The relay may push the first bytes before the client sees `open`, and ws drops
- * `message` events that have no listener, so the duplex must be created inside
- * the open handler rather than after an `await`.
+ * relay 可能在客户端看到 `open` 前推送首字节，而 ws 会丢弃
+ * 没有 listener 的 `message` 事件，因此必须在
+ * open handler 内创建 duplex，而不是在 `await` 之后创建。
  */
 function dialDataStream(url: string, signal: AbortSignal): Promise<Duplex> {
   return new Promise((resolve, reject) => {
@@ -99,7 +99,7 @@ function dialDataStream(url: string, signal: AbortSignal): Promise<Duplex> {
       if (done) return
       done = true
       cleanup()
-      // `terminate()` during CONNECTING emits an error; keep it observed.
+      // CONNECTING 期间调用 `terminate()` 会产生 error；保留 listener 观察它。
       ws.once('error', () => {})
       ws.terminate()
       reject(error)
@@ -123,7 +123,7 @@ function dialDataStream(url: string, signal: AbortSignal): Promise<Duplex> {
   })
 }
 
-/** Byte-for-byte bridge; the connector never parses what flows through it. */
+/** 逐字节桥接；connector 从不解析经过其中的内容。 */
 function bridge(a: Duplex, b: Duplex, onDone: (error?: Error) => void): void {
   let done = false
   const finish = (error?: Error): void => {
@@ -142,9 +142,9 @@ function bridge(a: Duplex, b: Duplex, onDone: (error?: Error) => void): void {
 }
 
 /**
- * One work connection per browser connection (frp/ngrok model, see
- * docs/03-architecture.md §4.3): dial back a data WebSocket and splice it onto
- * a fresh TCP connection to the local dsh.
+ * 每个浏览器连接对应一个工作连接（frp/ngrok 模型，见
+ * docs/03-architecture.md §4.3）：回拨数据 WebSocket，并将它拼接到
+ * 本地 dsh 的新 TCP 连接。
  */
 export class WorkStreamPool {
   readonly #deps: WorkStreamDeps
@@ -180,8 +180,8 @@ export class WorkStreamPool {
       return
     }
 
-    // Pair with the relay first so a local dsh failure tears down the waiting
-    // HTTP/WebSocket request immediately instead of making it wait for token TTL.
+    // 先与 relay 配对，这样本地 dsh 失败时会立即拆掉等待中的
+    // HTTP/WebSocket 请求，而不是让它等待 token TTL。
     let local: net.Socket
     try {
       local = await connectLocalDsh(dshHost, dshPort, signal)

@@ -1,27 +1,16 @@
 /**
- * Adds one durable Retry or Continue action above the composer after a turn fails or stops.
- * dsh keeps its own automatic retries; this plugin deliberately shows no live request-error question.
- * A closed turn needs a plugin-sourced notice to wake dsh. If ordinary messages are already queued,
- * the Host refuses the click rather than letting followup() send a queued user message by mistake.
- * @module @dsh-remote/dsh-plugin-turn-retry
+ * Host half：在 turn 结束后发布 durable retry projection，并提供经过 queue/agent guard 的 retry RPC。
+ * 只追加 dsh 已知的 plugin notice message，不追加自定义 session event。
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import { z as zod } from 'zod'
-// Type-only: activates the Context merges for the services below.
+// 仅类型：激活本插件读取的 Agent/session projection Context merge。
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-// The one RUNTIME import of a dsh package in this repository's plugins, and
-// therefore the one that belongs in `dependencies` rather than
-// `devDependencies`: a green package built by `pnpm deploy --prod` drops dev
-// trees, and a missing `createUserMessage` would only surface when someone
-// pressed Retry. It is imported rather than reimplemented because it mints the
-// branded MessageId and deep-freezes the message the way the session invariant
-// expects (`packages/llm/llm/src/message.ts:180-187`); it is a pure factory
-// with no module state, so resolving it is a correctness win with no
-// same-instance requirement.
+// `createUserMessage` 是唯一需要的 runtime dsh import，必须放在 dependencies；它生成 branded MessageId 并 deep-freeze notice message，不能在插件内重实现。
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { ConnectionRpcResult } from '@deepseek-ai/dsh-client-connection'
@@ -41,19 +30,13 @@ export type {
 } from './shared.js'
 export { foldTurnRetry, INITIAL_STATE, stoppedCause } from './projection.js'
 
-/** Cordis plugin name, as it appears in dsh's plugin tree and its diagnostics. */
+/** Cordis 插件名，出现在 dsh 诊断信息中。 */
 export const name = 'dsh-remote-turn-retry'
 
-/** Required services for the durable banner and its authenticated action. */
+/** 所需 service：agents、sessionProjections 和 connection。 */
 export const inject = ['agents', 'sessionProjections', 'connection']
 
-/**
- * Wire/state schema of the projection.
- *
- * The projection registry only ever calls `.parse()` on this
- * (`ErasedDefinition` in `packages/session/session-projection/src/index.ts`),
- * so a bundled zod is duck-type compatible with dsh's own.
- */
+/** projection registry 使用的 wire/state schema；registry 会调用 `.parse()`，且 `ErasedDefinition` 要求 plain JSON。 */
 const stateSchema: zod.ZodType<TurnRetryState> = zod.union([
   zod.object({
     kind: zod.literal('failed'),
@@ -69,26 +52,10 @@ const stateSchema: zod.ZodType<TurnRetryState> = zod.union([
   }),
 ]).nullable() as unknown as zod.ZodType<TurnRetryState>
 
-/**
- * How much of a failure message the model-facing notice repeats.
- *
- * The banner may show up to {@link MESSAGE_LIMIT} characters because a human is
- * reading it and can scroll. The notice is context the model pays for on every
- * subsequent request, and past the first line a provider's error body says
- * nothing more about what to do next.
- */
+/** 面向模型的 notice message 截断上限；页面 banner 可显示更长的原始错误。 */
 export const NOTICE_MESSAGE_LIMIT = 300
 
-/**
- * The notice a post-mortem retry appends.
- *
- * Model-facing, so it is written in English and says what actually happened
- * rather than pretending to be a user instruction: the model can see the failed
- * or stopped turn in its own history, and what it needs is permission to
- * continue from there instead of restarting.
- * @param pending - the turn this retry picks up.
- * @returns the message content.
- */
+/** 构造 model-facing 的英文 notice：区分 failed request 与 stopped turn，并明确从现有 history 继续而非重复已完成步骤。 */
 export function retryNoticeText(pending: TurnRetryView): string {
   const tail = 'Continue the work of that turn from where it stopped, '
     + 'using the conversation history above; do not repeat steps that already succeeded '
@@ -108,40 +75,27 @@ export function retryNoticeText(pending: TurnRetryView): string {
     + `The user pressed Retry. ${tail}`
 }
 
-/**
- * The one-line transcript summary of that notice.
- *
- * Rendered as dsh's collapsed context row, so it must stay under the 120
- * characters `createUserMessage` enforces (`llm/src/message.ts:114-125`).
- * @param pending - the turn this retry picks up.
- * @returns the summary line.
- */
+/** 一行的转录摘要；使用中文「继续/重试」文案，供 dsh collapsed context row 显示。 */
 export function retryNoticeSummary(pending: TurnRetryView): string {
   return pending.kind === 'stopped'
     ? `继续第 ${String(pending.turn)} 轮没跑完的工作`
     : `重试第 ${String(pending.turn)} 轮失败的模型请求`
 }
 
-/** Reject subagent turns because their parent owns the work. */
+/** 只有 live root agent 可以被本插件驱动；subagent 的工作归 parent。 */
 function isLiveRoot(ctx: Context, agent: Agent): boolean {
   return ctx.agents.roots().includes(agent)
 }
 
 /**
- * Re-drive a session whose last turn failed or was cut short.
- *
- * Exported for tests, which call it without an HTTP carrier.
- * @param ctx - Host plugin context.
- * @param sessionId - the session to retry.
- * @returns whether a retry turn was started, and why not when it was not.
+ * 重驱动一个失败或停止的 session turn。
+ * 先恢复 live agent，再检查 root、idle、pending input 和 projection；拒绝时不修改 queue。
  */
 export async function retrySession(ctx: Context, sessionId: string): Promise<RetryResult> {
   const id = sessionId as SessionId
   let agent = ctx.agents.get(id)
   if (agent === undefined) {
-    // Cold session: the page can legitimately show the banner for a session
-    // whose agent was disposed. `resolveAgent` is the Session Controller's own
-    // resolve-or-resume path, with its concurrent-activation de-duplication.
+    // cold session 没有 live agent 时，使用 Session Controller 的 `resolveAgent`；无法恢复则返回 no-agent。
     const controller = ctx.get('sessionController')
     if (controller === undefined) return { started: false, reason: 'no-agent' }
     const resolved = await controller.resolveAgent(id)
@@ -150,19 +104,15 @@ export async function retrySession(ctx: Context, sessionId: string): Promise<Ret
   }
   if (!isLiveRoot(ctx, agent)) return { started: false, reason: 'subagent' }
   if (agent.status !== 'idle') return { started: false, reason: 'busy' }
-  // The projection is the single source of truth the button and this guard
-  // share: if it says nothing is pending, the page is looking at a stale view.
+  // 读取 projection 作为 button 和 guard 的 single source of truth。
   const pending = ctx.sessionProjections.stateOf(agent.session, PROJECTION_KEY)
   if (pending === undefined || pending === null) return { started: false, reason: 'not-failed' }
-  // followup() appends behind ordinary next-turn input. Refuse without mutating
-  // or waking the inbox, otherwise the oldest queued message runs instead.
+  // 保护 nextTurn queue：已有普通输入时不能让 retry notice 抢先发送。
   const pendingInput = agent.inbox.nextTurn.length > 0
   if (pendingInput) return { started: false, reason: 'pending-input' }
   agent.followup(createUserMessage({
     content: [{ type: 'text', text: retryNoticeText(pending) }],
-    // `form: 'notice'` + `summary` is dsh's own shape for "a plugin put
-    // something in the history"; the transcript renders it as one collapsed
-    // row instead of a user bubble.
+    // 使用 dsh 自己的 `form: 'notice'` + `summary` shape，让 notice 以折叠行进入 history，而不是 user bubble。
     source: {
       kind: 'plugin',
       plugin: SELF_NAMESPACE,
@@ -173,15 +123,7 @@ export async function retrySession(ctx: Context, sessionId: string): Promise<Ret
   return { started: true }
 }
 
-/**
- * Dispatch one decoded RPC call.
- *
- * Exported for tests, which drive the endpoints without an HTTP carrier.
- * @param ctx - Host plugin context.
- * @param endpoint - channel-relative endpoint name.
- * @param payload - the browser's payload.
- * @returns the result, or a coded failure.
- */
+/** 解码并分发 retry RPC；校验 channel endpoint/payload，Host 异常转换为稳定错误码。 */
 export async function dispatch(
   ctx: Context,
   endpoint: string,
@@ -213,26 +155,18 @@ export async function dispatch(
   }
 }
 
-/**
- * Mount the projection and the authenticated retry channel.
- * @param ctx - Host plugin context.
- */
+/** 注册 durable projection 和 authenticated retry channel。 */
 export function apply(ctx: Context): void {
   ctx.sessionProjections.register({
     key: PROJECTION_KEY,
-    // 2, not 1: the state grew a `kind` discriminator and a stopped-turn
-    // variant. A cached row from the previous shape would parse into a banner
-    // with no kind at all, so the bump is what makes dsh drop it
-    // (`session-projection/src/index.ts:429,459,511`).
+    // stateVersion 变化时让 dsh 丢弃旧 shape；`view` 返回 projection 完整值而非 delta。
     stateVersion: 2,
     stateSchema,
     init: () => INITIAL_STATE,
     apply: foldTurnRetry,
     wire: {
       viewSchema: stateSchema,
-      // The fold state IS the whole value, so the view is the identity. That
-      // also preserves the reference, which is what suppresses a publication
-      // when an unrelated event leaves the state untouched.
+      // projection fold 返回的 state 已是完整 wire value，保持引用以抑制无关发布。
       view: state => state,
     },
   })

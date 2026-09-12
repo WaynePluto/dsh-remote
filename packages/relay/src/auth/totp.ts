@@ -3,7 +3,7 @@ import { generate, generateSecret, generateURI, verify } from 'otplib'
 export const TOTP_ISSUER = 'dsh-remote'
 export const TOTP_PERIOD_SECONDS = 30
 export const TOTP_DIGITS = 6
-/** Accept one adjacent period for ordinary phone/server clock drift. */
+/** 允许相邻的一个时间周期，以容忍普通手机/服务器时钟漂移。 */
 export const TOTP_TOLERANCE_SECONDS = 30
 
 export interface TotpEnrollment {
@@ -22,14 +22,14 @@ function requiredLabel(value: string, name: string): string {
 }
 
 /**
- * Build the `otpauth://` URI an authenticator scans.
+ * 构建验证器扫描的 `otpauth://` URI。
  *
- * Split out from {@link createTotpEnrollment} so a page can re-draw the QR code
- * for a secret that is already staged — a browser reload during enrollment must
- * not mint a new secret and invalidate the one the operator just scanned.
- * @param options The account label shown in the authenticator, the base32
- * secret to encode, and the issuer name (defaults to the relay's).
- * @returns The provisioning URI.
+ * 从 {@link createTotpEnrollment} 中拆出，使页面可以为已暂存的 secret
+ * 重新绘制 QR code——绑定期间刷新浏览器不能
+ * 重新签发 secret 并使操作员刚扫描的 secret 失效。
+ * @param options 验证器中显示的账号标签、要编码的 base32
+ * secret，以及签发者名称（默认使用 relay 的名称）。
+ * @returns 配置 URI。
  */
 export function totpProvisioningUri(options: {
   label: string
@@ -53,7 +53,7 @@ export function createTotpEnrollment(
   return { secret, uri: totpProvisioningUri({ label, secret, issuer }) }
 }
 
-/** Exposed for enrollment tests and CLI confirmation; login normally only verifies. */
+/** 供注册测试和 CLI 确认使用；登录通常只做验证。 */
 export function generateTotp(secret: string, now = Date.now()): Promise<string> {
   return generate({
     secret,

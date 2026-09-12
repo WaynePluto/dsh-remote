@@ -1,113 +1,62 @@
-/**
- * The handful of facts both halves of this plugin have to agree on.
- *
- * This module is imported by the Host half AND compiled into the browser
- * bundle, so it must stay free of Node built-ins and of every dsh package: the
- * client program (`tsconfig.client.json`) type-checks it with `"types": []`.
- *
- * @module @dsh-remote/dsh-plugin-agents-md/shared
- */
+/** Host/browser 两半共享的 JSON contract；保持无 Node/dsh runtime import，client `"types": []` 也能独立 typecheck。 */
 
-/**
- * The copy namespace of this plugin's settings page.
- *
- * The package name, per AGENTS.md. Note this plugin registers NO settings
- * namespace: its state is the `AGENTS.md` file itself, not a settings section,
- * so this string is only a locale key. Keeping the same spelling anyway means
- * the settings page id, the locale namespace and the package all read alike.
- */
+/** settings/RPC 共用的本插件 namespace。 */
 export const NAMESPACE = 'dsh-plugin-agents-md'
 
-/** The private RPC channel the editor reads and writes the file through. */
+/** 编辑器读写文件所经过的私有 RPC 通道。 */
 export const CHANNEL = '/agents-md'
 
-/** Read the current file. */
+/** 读取当前文件。 */
 export const LOAD_ENDPOINT = 'load'
 
-/** Write the editor's contents back to the file. */
+/** 将编辑器内容写回文件。 */
 export const SAVE_ENDPOINT = 'save'
 
-/** Every endpoint of {@link CHANNEL}. */
+/** {@link CHANNEL} 的全部端点。 */
 export const ENDPOINTS = [LOAD_ENDPOINT, SAVE_ENDPOINT] as const
 
-/** One endpoint name of {@link CHANNEL}. */
+/** {@link CHANNEL} 的一个端点名。 */
 export type AgentsMdEndpoint = typeof ENDPOINTS[number]
 
-/**
- * The largest document this page will read or write, in UTF-8 bytes.
- *
- * ⚠️ This is NOT a limit this plugin invented. dsh's own instruction loader
- * refuses to read a candidate larger than its `maxSourceBytes`
- * (`agent-instructions/src/files.ts` `readBounded`), whose default is 1 MiB —
- * and a file over that limit is dropped SILENTLY, so a person who saved one
- * through this page would see it stored and never applied. Refusing the write
- * here is the only way that failure becomes visible.
- */
+/** UTF-8 读取和写入的硬上限，与 dsh `readBounded`/`maxSourceBytes` 契约对齐。 */
 export const MAX_BYTES = 1_048_576
 
-/**
- * What the Host reports about the global instruction file.
- *
- * `content` is the file exactly as stored, empty when it does not exist yet;
- * `exists` is what distinguishes "an empty file" from "no file", which is a
- * real difference to dsh (an absent candidate contributes nothing at all).
- */
+/** `/load` 返回的文件状态。 */
 export interface AgentsMdDocument {
-  /** The file's contents, or the empty string when it does not exist. */
+  /** 文件内容；文件不存在时为空字符串。 */
   content: string
-  /** Whether the file exists on disk right now. */
+  /** 文件当前是否存在于磁盘。 */
   exists: boolean
-  /** Symbolic location for display, e.g. `~/.dsh/AGENTS.md`. */
+  /** 用于显示的符号路径，例如 `~/.dsh/AGENTS.md`。 */
   displayPath: string
-  /** Size of the stored content in UTF-8 bytes. */
+  /** 已存内容的 UTF-8 字节数。 */
   bytes: number
 }
 
-/** What one save did. */
+/** 一次保存的结果。 */
 export interface AgentsMdSaveResult {
-  /** The document as it stands after the write. */
+  /** 写入后的文档状态。 */
   document: AgentsMdDocument
 }
 
-/** What the editor sends to {@link SAVE_ENDPOINT}. */
+/** 编辑器发送给 {@link SAVE_ENDPOINT} 的内容。 */
 export interface AgentsMdSaveRequest {
-  /** The full replacement contents. */
+  /** 完整的替换内容。 */
   content: string
 }
 
-/**
- * Whether an endpoint name is one this channel serves.
- * @param endpoint - channel-relative endpoint name.
- * @returns whether it is a known endpoint.
- */
+/** 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。 */
 export function isAgentsMdEndpoint(endpoint: string): endpoint is AgentsMdEndpoint {
   return (ENDPOINTS as readonly string[]).includes(endpoint)
 }
 
-/**
- * Count the UTF-8 bytes of a string without Node's Buffer.
- *
- * Shared rather than duplicated because the page refuses an oversized document
- * BEFORE sending it and the Host refuses it again on arrival; two different
- * measurements would let a document the page accepted be rejected on the wire,
- * which is exactly the "page said yes, host said no" failure shape this
- * repository has already been bitten by (docs/02 §8.8).
- * @param text - the text to measure.
- * @returns its length in UTF-8 bytes.
- */
+/** 计算文本的 UTF-8 字节数，用于保存前的有界校验。 */
 export function utf8Bytes(text: string): number {
-  // TextEncoder is available in Node 22 and in every browser dsh supports.
+  // Node 22 以及 dsh 支持的所有浏览器都提供 TextEncoder。
   return new TextEncoder().encode(text).length
 }
 
-/**
- * Why a document cannot be saved, or undefined when it can.
- *
- * The single validator both halves call, so the page can never accept a
- * document the Host will refuse.
- * @param content - the candidate document.
- * @returns a machine-readable fault, or undefined when the content is fine.
- */
+/** 检查内容是否超过 AGENTS.md 字节上限。 */
 export function documentFault(content: string): 'too-large' | undefined {
   return utf8Bytes(content) > MAX_BYTES ? 'too-large' : undefined
 }

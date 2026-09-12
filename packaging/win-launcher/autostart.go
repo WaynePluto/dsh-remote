@@ -7,15 +7,15 @@ import (
 )
 
 const (
-	// Per-user autostart. HKCU needs no elevation, and the stack is a per-user
-	// thing: it serves that user's dsh, from that user's home directory.
+	// 按用户设置开机自启动。HKCU 无需提权；stack 也是按用户隔离的
+	// 它服务于该用户、运行在该用户 home 目录中的 dsh。
 	runKeyPath   = `Software\Microsoft\Windows\CurrentVersion\Run`
 	runValueName = "dsh-remote"
 )
 
-// autostartEnabled reads the registry every time the menu is opened. The
-// registry is the truth — the user may have edited it, or a cleanup tool may
-// have removed the entry — and a cached copy could only ever lie about it.
+// autostartEnabled 每次打开菜单都读取注册表。
+// 注册表才是真实状态——用户可能手动改过它，清理工具也可能
+// 删除了条目；缓存只会造成错误显示。
 func autostartEnabled() bool {
 	var key syscall.Handle
 	if err := syscall.RegOpenKeyEx(hkeyCurrentUser, utf16Ptr(runKeyPath), 0, keyQueryValue, &key); err != nil {
@@ -28,8 +28,8 @@ func autostartEnabled() bool {
 	return err == nil
 }
 
-// setAutostart writes the executable's current absolute path, so a package that
-// was moved and switched on again points at where it is now.
+// setAutostart 写入可执行文件当前的绝对路径，这样软件包
+// 移动后重新开启自启动，指向的就是新位置。
 func setAutostart(executable string, enabled bool) error {
 	var key syscall.Handle
 	if err := syscall.RegOpenKeyEx(hkeyCurrentUser, utf16Ptr(runKeyPath), 0, keySetValue, &key); err != nil {
@@ -44,8 +44,8 @@ func setAutostart(executable string, enabled bool) error {
 		}
 		return nil
 	}
-	// Quoted: the path almost always contains spaces, and the Run key hands its
-	// value to CreateProcess as a command line.
+	// 加引号：路径几乎总会包含空格，而 Run 键会把它的
+	// 值作为命令行交给 CreateProcess。
 	value := utf16.Encode([]rune(`"` + executable + `"`))
 	value = append(value, 0)
 	result, _, _ := procRegSetValueExW.Call(

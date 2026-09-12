@@ -47,8 +47,8 @@ describe('relay jwt secret', () => {
     const path = jwtSecretFilePath(newHome())
     loadOrCreateJwtSecret(path, () => undefined)
     if (process.platform === 'win32') {
-      // Windows ignores the POSIX bits; the ACL is tightened with icacls and
-      // asserting on it here would test icacls, not the launcher.
+      // Windows 会忽略 POSIX 位；ACL 由 icacls 收紧，
+      // 在这里断言会测试 icacls，而不是 launcher。
       expect(statSync(path).isFile()).toBe(true)
       return
     }

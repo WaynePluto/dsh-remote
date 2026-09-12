@@ -7,7 +7,7 @@ import { hashPassword, verifyPassword } from './password.js'
 import { SessionManager, type AuthPrincipal, type SessionTokens } from './session.js'
 import { verifyTotp } from './totp.js'
 
-/** Only ever hashed, never compared against a real one; it satisfies the policy so it can be hashed at all. */
+/** 只会被哈希，从不与真实密码比较；它满足策略，因而可以被哈希。 */
 const DUMMY_PASSWORD = 'Not a real user password 0'
 
 export class InvalidCredentialsError extends Error {
@@ -143,7 +143,7 @@ export async function createAuthenticationService(options: {
   store: RelayStore
   jwtSecret: Uint8Array
   rateLimit?: LoginRateLimiterOptions
-  /** Sink for the audit lines this service emits; defaults to the shared one. */
+  /** 此服务输出审计行的出口；默认使用共享出口。 */
   logger?: Logger
 }): Promise<AuthenticationService> {
   const sessions = new SessionManager({ store: options.store, jwtSecret: options.jwtSecret })

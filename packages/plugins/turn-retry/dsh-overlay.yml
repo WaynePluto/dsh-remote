@@ -1,19 +1,11 @@
 # dsh-remote 的 dsh 插件叠加层，由 launcher 用 `dsh --patch <这个文件>` 传给 dsh。
 #
-# 形态与 models-catalog / copilot-auth / remote-privileged 相同：`./` 开头的 insert
-# 名字由 dsh 锚定到本文件所在目录再转成 file:// URL，所以这里只写相对路径（铁律 D17）。
+# `./` insert 名字由 dsh 锚定到本文件目录再转成 file:// URL，故这里只写相对路径（D17）。
 #
-# 这个插件是**双面**的：insert 加载宿主半（dist/index.js），dsh 的客户端模块系统顺着
-# 这个路径往上找到本包的 package.json，读 `dsh.client` 与 exports["./client"]，把
-# dist/client.js 一起下发。**dist/client.js 缺失会让 dsh 启动即失败**，不是静默降级。
-#
-# `id` 不是装饰：dsh 的补丁层顺序是
-#   bundle 层 → profile 的 cordis.patch.yml → DSH_HOME 级 patch → `--patch` 叠加层
-# （dsh 源码 apps/cli/src/profile-boot.ts 的 allPatches）。`--patch` 在最后，所以本行插入之后
-# 只有**再后面的 `--patch`** 能按 id 覆盖它的 config；没有 id 就谁也改不了。
-#
-# 本插件只注册持久的 turn projection 和重试 RPC；失败当场不弹 userQuestions。
-# 自动重试仍完全由 dsh 自带的 llm-retry 负责。
+# 双面插件：insert 加载宿主半 `dist/index.js`，并依据 package.json 的 `dsh.client` 与
+# `exports["./client"]` 下发 `dist/client.js`；缺失客户端产物会让 dsh 启动失败。
+# `id` 让后续 `--patch` 按 id 覆盖；本插件只注册 turn projection 和重试 RPC，
+# 失败时不弹 userQuestions，自动重试仍由 dsh 自带的 llm-retry 负责。
 - insert:
     - id: turn-retry
       name: './dist/index.js'

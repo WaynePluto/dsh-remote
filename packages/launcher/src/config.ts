@@ -7,32 +7,32 @@ import { machineSlugSchema } from '@dsh-remote/protocol'
 import { LauncherError } from './errors.js'
 import { defaultMachineSlug } from './relay.js'
 
-/** Config file name looked up in the working directory. */
+/** 在工作目录中查找的配置文件名。 */
 export const CONFIG_FILE_NAME = 'dsh-remote.config.json'
 
-/** dsh-remote runs its own profile, never the official `web` one (D14). */
+/** dsh-remote 运行自己的 profile，从不运行官方的 `web` profile（D14）。 */
 export const DEFAULT_DSH_PROFILE = 'dsh-remote-web'
 
-/** dsh's own default web port; keeping it makes a fresh package predictable. */
+/** dsh 自己的默认 web 端口；保持它能让新包的行为可预期。 */
 export const DEFAULT_DSH_PORT = 3080
 
-/** The relay's own default port (`packages/relay/src/config.ts`). */
+/** relay 自己的默认端口（`packages/relay/src/config.ts`）。 */
 export const DEFAULT_RELAY_PORT = 30_809
 
 /**
- * Every machine is its own hub's console (D16), and the console is the only
- * place to join a hub — so it has to answer on the LAN, not just on loopback.
- * Non-loopback access is still authenticated (铁律 11).
+ * 每台机器都是自己 hub 的控制台（D16），而控制台是唯一
+ * 可以加入 hub 的地方——因此它必须在局域网上响应，而不能只监听 loopback。
+ * 非 loopback 访问仍需认证（铁律 11）。
  */
 export const DEFAULT_RELAY_HOST = '0.0.0.0'
 
-/** Relay database file name inside the dsh-remote home. */
+/** dsh-remote home 中的 relay 数据库文件名。 */
 export const RELAY_DATABASE_FILE_NAME = 'relay.db'
 
 /**
- * Expand a leading `~`, matching how dsh reads configured paths, then make the
- * result absolute so every child process is given the same directory no matter
- * what its own working directory is.
+ * 展开开头的 `~`（与 dsh 读取配置路径的方式一致），然后将
+ * 结果变为绝对路径，使每个子进程无论
+ * 自己的工作目录是什么，得到的都是同一个目录。
  */
 function expandHome(path: string): string {
   if (path === '~') return homedir()
@@ -41,8 +41,8 @@ function expandHome(path: string): string {
 }
 
 /**
- * dsh rejects these profile names outright (`resolveProfileDir` in
- * `@deepseek-ai/dsh-app-boot`); catching them here keeps the failure readable.
+ * dsh 会直接拒绝这些 profile 名称（`resolveProfileDir` 位于
+ * `@deepseek-ai/dsh-app-boot`）；在这里捕获能让失败信息易读。
  */
 const profileSchema = z.string().min(1).refine(
   value => !value.includes('/') && !value.includes('\\')
@@ -50,13 +50,13 @@ const profileSchema = z.string().min(1).refine(
   'profile 只能是一个目录名，不能含有 / 或 \\，也不能是 . / .. / node_modules',
 )
 
-/** The relay CLI only takes a literal bind address, never a host name. */
+/** relay CLI 只接受字面绑定地址，从不接受主机名。 */
 const bindHostSchema = z.string().refine(
   value => isIP(value) !== 0,
   'host 必须是一个 IPv4 或 IPv6 地址，例如 0.0.0.0 或 127.0.0.1',
 )
 
-/** Same rule as the tunnel protocol, restated so the message stays readable. */
+/** 与隧道协议相同的规则，在此重述以保持消息易读。 */
 const slugSchema = z.string().refine(
   value => machineSlugSchema.safeParse(value).success,
   'slug 只能是 1-63 个小写字母、数字或连字符，且不能以连字符开头或结尾',
@@ -66,34 +66,34 @@ const launcherConfigSchema = z.strictObject({
   dsh: z.strictObject({
     profile: profileSchema.default(DEFAULT_DSH_PROFILE),
     port: z.number().int().min(1).max(65_535).default(DEFAULT_DSH_PORT),
-    /** Passed through to the dsh child verbatim, after the launcher's own flags. */
+    /** 在 launcher 自己的 flags 之后原样传给 dsh 子进程。 */
     extraArgs: z.array(z.string()).default([]),
-    // prefault, not default: an absent `dsh` section must be run through the
-    // schema so its own per-field defaults apply.
+    // 使用 prefault 而不是 default：缺少 `dsh` 部分时必须经过
+    // schema，才能应用该部分自己的字段默认值。
   }).prefault({}),
   /**
-   * This machine's own relay — its console, and the way a phone reaches it.
+   * 这台机器自己的 relay——它的控制台，也是手机访问它的方式。
    *
-   * There is no switch to turn it off: a machine that is only ever a member
-   * still needs its local console, because that console is the only place to
-   * join a hub (D16).
+   * 没有关闭它的开关：即使一台机器永远只是成员，
+   * 仍然需要本地控制台，因为控制台是唯一可以
+   * 加入 hub 的地方（D16）。
    */
   relay: z.strictObject({
     port: z.number().int().min(1).max(65_535).default(DEFAULT_RELAY_PORT),
     host: bindHostSchema.default(DEFAULT_RELAY_HOST),
-    /** This machine's name on its own console; defaults to the host name. */
+    /** 这台机器在自己控制台上的名称；默认为主机名。 */
     slug: slugSchema.default(() => defaultMachineSlug()),
     /**
-     * SQLite file with the administrator, sessions, devices and audit log.
-     * Left optional here because its default follows `home`, which zod cannot
-     * express between sibling fields; it is filled in below.
+     * 保存管理员、会话、设备和审计日志的 SQLite 文件。
+     * 在此设为可选，因为它的默认值依赖 `home`，而 zod 无法
+     * 表达兄弟字段之间的关系；下面会补上它。
      */
     data: z.string().min(1).transform(expandHome).optional(),
   }).prefault({}),
   /**
-   * dsh-remote home holding `device.key` and `membership.json`. Defaults exactly
-   * like the connector's, so both processes of one machine agree on "this
-   * machine" without any configuration.
+   * 保存 `device.key` 和 `membership.json` 的 dsh-remote home。默认值完全
+   * 与 connector 相同，使一台机器的两个进程都能对“这台
+   * 机器”的位置达成一致，无需配置。
    */
   home: z.string().min(1).transform(expandHome).default(() => join(homedir(), '.dsh-remote')),
 }).transform(value => ({
@@ -107,19 +107,19 @@ const launcherConfigSchema = z.strictObject({
 export type LauncherConfig = z.output<typeof launcherConfigSchema>
 export type LauncherConfigInput = z.input<typeof launcherConfigSchema>
 
-/** The config in effect, plus where it came from. */
+/** 当前生效的配置，以及它的来源。 */
 export interface LoadedLauncherConfig {
   readonly config: LauncherConfig
-  /** The file that was read, or undefined when built-in defaults are in use. */
+  /** 读取的文件；使用内置默认值时为 undefined。 */
   readonly path: string | undefined
 }
 
 /**
- * Keys of the hub-in-a-config-file era. The hub a machine has joined is written
- * by an admin console into `membership.json` at runtime (D16), so a second copy
- * in this file could only ever disagree with it. Say that instead of reporting
- * an unknown key — the `relay` section itself is valid again, it just describes
- * this machine's own relay now.
+ * 配置文件记录 hub 时代遗留的键。机器加入的 hub 会由
+ * 管理控制台在运行时写入 `membership.json`（D16），因此第二份
+ * 配置只会与它不一致。与其报告未知键，不如说明这一点：
+ * `relay` 部分本身现在重新有效，只是它描述的是
+ * 这台机器自己的 relay。
  */
 const RETIRED_RELAY_KEYS = ['enabled', 'url', 'publicDomain', 'deviceKeyPath'] as const
 
@@ -136,11 +136,11 @@ function assertNoRetiredKeys(value: unknown, path: string): void {
 }
 
 /**
- * Validate one config document.
- * @param raw - the file contents.
- * @param path - the file path, used in error messages.
- * @returns The config with defaults applied.
- * @throws LauncherError When the file is not valid JSON or does not match the schema.
+ * 校验一个配置文档。
+ * @param raw - 文件内容。
+ * @param path - 文件路径，用于错误消息。
+ * @returns 应用默认值后的配置。
+ * @throws LauncherError 文件不是合法 JSON 或不符合 schema 时抛出。
  */
 export function parseLauncherConfig(raw: string, path: string): LauncherConfig {
   let document: unknown
@@ -165,16 +165,12 @@ export function parseLauncherConfig(raw: string, path: string): LauncherConfig {
 }
 
 /**
- * Load `dsh-remote.config.json`.
- *
- * A missing file is normal — a freshly unzipped package must start with no
- * configuration at all — but a file that exists and is broken stops the
- * launcher: silently falling back to defaults would start dsh on a port the
- * user did not ask for.
- * @param options - working directory, and an explicit `--config` path when given.
- * @returns The config in effect and the file it came from.
- * @throws LauncherError When the file is unreadable or invalid, or when an
- * explicitly requested file does not exist.
+ * 加载 `dsh-remote.config.json`。
+ * 文件缺失是正常的——刚解压的包必须能在没有配置时启动；但存在且损坏的文件会停止 launcher，
+ * 因为静默回退会让 dsh 在用户没有要求的端口上启动。
+ * @param options - 工作目录，以及给定时显式指定的 `--config` 路径。
+ * @returns 当前生效的配置及其来源文件。
+ * @throws LauncherError 文件不可读或无效，或显式请求的文件不存在时抛出。
  */
 export function loadLauncherConfig(options: {
   readonly cwd: string

@@ -1,46 +1,120 @@
-/**
- * The sign-in area rendered inside the `github-copilot` provider card on dsh's
- * Models page.
- *
- * It occupies `settings.models.provider-card`, the extension seat that page
- * declares for adapter families (`ProviderCardExtrasOwnerProps`), keyed by the
- * owning settings namespace — so this component is handed every pi-ai card and
- * renders for exactly one of them. The card's own API-key field stays where it
- * is: the seat is an addition to a card, not a replacement for it, and a
- * Copilot subscription simply has no key to put there.
- *
- * Styling uses dsh's own `--dsw-*` theme tokens with fallbacks, so the area
- * follows light/dark without this package shipping a stylesheet the loader
- * would have to compile.
- *
- * @module @dsh-remote/dsh-plugin-copilot-auth/client/CopilotCard
- */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。（涉及：`github-copilot`、`settings.models.provider-card`、`.editor`） */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { CSSProperties, ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { CSSProperties, ReactNode, RefObject } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ProviderCardExtrasOwnerProps } from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import type { CopilotStatusView } from '../shared.js'
 import { PROVIDER_ID } from '../shared.js'
 import { fill } from './locales.js'
 import type { CopilotKey } from './locales.js'
 
-/** How often a running attempt is re-read while the page is open. */
+/** 页面打开时重新读取进行中尝试的间隔。 */
 const POLL_INTERVAL_MS = 2000
 
-/** What the Models page hands every card of this family. */
-export interface ProviderCardOwnerProps {
-  /** The card's directory row; `provider` is the route id. */
-  provider: { provider: string }
+/** 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。 */
+const PROVIDER_CARD_SELECTOR = [
+  '[class*="_rowCard"]',
+  '[class*="_setupCard"]',
+  '[class*="_addCard"]',
+].join(', ')
+const EDITOR_SELECTOR = '[class*="_editor"]'
+const FIELD_SELECTOR = '[class*="_field"]'
+const CUSTOMIZED_SELECTOR = '[class*="_customized"]'
+const EDITOR_ACTIONS_SELECTOR = '[class*="_editorActions"]'
+const EDITOR_HOST_ATTRIBUTE = 'data-dsh-plugin-copilot-auth-editor-host'
+
+/** 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。 */
+function editorFor(anchor: HTMLElement): HTMLElement | null {
+  const card = anchor.closest<HTMLElement>(PROVIDER_CARD_SELECTOR)
+  const editor = card?.querySelector<HTMLElement>(EDITOR_SELECTOR)
+  return editor?.isConnected === true ? editor : null
 }
 
-/** What this plugin injects into its own registration. */
+/** 会话与投影契约：此处说明持久事件、投影状态或历史回放边界。 */
+function hostFor(editor: HTMLElement): HTMLElement {
+  const existing = editor.querySelector<HTMLElement>(`[${EDITOR_HOST_ATTRIBUTE}]`)
+  if (existing !== null) return existing
+
+  const host = document.createElement('div')
+  host.setAttribute(EDITOR_HOST_ATTRIBUTE, '')
+  host.style.display = 'contents'
+  const before = editor.querySelector<HTMLElement>(FIELD_SELECTOR)
+    ?? editor.querySelector<HTMLElement>(CUSTOMIZED_SELECTOR)
+    ?? editor.querySelector<HTMLElement>(EDITOR_ACTIONS_SELECTOR)
+  editor.insertBefore(host, before)
+  return host
+}
+
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
+function removeEmptyHost(host: HTMLElement): void {
+  queueMicrotask(() => {
+    if (host.isConnected && host.childNodes.length === 0) host.remove()
+  })
+}
+
+/** 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。 */
+function useEditorPortal(): { anchorRef: RefObject<HTMLSpanElement>; host: HTMLElement | null } {
+  const anchorRef = useRef<HTMLSpanElement>(null)
+  const [host, setHost] = useState<HTMLElement | null>(null)
+  const hostRef = useRef<HTMLElement | null>(null)
+
+  useLayoutEffect(() => {
+    const anchor = anchorRef.current
+    if (anchor === null) return
+    const card = anchor.closest<HTMLElement>(PROVIDER_CARD_SELECTOR)
+    if (card === null) return
+
+    let disposed = false
+    let pending = false
+    const sync = (): void => {
+      pending = false
+      if (disposed) return
+      const editor = editorFor(anchor)
+      const next = editor === null ? null : hostFor(editor)
+      const previous = hostRef.current
+      hostRef.current = next
+      if (previous !== null && previous !== next) removeEmptyHost(previous)
+      setHost(current => current === next ? current : next)
+    }
+    const schedule = (): void => {
+      if (pending) return
+      pending = true
+      queueMicrotask(sync)
+    }
+
+    sync()
+    const observer = new MutationObserver(schedule)
+    observer.observe(card, { childList: true, subtree: true })
+    return () => {
+      disposed = true
+      observer.disconnect()
+      const previous = hostRef.current
+      hostRef.current = null
+      if (previous !== null) removeEmptyHost(previous)
+    }
+  }, [])
+
+  return { anchorRef, host }
+}
+
+/** 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。 */
+export type ProviderCardOwnerProps = ProviderCardExtrasOwnerProps
+
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
+type ProviderCardChildren = Partial<PropsRenderSlots<'settings.models.provider-card.capabilities'>>
+
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 export interface CopilotCardInjected {
-  /** Call one endpoint of this plugin's channel. */
+  /** 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。 */
   call: (endpoint: string) => Promise<CopilotStatusView>
 }
 
-/** Everything the component reads. */
-export type CopilotCardProps = ProviderCardOwnerProps & Partial<CopilotCardInjected> & {
-  /** Locale seat bound to this plugin's namespace. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
+export type CopilotCardProps = ProviderCardOwnerProps & ProviderCardChildren & Partial<CopilotCardInjected> & {
+  /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
   t?: (key: CopilotKey) => string
 }
 
@@ -48,9 +122,6 @@ const areaStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: '8px',
-  marginTop: '12px',
-  paddingTop: '12px',
-  borderTop: '1px solid var(--dsw-alias-border-l1, rgba(128,128,128,0.2))',
   fontSize: '13px',
 }
 
@@ -67,43 +138,29 @@ const codeStyle: CSSProperties = {
   background: 'var(--dsw-alias-markdown-inline-code, rgba(128,128,128,0.14))',
 }
 
-const buttonStyle: CSSProperties = {
-  padding: '6px 12px',
-  borderRadius: '8px',
-  border: '1px solid var(--dsw-alias-border-l1, rgba(128,128,128,0.3))',
-  background: 'transparent',
-  color: 'inherit',
-  cursor: 'pointer',
-  font: 'inherit',
-}
-
-const primaryButtonStyle: CSSProperties = {
-  ...buttonStyle,
-  border: '1px solid transparent',
-  background: 'var(--dsw-alias-button-primary-fill, #1f2937)',
-  color: 'var(--dsw-alias-label-primary-inverted, #fff)',
-}
-
 const errorStyle: CSSProperties = { color: 'var(--dsw-alias-state-error-primary, #dc2626)' }
 
-/** Whole minutes left before a device code expires, floored at zero. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 function minutesLeft(expiresAt: number, now: number): number {
   return Math.max(0, Math.ceil((expiresAt - now) / 60000))
 }
 
-/**
- * The Copilot sign-in area.
- * @param props - owner share, injected callbacks, and the locale seat.
- * @returns the area, or nothing for a card that is not GitHub Copilot's.
- */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 export function CopilotProviderCard(props: CopilotCardProps): ReactNode {
-  const { provider, call, t } = props
+  const { provider, call, t, renderSlot } = props
   const isCopilot = provider.provider === PROVIDER_ID
+  const capabilities = renderSlot === undefined
+    ? null
+    : renderSlot(
+      'settings.models.provider-card.capabilities',
+      { provider, configured: props.configured, keyConfigured: props.keyConfigured },
+    )
+  const { anchorRef, host } = useEditorPortal()
   const [status, setStatus] = useState<CopilotStatusView | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
-  // Only the latest request may write state: a slow `status` poll must not
-  // overwrite the fresher answer of the `start` the human just pressed.
+  // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`status`）
+  // 覆盖用户刚按下 `start` 得到的更新答案。
   const generation = useRef(0)
 
   const run = useCallback(async (endpoint: string): Promise<void> => {
@@ -113,8 +170,8 @@ export function CopilotProviderCard(props: CopilotCardProps): ReactNode {
       const next = await call(endpoint)
       if (generation.current === mine) setStatus(next)
     } catch {
-      // A failed poll is not worth a message of its own: the connection layer
-      // already reports transport failures, and the next tick retries.
+      // poll 失败不值得单独提示：connection layer
+      // 已报告传输失败，下一次 tick 会重试。
     }
   }, [call])
 
@@ -139,7 +196,14 @@ export function CopilotProviderCard(props: CopilotCardProps): ReactNode {
     return () => { clearInterval(timer) }
   }, [isCopilot, attempt, run])
 
-  if (!isCopilot) return null
+  if (!isCopilot) {
+    return (
+      <>
+        <span ref={anchorRef} data-dsh-plugin-copilot-auth-anchor="" hidden aria-hidden="true" />
+        {host === null ? null : createPortal(capabilities, host)}
+      </>
+    )
+  }
   const text = (key: CopilotKey): string => t?.(key) ?? key
 
   const copy = (value: string): void => {
@@ -148,15 +212,25 @@ export function CopilotProviderCard(props: CopilotCardProps): ReactNode {
         await navigator.clipboard?.writeText(value)
         setCopied(true)
       } catch {
-        // Clipboard access is denied on some browsers over plain HTTP; the code
-        // stays selectable on screen, which is the fallback either way.
+        // 部分浏览器在普通 HTTP 下拒绝剪贴板访问；code
+        // 仍可在屏幕上选择，这始终是回退方案。
       }
     })()
   }
 
   return (
-    <div style={areaStyle}>
-      <div style={{ fontWeight: 600 }}>{text('title')}</div>
+    <>
+      <span ref={anchorRef} data-dsh-plugin-copilot-auth-anchor="" hidden aria-hidden="true" />
+      {host === null ? null : createPortal(
+        <>
+          <style>{`
+            [class*="_editor"]:has(> [data-dsh-plugin-copilot-auth-editor-host] > [data-dsh-copilot-subscription])
+              > [class*="_field"]:has(> input[type="password"]) {
+              display: none !important;
+            }
+          `}</style>
+          <div style={areaStyle} data-dsh-copilot-subscription="">
+            <div style={{ fontWeight: 600 }}>{text('title')}</div>
       {attempt === undefined
         ? (
             <>
@@ -176,36 +250,36 @@ export function CopilotProviderCard(props: CopilotCardProps): ReactNode {
                 ? null
                 : <div style={errorStyle}>{fill(text('routeFailed'), { message: status.warning })}</div>}
               <div style={rowStyle}>
-                <button
-                  type="button"
-                  style={primaryButtonStyle}
+                <Button
+                  variant="primary"
+                  size="sm"
                   disabled={busy}
                   onClick={() => { void act('start') }}
                 >
                   {busy ? text('busy') : status?.signedIn === true ? text('signInAgain') : text('signIn')}
-                </button>
+                </Button>
                 {status?.signedIn === true && !status.routeConfigured
                   ? (
-                      <button
-                        type="button"
-                        style={buttonStyle}
+                      <Button
+                        variant="outline"
+                        size="sm"
                         disabled={busy}
                         onClick={() => { void act('configure') }}
                       >
                         {text('configure')}
-                      </button>
+                      </Button>
                     )
                   : null}
                 {status?.signedIn === true
                   ? (
-                      <button
-                        type="button"
-                        style={buttonStyle}
+                      <Button
+                        variant="outline"
+                        size="sm"
                         disabled={busy}
                         onClick={() => { void act('sign-out') }}
                       >
                         {text('signOut')}
-                      </button>
+                      </Button>
                     )
                   : null}
               </div>
@@ -221,13 +295,13 @@ export function CopilotProviderCard(props: CopilotCardProps): ReactNode {
                 : (
                     <div style={rowStyle}>
                       <code style={codeStyle}>{attempt.userCode}</code>
-                      <button
-                        type="button"
-                        style={buttonStyle}
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => { copy(attempt.userCode ?? '') }}
                       >
                         {copied ? text('copied') : text('copy')}
-                      </button>
+                      </Button>
                     </div>
                   )}
               {attempt.verificationUri === undefined
@@ -251,12 +325,16 @@ export function CopilotProviderCard(props: CopilotCardProps): ReactNode {
                   )}
               {attempt.message === undefined ? null : <div style={mutedStyle}>{attempt.message}</div>}
               <div style={rowStyle}>
-                <button type="button" style={buttonStyle} disabled={busy} onClick={() => { void act('cancel') }}>
+                <Button variant="outline" size="sm" disabled={busy} onClick={() => { void act('cancel') }}>
                   {text('cancel')}
-                </button>
+                </Button>
               </div>
             </>
           )}
-    </div>
+          </div>
+          {capabilities}
+        </>,
+      host)}
+    </>
   )
 }

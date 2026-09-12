@@ -14,25 +14,36 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@deepseek-ai/dsh": "0.1.2-alpha.4",
+    "@deepseek-ai/dsh": "0.1.5-rc.2",
     "@dsh-remote/connector": "workspace:*",
     "@dsh-remote/dsh-plugin-agents-md": "workspace:*",
+    "@dsh-remote/dsh-plugin-concise-mode": "workspace:*",
+    "@dsh-remote/dsh-plugin-directory-picker-browse": "workspace:*",
     "@dsh-remote/dsh-plugin-copilot-auth": "workspace:*",
     "@dsh-remote/dsh-plugin-exec-process": "workspace:*",
+    "@dsh-remote/dsh-plugin-chat-scroll": "workspace:*",
+    "@dsh-remote/dsh-plugin-user-message-fork": "workspace:*",
+    "@dsh-remote/dsh-plugin-favorite-models": "workspace:*",
+    "@dsh-remote/dsh-plugin-files": "workspace:*",
     "@dsh-remote/dsh-plugin-models-catalog": "workspace:*",
+    "@dsh-remote/dsh-plugin-model-capabilities": "workspace:*",
     "@dsh-remote/dsh-plugin-notify": "workspace:*",
     "@dsh-remote/dsh-plugin-proxy": "workspace:*",
     "@dsh-remote/dsh-plugin-remote-privileged": "workspace:*",
     "@dsh-remote/dsh-plugin-services": "workspace:*",
     "@dsh-remote/dsh-plugin-skills-inspector": "workspace:*",
+    "@dsh-remote/dsh-plugin-subagent-depth": "workspace:*",
     "@dsh-remote/dsh-plugin-terminal": "workspace:*",
     "@dsh-remote/dsh-plugin-tools-inspector": "workspace:*",
     "@dsh-remote/dsh-plugin-turn-retry": "workspace:*",
+    "@dsh-remote/dsh-plugin-yolo-mode": "workspace:*",
     "@dsh-remote/protocol": "workspace:*",
     "@dsh-remote/relay": "workspace:*",
     "commander": "15.0.0",
+    "immer": "10.2.0",
     "undici": "8.10.1",
-    "zod": "4.5.4"
+    "zod": "4.5.4",
+    "zustand": "4.4.7"
   },
   "devDependencies": {
     "vitest": "4.1.11"

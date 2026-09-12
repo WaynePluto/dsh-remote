@@ -19,10 +19,8 @@ export interface RegisteredMachine {
   lastSeenAt: number
   heartbeatId?: string
   /**
-   * dsh's own browser login token on that machine, as reported by its
-   * connector (`dsh-auth` frame). Absent until the connector reports one; a
-   * dsh restart replaces it, so it is per live control channel and never
-   * persisted.
+   * 该机器自己的 dsh 浏览器登录 token，由其 connector（`dsh-auth` frame）上报。
+   * connector 上报前不存在；dsh 重启会替换它，因此它只属于当前活动控制信道，绝不持久化。
    */
   dshToken?: string
 }
@@ -95,14 +93,12 @@ export class MachineRegistry {
   }
 
   /**
-   * Force a machine off the relay right now: fail its pending streams, destroy
-   * the streams it is still serving, and close its control channel with a fatal
-   * error frame. Revocation that only blocked the next reconnect would leave an
-   * already-open remote shell running until the operator noticed.
-   * @param machineId The machine to drop.
-   * @param code Protocol error code sent to the connector before closing.
-   * @param message Human-readable reason carried in the same frame.
-   * @returns true when the machine was online and has been dropped.
+   * 立即强制机器离开 relay：使待处理流失败、销毁它仍在服务的流，并用 fatal error frame 关闭控制信道。
+   * 只阻止下一次重连的吊销会让已打开的远程 shell 一直运行到操作员发现。
+   * @param machineId 要断开的机器。
+   * @param code 关闭前发送给 connector 的协议错误码。
+   * @param message 同一 frame 中携带的可读原因。
+   * @returns 机器在线且已被断开时为 true。
    */
   disconnect(machineId: string, code: ErrorFrame['code'], message: string): boolean {
     const machine = this.#byMachineId.get(machineId)
@@ -130,9 +126,9 @@ export class MachineRegistry {
   }
 
   /**
-   * Record the dsh login token a connector reported for its own machine.
-   * @param machine The registered machine, as resolved from its control channel.
-   * @param token The token dsh printed when it started.
+   * 记录 connector 为其机器上报的 dsh 登录 token。
+   * @param machine 从控制信道解析出的已注册机器。
+   * @param token dsh 启动时打印的 token。
    */
   setDshToken(machine: RegisteredMachine, token: string): void {
     const changed = machine.dshToken !== token
@@ -184,7 +180,7 @@ export class MachineRegistry {
     }
     try {
       machine.control.send(JSON.stringify(frame), (error) => {
-        // ws calls this Node-style callback with null on success at runtime.
+        // ws 在运行时成功时会以 Node 风格回调传入 null。
         if (error === undefined || error === null) return
         const pending = this.#pendingByToken.get(token)
         if (pending !== undefined) this.#failPending(pending, error)
@@ -199,8 +195,7 @@ export class MachineRegistry {
   }
 
   takePendingStream(token: string): StreamPairResult {
-    // Tokens are random map keys; scan with timing-safe equality so a future
-    // externally-observable lookup path does not grow a prefix oracle.
+    // token 是随机 map 键；使用时序安全相等比较扫描，确保未来可被外部观察的查找路径不会形成前缀 oracle。
     const pending = [...this.#pendingByToken.values()].find(candidate => tokenEquals(token, candidate.token))
     if (pending === undefined) return { ok: false, code: 'STREAM_TOKEN_INVALID' }
     this.#pendingByToken.delete(pending.token)
@@ -213,8 +208,7 @@ export class MachineRegistry {
   }
 
   resolvePendingStream(pending: PendingStream, stream: Duplex): void {
-    // Established streams are tracked per machine so an operator revoke can
-    // tear down traffic that is already flowing, not just future streams.
+    // 已建立的流按机器跟踪，使操作员吊销时可以拆除已经流动的流量，而不只是阻止未来的流。
     const streams = this.#streamsByMachineId.get(pending.machineId) ?? new Set<Duplex>()
     this.#streamsByMachineId.set(pending.machineId, streams)
     streams.add(stream)
@@ -257,9 +251,8 @@ export class MachineRegistry {
       this.#failPending(pending, new TunnelError('STREAM_TIMEOUT', 'relay is shutting down'))
     }
     for (const machine of this.#byMachineId.values()) machine.control.close(1001, 'relay shutting down')
-    // Only forget the tracked streams: relay shutdown destroys every socket
-    // through closeAllConnections(), and destroying the duplexes here first
-    // races with that teardown and can hang the HTTP server close.
+    // 这里只遗忘已跟踪的流：relay 关闭时会通过 closeAllConnections() 销毁所有 socket；
+    // 先在此处销毁 duplex 会与该清理竞态，导致 HTTP server 关闭卡住。
     this.#streamsByMachineId.clear()
     this.#byMachineId.clear()
     this.#bySlug.clear()

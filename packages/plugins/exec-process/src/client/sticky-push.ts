@@ -1,114 +1,59 @@
 /**
- * Make the「执行过程」header follow the reader — and then let it GO.
- *
- * ── WHY THIS IS NOT A PLAIN `position: sticky` RULE ─────────────────────────
- *
- * A sticky element is released by the bottom edge of its CONTAINING BLOCK: the
- * browser pushes it back out of view once the box it belongs to has scrolled
- * away. That mechanism is exactly what this header wants and exactly what it
- * cannot have. The rows it discloses are dsh's OWN siblings in the transcript
- * column, so the header's containing block is the whole column — a plain
- * sticky rule therefore pins it for the entire rest of the conversation, long
- * after the segment it summarizes has gone. Grouping the segment under a box of
- * our own is the option that does not exist: it would mean moving nodes React
- * owns (see `./hidden-rows.ts` for the same constraint from the other side).
- *
- * So this module reproduces the release by hand. Every frame the reader
- * scrolls, one number is published:
- *
- *     push = clamp(scrollportTop + headerHeight - contentBottom, 0, headerHeight)
- *
- * and the header sticks at `top: -push`. While the segment still has rows below
- * the header the term is negative and clamps to 0 — ordinary sticking. Once the
- * last folded row's bottom edge rises past the header's own bottom, `push`
- * grows exactly as fast as the scroll, so the header slides up under the top of
- * the scrollport at content speed and is fully gone the moment its content is.
- * That is the same motion a real containing block would produce, which is why
- * it needs no transition and never jumps.
- *
- * The formula deliberately reads NOTHING about where the header currently is,
- * only where the scrollport and the content end. Feeding a sticky element's own
- * position back into its offset is a feedback loop: it would unpin, measure its
- * natural position, re-pin, and oscillate once per frame.
- *
- * ── WHY IT WRITES WHERE IT WRITES ───────────────────────────────────────────
- *
- * The element that must move is dsh's `.flowItem` wrapper (`ChatNodeSeat.tsx:125-135`),
- * and this plugin does not write to dsh's nodes — `useSearchableHidden` sets and
- * clears attributes on those very wrappers. So the value travels the long way
- * round: a custom property on `<html>` (a name nobody else can collide with)
- * read by a rule in this module's own stylesheet, which selects the wrapper by
- * the identity dsh already prints on it. One property per open header, because
- * two segments can be on screen with different pushes — one already gone, one
- * not yet pinned.
- *
- * That indirection also buys robustness the previous `:has()` rule did not
- * have: the wrapper is matched by `data-chat-flow-key` directly, so a browser
- * without `:has()` sticks too.
+ * 让「执行过程」表头跟随阅读位置，并在自己的内容结束后推出视口。
+ * 普通 `position: sticky` 会固定到整列末尾，因此按每帧测量内容底边计算 push；每个 header 用自己的 custom property，不移动 React DOM。
+ * offset = clamp(scrollportTop + headerHeight - contentBottom, 0, headerHeight)，写到 `<html>` 后由本模块 stylesheet 应用到 dsh wrapper。
  *
  * @module @dsh-remote/dsh-plugin-exec-process/client/sticky-push
  */
 
 import { FLOW_KEY_ATTRIBUTE, flowKeySelector, THINK_SELECTOR } from './hidden-rows.js'
 
-/** Marker attribute set on this module's own `<style>`, for diagnostics. */
+/** 本模块自有 `<style>` 上的标记属性，用于诊断。 */
 export const PUSH_STYLE_MARKER = 'data-dsh-plugin-exec-process-sticky'
 
-/** Prefix of the per-header custom property published on `<html>`. */
+/** 发布到 `<html>` 的每个表头 custom property 前缀。 */
 export const PUSH_PROPERTY_PREFIX = '--dshx-exec-process-push-'
 
-/** Computed styles whose overflow makes an element a scrollport. */
+/** 使元素成为 scrollport 的 computed style overflow 值。 */
 const SCROLLING_OVERFLOW = new Set(['auto', 'scroll', 'overlay'])
 
-/** What one measurement needs; all four numbers are viewport coordinates. */
+/** 一次测量所需的数据；四个数字都是 viewport 坐标。 */
 export interface PushGeometry {
-  /** Top edge of the scrollport the header sticks to. */
+  /** 表头吸附的 scrollport 顶边。 */
   scrollportTop: number
-  /** Height of the header row. */
+  /** 表头行高度。 */
   headerHeight: number
-  /** Bottom edge of the segment's last expanded content; `null` when it is gone. */
+  /** segment 最后一个展开内容的底边；内容不存在时为 `null`。 */
   contentBottom: number | null
 }
 
 /**
- * How far the header has to be pushed above its sticky position.
- *
- * @param geometry - scrollport top, header height, and the end of the content.
- * @returns a non-negative number of pixels, never more than the header's own
- * height — past that the header is already clear of the scrollport and further
- * pushing would only keep re-writing the same invisible offset.
+ * 计算表头需要从 sticky 位置向上推出的距离。
+ * @param geometry - scrollport 顶部、表头高度和内容结束位置。
+ * @returns 非负像素值，且不超过表头高度；超过后表头已经离开 viewport，不再继续写 offset。
  */
 export function pushOffset({ scrollportTop, headerHeight, contentBottom }: PushGeometry): number {
   if (contentBottom === null || !(headerHeight > 0)) return 0
   const overhang = scrollportTop + headerHeight - contentBottom
   if (!(overhang > 0)) return 0
-  // Whole pixels: the reader cannot see a third of one, and rounding turns a
-  // continuous scroll into at most one property write per pixel.
+  // 使用整像素：读者看不到三分之一像素，取整可将连续滚动限制为每像素最多一次 property 写入。
   return Math.min(Math.round(overhang), Math.ceil(headerHeight))
 }
 
-/** One header currently sticking, as the stylesheet sees it. */
+/** stylesheet 当前看到的一项吸附表头。 */
 export interface StickyEntry {
-  /** `data-chat-flow-key` of the header's own wrapper. */
+  /** 表头自身 wrapper 的 `data-chat-flow-key`。 */
   readonly flowKey: string
-  /** Custom property carrying this header's push offset. */
+  /** 携带该表头 push offset 的 custom property。 */
   readonly property: string
 }
 
 /**
- * Select the real bottom edge of one expanded segment.
- *
- * Inline reasoning belongs to the segment even though its formal-answer row
- * does not. When it exists, measuring the answer wrapper would keep the header
- * pinned for the whole answer. The fixed-height thinking root is not the real
- * framed extent either: its parent carries the frame padding and border. Measure
- * that same `div:has(> [data-variant="think"])` wrapper as segment-frame so the
- * sticky header releases at the visible frame's bottom edge. Without inline
- * reasoning, the last member row is the segment end.
- *
- * @param memberKeys - whole rows owned by the segment, in flow order.
- * @param reasoningOnlyKeys - formal rows whose nested thinking belongs to it.
- * @returns a selector for the last expanded box, or undefined for no content.
+ * 选择一个展开 segment 的真实底边。
+ * 正式答案行本身不属于 segment，但其中的 inline reasoning 属于；因此有 reasoning 时测量带 frame padding/border 的 `div:has(> [data-variant="think"])`，否则测量最后一个 member 行。
+ * @param memberKeys - segment 拥有的整行 key，按 flow 顺序排列。
+ * @param reasoningOnlyKeys - 正式行中、其嵌套 thinking 归该 segment 的 key。
+ * @returns 最后展开 box 的 selector；没有内容时返回 undefined。
  */
 export function segmentContentEndSelector(
   memberKeys: readonly string[],
@@ -123,14 +68,9 @@ export function segmentContentEndSelector(
 }
 
 /**
- * Build the stylesheet text for the headers currently sticking.
- *
- * `z-index` and an opaque background belong to the same rule as the sticking
- * itself: a stuck row that is transparent, or below its neighbours, shows the
- * transcript straight through it.
- *
- * @param entries - one per open header, in any order.
- * @returns CSS text; the empty string when nothing is sticking.
+ * 构造当前吸附表头的 stylesheet 文本。`z-index` 和不透明背景必须与 sticky 写在同一规则中，避免表头透明或被邻居覆盖。
+ * @param entries - 每个打开表头一项，顺序任意。
+ * @returns CSS 文本；没有吸附项时返回空字符串。
  */
 export function stickyCss(entries: readonly StickyEntry[]): string {
   return entries
@@ -143,86 +83,86 @@ export function stickyCss(entries: readonly StickyEntry[]): string {
     .join('\n\n')
 }
 
-/** The little this module reads from any element it measures. */
+/** 本模块从被测元素读取的最小接口。 */
 export interface MeasuredElement {
-  /** @returns the element's box in viewport coordinates. */
+  /** @returns 元素在 viewport 坐标中的 box。 */
   getBoundingClientRect(): { readonly top: number; readonly bottom: number; readonly height: number }
 }
 
-/** An element this module may walk up from and listen to. */
+/** 本模块可从中向上遍历并监听事件的元素。 */
 export interface AncestorElement extends MeasuredElement {
-  /** Next element up the tree, or `null` at the root. */
+  /** 树中向上的下一个元素；根部为 `null`。 */
   readonly parentElement: AncestorElement | null
-  /** @param name - attribute name. @returns its value, when present. */
+  /** @param name - attribute 名称。@returns 存在时返回其值。 */
   getAttribute(name: string): string | null
-  /** @param type - always `scroll`. @param listener - the callback. @param options - listener options. */
+  /** @param type - 始终为 `scroll`。@param listener - callback。@param options - listener options。 */
   addEventListener(type: 'scroll', listener: () => void, options: { passive: boolean }): void
-  /** @param type - always `scroll`. @param listener - the callback registered earlier. */
+  /** @param type - 始终为 `scroll`。@param listener - 之前注册的 callback。 */
   removeEventListener(type: 'scroll', listener: () => void): void
 }
 
-/** The header button, used only to find the wrapper dsh put it in. */
+/** 表头 button；仅用于找到 dsh 放置它的 wrapper。 */
 export interface TrackedButton {
-  /** @param selectors - a CSS selector. @returns the nearest matching ancestor. */
+  /** @param selectors - CSS selector。@returns 最近的匹配祖先。 */
   closest(selectors: string): AncestorElement | null
 }
 
-/** The window surface this module needs; narrowed so tests can fake it. */
+/** 本模块所需的 window surface；收窄接口以便测试伪造。 */
 export interface StickyPushView {
-  /** @param type - always `resize`. @param listener - the callback. */
+  /** @param type - 始终为 `resize`。@param listener - callback。 */
   addEventListener(type: 'resize', listener: () => void): void
-  /** @param type - always `resize`. @param listener - the callback registered earlier. */
+  /** @param type - 始终为 `resize`。@param listener - 之前注册的 callback。 */
   removeEventListener(type: 'resize', listener: () => void): void
-  /** @param callback - run before the next paint. @returns a cancellation handle. */
+  /** @param callback - 在下一次 paint 前运行。@returns 取消句柄。 */
   requestAnimationFrame(callback: () => void): number
-  /** @param handle - a handle from `requestAnimationFrame`. */
+  /** @param handle - 来自 `requestAnimationFrame` 的句柄。 */
   cancelAnimationFrame(handle: number): void
-  /** @param element - any element. @returns its resolved style. */
+  /** @param element - 任意元素。@returns 解析后的 style。 */
   getComputedStyle(element: AncestorElement): { readonly overflowY: string }
 }
 
-/** The document surface this module needs; narrowed so tests can fake it. */
+/** 本模块所需的 document surface；收窄接口以便测试伪造。 */
 export interface StickyPushHost {
-  /** @param tag - always `style`. @returns the detached element. */
+  /** @param tag - 始终为 `style`。@returns detached element。 */
   createElement(tag: 'style'): {
     textContent: string | null
     setAttribute(name: string, value: string): void
     remove(): void
   }
-  /** Where the stylesheet goes. */
+  /** stylesheet 挂载的位置。 */
   readonly head: { append(node: never): void } | { appendChild(node: never): void }
-  /** Carrier of the push properties. */
+  /** 承载 push properties 的对象。 */
   readonly documentElement: {
     readonly style: {
       setProperty(name: string, value: string): void
       removeProperty(name: string): void
     }
   }
-  /** @param selectors - a CSS selector. @returns the first match in the page. */
+  /** @param selectors - CSS selector。@returns 页面中的首个匹配项。 */
   querySelector(selectors: string): MeasuredElement | null
-  /** The window, absent in a detached document. */
+  /** window；detached document 中不存在。 */
   readonly defaultView: StickyPushView | null
 }
 
-/** Registration of one open header. */
+/** 一项打开表头的注册。 */
 export interface StickyPushController {
   /**
-   * Stick one header for as long as the caller keeps it.
-   * @param button - the header button; its wrapper is what actually sticks.
-   * @param contentEndSelector - selector of the segment's last expanded box;
-   * without one the header sticks and is never released.
-   * @returns a disposer removing the rule and its property.
+   * 只要调用方保留注册，就让一个表头保持吸附。
+   * @param button - 表头 button；实际吸附的是它的 wrapper。
+   * @param contentEndSelector - segment 最后一个展开 box 的 selector；
+   * 没有 selector 时表头会吸附且永不释放。
+   * @returns 移除规则和 property 的 disposer。
    */
   track(button: TrackedButton, contentEndSelector: string | undefined): () => void
-  /** Recompute every offset now, outside the frame loop. */
+  /** 立即重新计算所有 offset，不经过 frame loop。 */
   measure(): void
-  /** @returns the CSS currently installed; for tests and diagnostics. */
+  /** @returns 当前安装的 CSS；用于测试和诊断。 */
   css(): string
-  /** Unstick everything and remove the stylesheet. */
+  /** 解除所有吸附并移除 stylesheet。 */
   dispose(): void
 }
 
-/** Bookkeeping for one tracked header. */
+/** 一个被跟踪表头的记录。 */
 interface Entry extends StickyEntry {
   readonly wrapper: AncestorElement
   readonly scrollport: AncestorElement | null
@@ -232,17 +172,10 @@ interface Entry extends StickyEntry {
 }
 
 /**
- * Find the box the header will actually stick inside.
- *
- * dsh has two transcript layouts — `ChatView.module.css` gives `.scroll` its own
- * `overflow-y: auto`, and turns that off again under `[data-conversation-scroll]`
- * where an ancestor scrolls instead — so the scrollport is discovered rather
- * than named. `null` means nothing between here and the root scrolls, and the
- * caller falls back to the viewport's own top edge.
- *
- * @param start - the header's wrapper.
- * @param view - the window, for resolved styles.
- * @returns the nearest scrolling ancestor, when there is one.
+ * 找到表头实际会吸附其中的 box。dsh 有两种转录布局：`.scroll` 通常拥有 `overflow-y: auto`，`[data-conversation-scroll]` 下则由祖先滚动，因此必须动态发现 scrollport。
+ * @param start - 表头 wrapper。
+ * @param view - window，用于读取 resolved styles。
+ * @returns 最近的滚动祖先；没有时返回 null。
  */
 export function findScrollport(
   start: AncestorElement | null,
@@ -258,10 +191,9 @@ export function findScrollport(
 }
 
 /**
- * Create the single stylesheet and frame loop every「执行过程」header sticks with.
- *
- * @param host - the document; injected so tests need no DOM.
- * @returns the controller, or a no-op one when there is no document.
+ * 创建所有「执行过程」表头共享的 stylesheet 和 frame loop。
+ * @param host - document；注入以便测试无需 DOM。
+ * @returns controller；没有 document 时返回 no-op controller。
  */
 export function createStickyPushController(host: StickyPushHost | undefined): StickyPushController {
   if (host === undefined) {
@@ -288,10 +220,7 @@ export function createStickyPushController(host: StickyPushHost | undefined): St
 
   const measure = (): void => {
     for (const entry of entries.values()) {
-      // Re-queried rather than cached: dsh mounts and unmounts transcript rows
-      // as the reader pages, and a stale node measures a box that is no longer
-      // on screen. One attribute selector against a handful of open headers is
-      // far cheaper than being wrong.
+      // 每次重新查询而不是缓存：reader 分页时 dsh 会挂载/卸载转录行，旧 node 可能已不在屏幕上；对少数打开表头做属性查询远比测错便宜。
       const contentEnd = entry.contentEndSelector === null ? null : host.querySelector(entry.contentEndSelector)
       const offset = pushOffset({
         scrollportTop: entry.scrollport === null ? 0 : entry.scrollport.getBoundingClientRect().top,
@@ -332,14 +261,11 @@ export function createStickyPushController(host: StickyPushHost | undefined): St
     track(button, contentEndSelector) {
       const wrapper = button.closest(`[${FLOW_KEY_ATTRIBUTE}]`)
       const flowKey = wrapper?.getAttribute(FLOW_KEY_ATTRIBUTE) ?? null
-      // No wrapper means dsh renamed the attribute or moved the seat. The
-      // header still renders and still folds; it just stops following.
+      // 没有 wrapper 表示 dsh 重命名了属性或移动了 seat；表头仍渲染并折叠，只是不再跟随阅读位置。
       if (wrapper === null || flowKey === null) return () => {}
       const id = nextId++
       const scrollport = findScrollport(wrapper, view)
-      // Its own identity per entry: the same function registered twice on one
-      // scrollport is deduplicated by the DOM, and removing it for one header
-      // would then silently stop the other one too.
+      // 每项使用独立 identity：同一个 scrollport 上注册两次的相同函数会被 DOM 去重，移除一个表头时会悄悄停止另一个。
       const onScroll = (): void => { schedule() }
       scrollport?.addEventListener('scroll', onScroll, { passive: true })
       entries.set(id, {
@@ -353,7 +279,7 @@ export function createStickyPushController(host: StickyPushHost | undefined): St
       })
       host.documentElement.style.setProperty(`${PUSH_PROPERTY_PREFIX}${id}`, '0px')
       render()
-      // The reader may open a fold that is already scrolled past.
+      // reader 可能打开一个已经滚过的 fold。
       schedule()
       return () => { drop(id) }
     },
@@ -363,8 +289,7 @@ export function createStickyPushController(host: StickyPushHost | undefined): St
       if (frame !== null && view !== null) view.cancelAnimationFrame(frame)
       frame = null
       view?.removeEventListener('resize', onResize)
-      // Deleting the current key while iterating a Map is defined behaviour:
-      // its iterator visits what is left, so this drains without a snapshot.
+      // 迭代 Map 时删除当前 key 是定义好的行为：iterator 会继续访问剩余项，因此无需创建 snapshot 即可清空。
       for (const id of entries.keys()) drop(id)
       text = ''
       element.remove()

@@ -2,29 +2,29 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import type { Readable } from 'node:stream'
 
-/** How much of a child's output is kept to explain an unexpected exit. */
+/** 保留多少子进程输出，用于解释意外退出。 */
 export const RECENT_OUTPUT_LINES = 50
 
-/** How long a child may take to exit on its own before it is killed outright. */
+/** 子进程自行退出前允许花费的时间，超时后直接杀死。 */
 export const STOP_TIMEOUT_MS = 5_000
 
-/** One child process the launcher owns. */
+/** launcher 持有的一个子进程。 */
 export interface ChildSpec {
-  /** Prefix of this child's log lines; also how it is named in messages. */
+  /** 此子进程日志行的前缀；也是消息中使用的名称。 */
   readonly name: string
   readonly command: string
   readonly args: readonly string[]
   readonly cwd?: string | undefined
   readonly env?: NodeJS.ProcessEnv | undefined
   /**
-   * Called for every line this child writes, before it is forwarded. Used to
-   * read facts a child only announces at runtime (dsh prints its browser login
-   * token); it must not throw.
+   * 在转发前为子进程写出的每一行调用。用于
+   * 读取子进程只在运行时宣布的事实（dsh 打印浏览器登录
+   * token）；它不能抛出异常。
    */
   readonly onLine?: ((line: string) => void) | undefined
 }
 
-/** Why a child is gone, with enough output to see what it complained about. */
+/** 子进程退出的原因，以及足够看出其抱怨内容的输出。 */
 export interface ChildExit {
   readonly name: string
   readonly code: number | null
@@ -34,23 +34,23 @@ export interface ChildExit {
 
 export interface SupervisorOptions {
   /**
-   * Called when a child exits while the launcher is still running. There is no
-   * restart: a dsh that died on a bad profile or a port clash would just die
-   * again, and a silent restart loop is the hardest failure to notice.
+   * launcher 仍运行时子进程退出会调用。不会
+   * 重启：因 profile 错误或端口冲突退出的 dsh 只会再次
+   * 退出，而静默重启循环是最难发现的失败。
    */
   readonly onUnexpectedExit: (exit: ChildExit) => void
-  /** Line sink; defaults to stdout. */
+  /** 行输出目标；默认为 stdout。 */
   readonly write?: ((line: string) => void) | undefined
 }
 
 export interface Supervisor {
-  /** Spawn a child and start forwarding its output. */
+  /** 启动一个子进程并开始转发其输出。 */
   start(spec: ChildSpec): void
-  /** @returns True while the named child is alive. */
+  /** @returns 指定名称的子进程存活时为 true。 */
   isRunning(name: string): boolean
   /**
-   * Stop every child in reverse start order, waiting for each one, then kill it
-   * if it outstays {@link STOP_TIMEOUT_MS}.
+   * 按反向启动顺序停止所有子进程，逐个等待；如果某个子进程
+   * 超过 {@link STOP_TIMEOUT_MS} 仍未退出则杀死它。
    */
   stopAll(): Promise<void>
 }
@@ -64,11 +64,11 @@ interface SupervisedChild {
 }
 
 /**
- * Kill a whole process tree.
+ * 杀死整个进程树。
  *
- * On Windows `child.kill()` only ends the immediate process, leaving the shells
- * dsh spawns running and holding its port; `taskkill /T` is the only way to get
- * rid of them, and it is always forceful.
+ * 在 Windows 上，`child.kill()` 只会结束直接子进程，留下 dsh
+ * 启动且占用端口的 shell；`taskkill /T` 是唯一能
+ * 清除它们的方法，而且始终是强制的。
  */
 function killTree(child: ChildProcess, force: boolean): void {
   if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return
@@ -79,7 +79,7 @@ function killTree(child: ChildProcess, force: boolean): void {
   child.kill(force ? 'SIGKILL' : 'SIGTERM')
 }
 
-/** @returns True when `promise` settled within `timeoutMs`. */
+/** @returns `promise` 在 `timeoutMs` 内 settle 时为 true。 */
 async function settledWithin(promise: Promise<void>, timeoutMs: number): Promise<boolean> {
   let timer: NodeJS.Timeout | undefined
   const expiry = new Promise<boolean>((resolvePromise) => {
@@ -94,12 +94,12 @@ async function settledWithin(promise: Promise<void>, timeoutMs: number): Promise
 }
 
 /**
- * Manage a set of named child processes as one unit.
+ * 将一组命名子进程作为一个单元管理。
  *
- * Generic on purpose: the launcher runs dsh and the connector today, and adding
- * a third child must not mean reshaping the shutdown logic.
- * @param options - the unexpected-exit callback and an optional line sink.
- * @returns A supervisor whose children all die together.
+ * 特意保持通用：launcher 今天运行 dsh 和 connector，今后添加
+ * 第三个子进程不应意味着要重塑关闭逻辑。
+ * @param options - 意外退出回调和可选的行输出目标。
+ * @returns 一个让所有子进程一起退出的 supervisor。
  */
 export function createSupervisor(options: SupervisorOptions): Supervisor {
   const write = options.write ?? ((line: string) => void process.stdout.write(`${line}\n`))
@@ -123,8 +123,8 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
         ...spec.env === undefined ? {} : { env: spec.env },
         stdio: ['ignore', 'pipe', 'pipe'],
       })
-      // Assigned synchronously by the executor below; optional only because the
-      // compiler cannot see that.
+      // 由下面的 executor 同步赋值；之所以可选只是因为
+      // 编译器看不出来这一点。
       let markClosed: (() => void) | undefined
       const child: SupervisedChild = {
         name: spec.name,
@@ -136,7 +136,7 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
       children.push(child)
       forward(child, spawned.stdout, spec.onLine)
       forward(child, spawned.stderr, spec.onLine)
-      // A spawn failure never emits 'close', so it is reported as an exit.
+      // spawn 失败永远不会发出 'close'，因此按退出报告。
       spawned.once('error', (error) => {
         child.recent.push(error.message)
         if (child.finished) return
@@ -144,8 +144,8 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
         markClosed?.()
         if (!stopping) options.onUnexpectedExit({ name: child.name, code: null, signal: null, recent: [...child.recent] })
       })
-      // 'close' rather than 'exit': the last lines of output must be forwarded
-      // before the exit is reported, or the reason scrolls in after the verdict.
+      // 使用 'close' 而不是 'exit'：必须先转发最后几行输出
+      // 再报告退出，否则原因会在结论之后滚入。
       spawned.once('close', (code, signal) => {
         if (child.finished) return
         child.finished = true
@@ -164,10 +164,10 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
       for (const child of children.toReversed()) {
         if (child.finished) continue
         killTree(child.process, false)
-        // eslint-disable-next-line no-await-in-loop -- stopping in reverse order is the point
+        // eslint-disable-next-line no-await-in-loop -- 反向停止顺序正是目的
         if (await settledWithin(child.closed, STOP_TIMEOUT_MS)) continue
         killTree(child.process, true)
-        // eslint-disable-next-line no-await-in-loop -- ditto
+        // eslint-disable-next-line no-await-in-loop -- 同上
         await settledWithin(child.closed, STOP_TIMEOUT_MS)
       }
     },

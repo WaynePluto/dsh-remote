@@ -32,7 +32,7 @@ interface Harness {
 
 const openStores: RelayStore[] = []
 
-/** A recorder wired to a real store and a capturing pino destination. */
+/** 连接真实 store 和可捕获 pino destination 的 recorder。 */
 function harness(): Harness {
   const lines: LoggedLine[] = []
   const logger = pino(
@@ -122,8 +122,8 @@ describe('audit recorder', () => {
       metadata: { sessions: [{ refreshToken: 'leak' }] },
     })).toThrow(/metadata\.sessions\[0\]\.refreshToken/u)
 
-    // A rejected event must reach neither sink: the guard is a development
-    // failure, not a half-written audit row.
+    // 被拒绝的事件不能到达任一出口：这个保护是开发期
+    // 失败，而不是写了一半的审计行。
     expect(store.listAudit()).toEqual([])
     expect(lines).toEqual([])
   })
@@ -140,8 +140,8 @@ describe('audit recorder', () => {
 
   it('logs a failed write at error and rethrows it', () => {
     const { store, recorder, lines } = harness()
-    // A machine_id that is not in devices violates the audit_log foreign key,
-    // which is a real store failure rather than a stubbed one.
+    // 不在 devices 中的 machine_id 会违反 audit_log 外键，
+    // 这是实际 store 失败，而不是 stub 造成的失败。
     expect(() => recorder.record({
       event: 'device.revoked',
       success: true,
@@ -168,8 +168,8 @@ describe('audit recording discipline', () => {
       .filter(entry => entry.endsWith('.ts'))
       .filter(entry => readFileSync(join(sourceRoot, entry), 'utf8').includes('appendAudit('))
 
-    // Everything else must go through AuditRecorder, or the event would be
-    // persisted without ever reaching the log stream.
+    // 其他所有调用都必须经过 AuditRecorder，否则事件会
+    // 在没有进入日志流的情况下被持久化。
     expect(offenders.toSorted()).toEqual(['audit/recorder.ts', 'store/store.ts'])
   })
 })

@@ -23,7 +23,7 @@ export function isLoopbackHost(host: string | undefined): boolean {
   return unbracketed === 'localhost' || isLoopbackAddress(unbracketed)
 }
 
-/** Never trust X-Forwarded-For for this exemption. Both raw facts must be loopback. */
+/** 绝不信任 X-Forwarded-For 来决定此豁免。两个原始事实都必须是 loopback。 */
 export function isLoopbackBrowserRequest(request: IncomingMessage): boolean {
   return isLoopbackAddress(request.socket.remoteAddress) && isLoopbackHost(request.headers.host)
 }

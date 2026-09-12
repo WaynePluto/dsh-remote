@@ -35,7 +35,7 @@ function rejectionResponse(value: unknown): RateLimiterRes {
   throw value
 }
 
-/** Independent account and source-IP buckets; either one can block the attempt. */
+/** 账号和源 IP 使用独立桶；任一桶都可以阻止尝试。 */
 export class LoginRateLimiter {
   readonly #account: RateLimiterMemory
   readonly #ip: RateLimiterMemory
@@ -69,8 +69,8 @@ export class LoginRateLimiter {
       if (result.status === 'fulfilled') return result.value.remainingPoints <= 0 ? [result.value] : []
       return [rejectionResponse(result.reason)]
     })
-    // The fifth failure consumes the final point. The current request still gets
-    // a generic credential error; assertAllowed blocks every subsequent attempt.
+    // 第五次失败会消耗最后一个点数。当前请求仍会得到
+    // 通用凭据错误；assertAllowed 会阻止后续所有尝试。
     if (blockedResponses.length !== 0) return
   }
 

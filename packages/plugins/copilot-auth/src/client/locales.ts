@@ -1,13 +1,6 @@
-/**
- * Copy for the Copilot sign-in area. Both dictionaries are complete by
- * construction: `en` defines the key set and `zh` is typed against it, so a
- * missing translation fails the build rather than falling back to English at
- * runtime.
- *
- * @module @dsh-remote/dsh-plugin-copilot-auth/client/locales
- */
+/** auth card 文案；`en` 作为 key 集合，`zh` 按它实现。 */
 
-/** English copy; also the key set of this namespace. */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 export const en = {
   title: 'GitHub Copilot subscription',
   intro: 'Sign in with GitHub to use your Copilot subscription. No API key is needed.',
@@ -32,10 +25,10 @@ export const en = {
   busy: 'Working…',
 } as const
 
-/** One copy key of this namespace. */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 export type CopilotKey = keyof typeof en
 
-/** Simplified Chinese copy. */
+/** 本 namespace 的文案 key 类型。 */
 export const zh: Record<CopilotKey, string> = {
   title: 'GitHub Copilot 订阅',
   intro: '用 GitHub 账号登录即可使用 Copilot 订阅，不需要填 API 密钥。',
@@ -60,12 +53,7 @@ export const zh: Record<CopilotKey, string> = {
   busy: '处理中…',
 }
 
-/**
- * Fill `{name}` placeholders in one copy string.
- * @param text - the translated string.
- * @param values - placeholder values by name.
- * @returns the filled string; an unknown placeholder is left as written.
- */
+/** 填充文案占位符，未知 key 保持原样。 */
 export function fill(text: string, values: Readonly<Record<string, string | number>>): string {
   return text.replace(/\{(\w+)\}/gu, (match, key: string) =>
     Object.hasOwn(values, key) ? String(values[key]) : match)

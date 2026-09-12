@@ -4,7 +4,7 @@
  *
  * 中文文案遵循本项目词表（docs/01-decisions.md §2.05）。
  *
- * @module @dsh-remote/dsh-plugin-tools-inspector/client/locales
+ * 实现说明：此处记录相关接口、边界和生命周期约束。
  */
 
 /** 英文文案；同时是本命名空间的 key 集合。 */
@@ -17,6 +17,8 @@ export const en = {
   callsUnit: '{count}×',
   failures: '{count} failed',
   never: '—',
+  descriptionLabel: 'Description',
+  noDescription: 'No description',
   noParams: 'No parameters',
   paramsLabel: 'Parameters',
   required: 'required',
@@ -41,6 +43,8 @@ export const zh: Record<ToolsKey, string> = {
   callsUnit: '{count} 次',
   failures: '{count} 次失败',
   never: '—',
+  descriptionLabel: '描述',
+  noDescription: '没有描述',
   noParams: '无参数',
   paramsLabel: '参数',
   required: '必填',

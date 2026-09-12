@@ -3,6 +3,17 @@ import { chmodSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { DatabaseSync, type StatementResultingChanges } from 'node:sqlite'
 import { applyStoreMigrations, CURRENT_STORE_VERSION } from './migrations.js'
+import {
+  auditFromRow,
+  deviceFromRow,
+  enrollTokenFromRow,
+  metadataJson,
+  numberField,
+  requiredText,
+  sessionFromRow,
+  timestamp,
+  userFromRow,
+} from './sqlite-codecs.js'
 import type { OpaqueTokenHash } from './token-hash.js'
 import type {
   AppendAuditInput,
@@ -18,7 +29,7 @@ import type {
   UserRecord,
 } from './types.js'
 
-/** Every port in the configured member range is already claimed by a device. */
+/** 配置的成员端口范围中的每个端口都已被设备占用。 */
 export class BrowserPortRangeExhaustedError extends Error {
   readonly basePort: number
   readonly count: number
@@ -48,121 +59,7 @@ function changed(result: StatementResultingChanges): boolean {
   return result.changes !== 0 && result.changes !== 0n
 }
 
-function requiredText(value: string, name: string): string {
-  const trimmed = value.trim()
-  if (trimmed === '') throw new TypeError(`${name} must not be empty`)
-  return trimmed
-}
-
-function timestamp(value: number, name: string): number {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new TypeError(`${name} must be a non-negative safe integer timestamp`)
-  }
-  return value
-}
-
-function numberField(row: Record<string, unknown>, name: string): number {
-  const value = row[name]
-  if (typeof value !== 'number') throw new Error(`invalid numeric ${name} read from relay store`)
-  return value
-}
-
-function nullableNumberField(row: Record<string, unknown>, name: string): number | null {
-  const value = row[name]
-  if (value === null) return null
-  if (typeof value !== 'number') throw new Error(`invalid numeric ${name} read from relay store`)
-  return value
-}
-
-function textField(row: Record<string, unknown>, name: string): string {
-  const value = row[name]
-  if (typeof value !== 'string') throw new Error(`invalid text ${name} read from relay store`)
-  return value
-}
-
-function nullableTextField(row: Record<string, unknown>, name: string): string | null {
-  const value = row[name]
-  if (value === null) return null
-  if (typeof value !== 'string') throw new Error(`invalid text ${name} read from relay store`)
-  return value
-}
-
-function userFromRow(row: Record<string, unknown>): UserRecord {
-  return {
-    id: textField(row, 'id'),
-    username: textField(row, 'username'),
-    passwordHash: textField(row, 'password_hash'),
-    totpSecret: nullableTextField(row, 'totp_secret'),
-    totpEnabled: numberField(row, 'totp_enabled') === 1,
-    totpLastTimeStep: nullableNumberField(row, 'totp_last_time_step'),
-    disabledAt: nullableNumberField(row, 'disabled_at'),
-    createdAt: numberField(row, 'created_at'),
-    updatedAt: numberField(row, 'updated_at'),
-  }
-}
-
-function sessionFromRow(row: Record<string, unknown>): SessionRecord {
-  return {
-    id: textField(row, 'id'),
-    userId: textField(row, 'user_id'),
-    refreshTokenHash: textField(row, 'refresh_token_hash') as OpaqueTokenHash,
-    sourceIp: nullableTextField(row, 'source_ip'),
-    userAgent: nullableTextField(row, 'user_agent'),
-    createdAt: numberField(row, 'created_at'),
-    expiresAt: numberField(row, 'expires_at'),
-    lastUsedAt: numberField(row, 'last_used_at'),
-    revokedAt: nullableNumberField(row, 'revoked_at'),
-  }
-}
-
-function auditFromRow(row: Record<string, unknown>): AuditRecord {
-  const storedMetadata = nullableTextField(row, 'metadata_json')
-  return {
-    id: numberField(row, 'id'),
-    occurredAt: numberField(row, 'occurred_at'),
-    event: textField(row, 'event'),
-    success: numberField(row, 'success') === 1,
-    actorUserId: nullableTextField(row, 'actor_user_id'),
-    machineId: nullableTextField(row, 'machine_id'),
-    sessionId: nullableTextField(row, 'session_id'),
-    sourceIp: nullableTextField(row, 'source_ip'),
-    metadata: storedMetadata === null ? null : JSON.parse(storedMetadata) as unknown,
-  }
-}
-
-function deviceFromRow(row: Record<string, unknown>): DeviceRecord {
-  return {
-    machineId: textField(row, 'machine_id'),
-    slug: textField(row, 'slug'),
-    displayName: nullableTextField(row, 'display_name'),
-    publicKey: textField(row, 'public_key'),
-    browserPort: nullableNumberField(row, 'browser_port'),
-    revokedAt: nullableNumberField(row, 'revoked_at'),
-    createdAt: numberField(row, 'created_at'),
-    updatedAt: numberField(row, 'updated_at'),
-  }
-}
-
-function enrollTokenFromRow(row: Record<string, unknown>): EnrollTokenRecord {
-  return {
-    id: textField(row, 'id'),
-    tokenHash: textField(row, 'token_hash') as OpaqueTokenHash,
-    requestedSlug: textField(row, 'requested_slug'),
-    deviceName: nullableTextField(row, 'device_name'),
-    createdByUserId: nullableTextField(row, 'created_by_user_id'),
-    createdAt: numberField(row, 'created_at'),
-    expiresAt: numberField(row, 'expires_at'),
-  }
-}
-
-function metadataJson(metadata: unknown): string | null {
-  if (metadata === undefined) return null
-  const json = JSON.stringify(metadata)
-  if (json === undefined) throw new TypeError('audit metadata must be JSON serializable')
-  return json
-}
-
-/** Synchronous store built on Node's bundled SQLite; relay request handlers remain async. */
+/** 基于 Node 内置 SQLite 的同步 store；relay 请求 handler 仍保持 async。 */
 export class RelayStore {
   readonly #database: DatabaseSync
 
@@ -197,7 +94,7 @@ export class RelayStore {
     return user
   }
 
-  /** Atomically enforce the v1 single-admin bootstrap rule. */
+  /** 原子执行 v1 单管理员初始化规则。 */
   createFirstUser(input: CreateUserInput): UserRecord | undefined {
     this.#database.exec('BEGIN IMMEDIATE')
     try {
@@ -275,7 +172,7 @@ export class RelayStore {
     `).run(timeStep, timestamp(options.now ?? Date.now(), 'now'), options.userId, secret))
   }
 
-  /** Atomically consume a verified step so the same TOTP code cannot be replayed. */
+  /** 原子消耗已验证的时间步，防止同一 TOTP 动态码重放。 */
   consumeUserTotpTimeStep(userId: string, timeStep: number): boolean {
     const step = timestamp(timeStep, 'TOTP timeStep')
     return changed(this.#database.prepare(`
@@ -381,9 +278,9 @@ export class RelayStore {
     const createdAt = timestamp(input.createdAt ?? Date.now(), 'createdAt')
     const expiresAt = timestamp(input.expiresAt, 'expiresAt')
     if (expiresAt <= createdAt) throw new TypeError('expiresAt must be later than createdAt')
-    // Issuing is the only thing that grows this table, so it is also the only
-    // place that has to sweep it: a token that expired without being used is
-    // dead weight, and no timer or background job is needed to notice.
+    // 只有签发会增加此表的记录，因此也只有签发时需要清理它：
+    // 未使用就过期的令牌是无用负担，
+    // 无需定时器或后台任务专门发现。
     this.deleteExpiredEnrollTokens(createdAt)
     this.#database.prepare(`
       INSERT INTO enroll_tokens (
@@ -410,16 +307,11 @@ export class RelayStore {
   }
 
   /**
-   * Atomically spend a single-use enrollment token and register the device it
-   * authorizes. Deleting the token and writing the device must share one
-   * transaction: two connectors racing on the same token would otherwise both
-   * pass the validity check and each claim a machine.
+   * 原子消耗一次性注册令牌并登记其授权设备；删除令牌和写入设备必须共享事务，
+   * 避免两个竞态 connector 都通过有效性检查、各自认领一台机器。
    *
-   * The row is deleted rather than flagged. It is single-use and holds nothing
-   * but a hash, so a spent row could only ever be dead weight; what happened is
-   * in the audit trail, which is where an operator looks anyway.
-   * @returns The registered device, or undefined when the token is unknown,
-   * already spent, expired, or issued for a different slug.
+   * 令牌只使用一次且只保存哈希，使用后删除而不是标记，审计轨迹会记录发生了什么。
+   * @returns 已注册设备；令牌未知、已使用、过期或为其他 slug 签发时返回 undefined。
    */
   consumeEnrollToken(options: {
     tokenHash: OpaqueTokenHash
@@ -447,8 +339,8 @@ export class RelayStore {
   }
 
   /**
-   * Re-enrolling an existing machine rotates its key and clears any revocation,
-   * which is why revoking a device must also invalidate its enrollment tokens.
+   * 重新注册已有机器会轮换密钥并清除吊销状态，
+   * 所以吊销设备时也必须使其注册令牌失效。
    */
   #registerDevice(input: RegisterDeviceInput & { now: number }): DeviceRecord {
     const machineId = requiredText(input.machineId, 'machineId')
@@ -498,16 +390,13 @@ export class RelayStore {
   }
 
   /**
-   * Reserve this machine's browser-facing port (D16 routing key 2).
+   * 为这台机器预留面向浏览器的端口（D16 路由键 2）。
    *
-   * The lookup and the write share one transaction so two connectors enrolling
-   * at the same moment cannot be handed the same port. A machine that already
-   * holds a port keeps it — including one outside the current range — because
-   * the port is what the operator bookmarked, and re-enrolling a machine must
-   * not silently move it.
-   * @param options Target machine plus the contiguous range to draw from.
-   * @returns The port this machine is reachable on.
-   * @throws BrowserPortRangeExhaustedError when every port in the range is taken.
+   * 查询和写入共享事务，避免并发注册的两个 connector 拿到同一端口。
+   * 已持有的端口（包括范围外）必须保留：它是操作员书签，重新注册不能静默移动。
+   * @param options 目标机器和要从中分配的连续范围。
+   * @returns 这台机器可访问的端口。
+   * @throws BrowserPortRangeExhaustedError 范围内所有端口均被占用时抛出。
    */
   allocateDeviceBrowserPort(options: {
     machineId: string
@@ -547,8 +436,8 @@ export class RelayStore {
         this.#database.exec('ROLLBACK')
         throw new BrowserPortRangeExhaustedError(basePort, count)
       }
-      // updated_at is left alone: the port is relay bookkeeping, not a change to
-      // the machine's own registration that the operator should see as activity.
+      // 保持 updated_at 不变：端口是 relay 的记账信息，不是机器自身注册的更改，
+      // 不应被操作员视为活动。
       this.#database.prepare('UPDATE devices SET browser_port = ? WHERE machine_id = ?')
         .run(chosen, machineId)
       this.#database.exec('COMMIT')
@@ -560,8 +449,8 @@ export class RelayStore {
   }
 
   /**
-   * Revoke a device and delete its unspent enrollment tokens in one transaction,
-   * so a revoked machine cannot walk back in through a token issued earlier.
+   * 在一个事务中吊销设备并删除其未使用注册令牌，
+   * 防止已吊销机器通过早先签发的令牌重新进入。
    */
   revokeDevice(machineId: string, now = Date.now()): boolean {
     const revokedAt = timestamp(now, 'now')
@@ -584,7 +473,7 @@ export class RelayStore {
     }
   }
 
-  /** Sweep tokens nobody used before they expired. */
+  /** 清理无人使用且已过期的令牌。 */
   deleteExpiredEnrollTokens(now = Date.now()): number {
     const result = this.#database.prepare('DELETE FROM enroll_tokens WHERE expires_at <= ?')
       .run(timestamp(now, 'now'))
@@ -614,14 +503,14 @@ export class RelayStore {
   }
 
   /**
-   * Read the audit trail newest first.
+   * 按最新在前读取审计轨迹。
    *
-   * The ordering and paging key stays `id`, which is the AUTOINCREMENT primary
-   * key: SQLite walks it backwards and stops once `limit` matching rows are
-   * found, so the optional filters narrow that walk instead of forcing a sort.
-   * @param options Page size, exclusive upper `id` bound for paging, an exact
-   * event name, and the oldest `occurredAt` (unix ms) to include.
-   * @returns At most `limit` records, ordered from newest to oldest.
+   * 排序和分页键保持为 `id`，它是 AUTOINCREMENT 主键：
+   * SQLite 从后向前遍历，找到 `limit` 条匹配行后就停止，
+   * 因此可选过滤条件会缩小遍历范围，而不必强制排序。
+   * @param options 页面大小、用于分页的排他上界 `id`、精确的
+   * 事件名，以及要包含的最早 `occurredAt`（unix ms）。
+   * @returns 最多 `limit` 条记录，按从新到旧排列。
    */
   listAudit(options: ListAuditOptions = {}): AuditRecord[] {
     const limit = options.limit ?? 100
@@ -645,11 +534,11 @@ export class RelayStore {
   }
 
   /**
-   * Delete audit rows older than a cutoff. Retention is an explicit operator
-   * action: the relay never expires its own security trail on a timer, because
-   * the rows an incident needs are the ones nobody asked for.
-   * @param cutoff Unix ms; rows with `occurredAt` strictly below it are removed.
-   * @returns How many rows were deleted.
+   * 删除早于截止时间的审计行。保留策略是操作员显式执行的
+   * 操作：relay 从不通过定时器使自己的安全轨迹过期，因为
+   * 事件调查需要的正是没人主动要求保留的那些行。
+   * @param cutoff Unix ms；严格早于它的 `occurredAt` 行会被删除。
+   * @returns 删除的行数。
    */
   deleteAuditBefore(cutoff: number): number {
     const result = this.#database.prepare('DELETE FROM audit_log WHERE occurred_at < ?')

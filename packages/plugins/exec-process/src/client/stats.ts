@@ -1,16 +1,7 @@
 /**
- * Everything the「执行过程」row says, derived from the Chat nodes of one turn.
- *
- * Pure by construction: the caller passes plain node descriptors and gets back
- * plain numbers plus the node keys to hide. No React, no dsh runtime, no DOM —
- * which is what makes the interesting part (which rows belong to the fold)
- * testable without standing up a conversation engine.
- *
- * WHY THE SHAPES ARE STRUCTURAL. Every payload here belongs to a dsh
- * Definition (`assistant-step`, `tool-call`, `model-retry`), and this plugin
- * reads them from the browser's conversation projection. Narrowing each field
- * defensively rather than casting means a dsh upgrade that reshapes one of
- * them costs a wrong count, never a thrown renderer inside the transcript.
+ * 从一个 turn 的 Chat nodes 推导「执行过程」行显示的全部内容：计数以及负责折叠的行。
+ * 纯函数只接收普通 node 描述并返回数字和要隐藏的 key，不依赖 React、dsh runtime 或 DOM，便于独立测试。
+ * 所有 payload 都按结构防御读取；dsh 升级改变形状时最多造成计数不准确，不应让转录 renderer 抛错。
  *
  * @module @dsh-remote/dsh-plugin-exec-process/client/stats
  */
@@ -18,17 +9,9 @@
 import { EXEC_PROCESS_KINDS } from '../shared.js'
 
 /**
- * Chat node kinds that stay outside a turn's process fold.
- *
- * Copied from dsh's `TURN_PROCESS_INDEPENDENT_KINDS`
- * (`packages/client/ui-chat/src/client/contract/turn-process.ts:20-33`) rather
- * than imported: that constant is not part of the package's public client
- * exports, and a browser bundle cannot value-import another plugin anyway (the
- * page's module table is frozen). Keeping the same set is what makes this fold
- * agree with dsh's own about where a turn's process content begins and ends.
- *
- * This plugin's own header rows are added to it: a segment must never fold
- * itself, nor the header of the segment after it.
+ * 不属于 turn 过程 fold 的 Chat node kinds。
+ * 复制 dsh 的 `TURN_PROCESS_INDEPENDENT_KINDS`（`packages/client/ui-chat/src/client/contract/turn-process.ts:20-33`），因为它不是公开 client export；保持同一集合才能与 dsh 对过程起止位置的判断一致。
+ * 本插件自己的表头也加入其中，避免 fold 折叠自己或下一个 segment 的表头。
  */
 export const INDEPENDENT_KINDS: ReadonlySet<string> = new Set([
   'system-prompt',
@@ -41,7 +24,7 @@ export const INDEPENDENT_KINDS: ReadonlySet<string> = new Set([
   ...EXEC_PROCESS_KINDS,
 ])
 
-/** One Chat node of a turn, reduced to what the fold needs. */
+/** 一个 turn 的 Chat node，收窄为 fold 所需的数据。 */
 export interface ExecNodeView {
   readonly key: string
   readonly kind: string
@@ -50,48 +33,41 @@ export interface ExecNodeView {
 }
 
 /**
- * Half-open seq window `[startSeq, endSeq)` owned by one segment.
- *
- * Half-open with ONE exception, and it is the interesting one: the row sitting
- * exactly on `endSeq` is the row that closes the segment. It is never folded,
- * but the fold still owns the thinking printed inside it — see
- * {@link execProcessStats}.
+ * 一个 segment 拥有的半开 seq 窗口 `[startSeq, endSeq)`。
+ * 唯一例外是正好位于 `endSeq` 的关闭行：它不折叠，但其中的 thinking 仍归 fold，见 {@link execProcessStats}。
  */
 export interface ExecProcessRange {
-  /** First seq this segment owns; never earlier than its own header row. */
+  /** 本 segment 拥有的首个 seq；不会早于自己的表头行。 */
   readonly startSeq: number
-  /** The next segment's header, the finalized answer, or `Infinity` while the turn runs. */
+  /** 下一个 segment 的表头、最终答案，或 turn 运行期间的 `Infinity`。 */
   readonly endSeq: number
 }
 
-/** What the agent did last inside the fold, and whether it is still doing it. */
+/** fold 内 agent 最近执行的动作，以及是否仍在执行。 */
 export type ExecLastAction =
   | { readonly kind: 'tool'; readonly name: string; readonly running: boolean }
   | { readonly kind: 'thinking'; readonly running: boolean }
 
-/** Everything the row displays for one turn. */
+/** 本行显示的一个 turn 的全部统计。 */
 export interface ExecProcessStats {
-  /** Chat node keys the fold owns, in flow order. */
+  /** fold 拥有的 Chat node keys，按 flow 顺序排列。 */
   readonly memberKeys: readonly string[]
   /**
-   * Chat node keys whose ROW stays visible while their thinking folds away.
-   *
-   * Exactly the rows that close a segment: a mid-turn formal message, and the
-   * turn's finalized answer. What they said belongs to the reader; the thinking
-   * printed above it is the last step of the work.
+   * 行本身保持可见、但其中 thinking 被折叠的 Chat node keys。
+   * 正好是结束 segment 的行：turn 中途正式消息和 turn 的最终答案；正文属于读者，行上方的 thinking 仍是工作过程的最后一步。
    */
   readonly reasoningOnlyKeys: readonly string[]
-  /** Assistant rows carrying a non-empty reasoning block. */
+  /** 携带非空 reasoning block 的 assistant 行数。 */
   readonly reasoningCount: number
-  /** Root tool calls, subagent delegations included. */
+  /** root tool call 数，包含 subagent delegation。 */
   readonly toolCallCount: number
-  /** Tool calls that ended in an error, plus every recorded model retry. */
+  /** 以错误结束的 tool call 数，加上每次记录的 model retry。 */
   readonly failureCount: number
-  /** Last tool call in the fold; thinking when the turn only thought. */
+  /** fold 中最近的 tool call；turn 只有思考时则为 thinking。 */
   readonly lastAction: ExecLastAction | null
 }
 
-/** The empty result, reused so an unchanged empty fold keeps its identity. */
+/** 空结果；复用它以保持未变化的空 fold 的引用身份。 */
 export const EMPTY_STATS: ExecProcessStats = {
   memberKeys: [],
   reasoningOnlyKeys: [],
@@ -108,9 +84,9 @@ function record(value: unknown): Readonly<Record<string, unknown>> | undefined {
 }
 
 /**
- * Whether an assistant row actually shows a thinking section.
- * @param data - the `assistant-step` payload.
- * @returns true when at least one reasoning block carries visible text.
+ * 判断 assistant 行是否实际显示 thinking section。
+ * @param data - `assistant-step` payload。
+ * @returns 至少一个 reasoning block 携带可见文本时返回 true。
  */
 export function hasVisibleReasoning(data: unknown): boolean {
   const blocks = record(data)?.blocks
@@ -122,13 +98,9 @@ export function hasVisibleReasoning(data: unknown): boolean {
 }
 
 /**
- * Read a root tool call's name from either lifecycle shape.
- *
- * A running root carries `name` directly; a settled root carries the call head
- * under `call`, which is null when the window cut left the `tool/call` outside
- * (`packages/client/ui-chat/src/client/contract/snapshot.ts` → ToolResultNode).
- * @param data - the `tool-call` payload.
- * @returns the tool name, or undefined when it is not recoverable.
+ * 从两种 lifecycle 形状读取 root tool call 名称：运行中 root 直接携带 `name`，已结束 root 从 `call` 读取；窗口截断导致无法恢复时返回 undefined。
+ * @param data - `tool-call` payload。
+ * @returns tool 名称；无法恢复时返回 undefined。
  */
 export function toolName(data: unknown): string | undefined {
   const root = record(record(data)?.root)
@@ -139,26 +111,20 @@ export function toolName(data: unknown): string | undefined {
 }
 
 /**
- * Whether a root tool call settled with an error.
- * @param data - the `tool-call` payload.
- * @returns true only for a settled root whose result is an error.
+ * 判断 root tool call 是否以错误结束。
+ * @param data - `tool-call` payload。
+ * @returns 仅已结束且 result 为错误的 root 返回 true。
  */
 export function toolFailed(data: unknown): boolean {
   const root = record(record(data)?.root)
-  // `kind` is present exactly on a settled root (dsh's own `isSettledTool`).
+  // `kind` 只会出现在已结束的 root 上（dsh 自己的 `isSettledTool`）。
   return root !== undefined && root.kind === 'tool-result' && root.isError === true
 }
 
 /**
- * Whether a root tool call is still running.
- *
- * Mirrors dsh's own `isRunningTool` (`contract/chat-nodes.ts:127-129`), which
- * is defined as "the root carries no final result" — the settled shape is the
- * one that gained a `kind`. Read that way round on purpose: a future lifecycle
- * state dsh adds would read as "not settled", which is the honest answer for a
- * row that has not produced its result yet.
- * @param data - the `tool-call` payload.
- * @returns true for a root that has not settled.
+ * 判断 root tool call 是否仍在运行。对应 dsh 的 `isRunningTool`（`contract/chat-nodes.ts:127-129`）：没有最终 result 就视为未结束，未来新增 lifecycle 状态也会诚实地显示为仍运行。
+ * @param data - `tool-call` payload。
+ * @returns root 尚未结束时返回 true。
  */
 export function toolRunning(data: unknown): boolean {
   const root = record(record(data)?.root)
@@ -166,25 +132,19 @@ export function toolRunning(data: unknown): boolean {
 }
 
 /**
- * Whether an assistant row is still streaming.
- * @param data - the `assistant-step` payload.
- * @returns true while dsh reports the step as running.
+ * 判断 assistant 行是否仍在流式输出。
+ * @param data - `assistant-step` payload。
+ * @returns dsh 报告 step 正在运行时返回 true。
  */
 export function assistantRunning(data: unknown): boolean {
   return record(data)?.status === 'running'
 }
 
 /**
- * Whether an assistant row is a FORMAL message — something the agent said to
- * the reader, rather than a step of its work.
- *
- * This is the line the whole segmentation rests on. A row carrying visible
- * prose is an answer, however short, and an answer never belongs inside a
- * disclosure labelled「执行过程」— even when the same row also dispatched a
- * tool (the model may speak first and then go back to work).
- *
- * @param data - the `assistant-step` payload.
- * @returns true when at least one text block carries visible prose.
+ * 判断 assistant 行是否为 FORMAL message：即 agent 对读者说的正文，而不是工作步骤。
+ * 携带可见 prose 的行永不归入「执行过程」fold，即使同一行随后也 dispatch 了 tool。
+ * @param data - `assistant-step` payload。
+ * @returns 至少一个 text block 携带可见正文时返回 true。
  */
 export function isFormalMessage(data: unknown): boolean {
   const blocks = record(data)?.blocks
@@ -196,9 +156,9 @@ export function isFormalMessage(data: unknown): boolean {
 }
 
 /**
- * Count the model retries a folded retry row stands for.
- * @param data - the `model-retry` payload.
- * @returns the number of recorded attempts, at least one.
+ * 计算一个折叠 retry 行代表的 model retry 次数。
+ * @param data - `model-retry` payload。
+ * @returns 记录的尝试次数，至少为 1。
  */
 export function retryAttempts(data: unknown): number {
   const attempts = record(data)?.attempts
@@ -206,13 +166,11 @@ export function retryAttempts(data: unknown): number {
 }
 
 /**
- * Where one segment stops: the next segment's header row, or the finalized
- * answer when this is the turn's last segment.
- *
- * @param nodes - the turn's Chat nodes in flow order.
- * @param selfAnchorSeq - this segment's own header position.
- * @param answerAnchorSeq - the turn's finalized answer, or null when it has none.
- * @returns the exclusive upper bound of this segment.
+ * 确定 segment 的结束位置：下一个 segment 表头，或最后一个 segment 的最终答案。
+ * @param nodes - 按 flow 顺序排列的 turn Chat nodes。
+ * @param selfAnchorSeq - 本 segment 表头位置。
+ * @param answerAnchorSeq - turn 的最终答案；没有时为 null。
+ * @returns segment 的排他上界。
  */
 export function segmentEndSeq(
   nodes: readonly ExecNodeView[],
@@ -228,7 +186,7 @@ export function segmentEndSeq(
   return next
 }
 
-/** Whether this segment can no longer receive process rows. */
+/** 本 segment 是否不再接收过程行。 */
 export function segmentEnded(
   nodes: readonly ExecNodeView[],
   selfAnchorSeq: number,
@@ -240,27 +198,11 @@ export function segmentEnded(
 }
 
 /**
- * Select the folded rows of one segment and summarize them.
- *
- * Membership starts from dsh's own `processMember` test
- * (`ChatNodeSeat.tsx:69-73`) — inside the seq window, and not one of the kinds
- * that stay independent of the disclosure — and adds two rules of its own.
- *
- * FIRST: a formal assistant message is never folded. Reproducing dsh's part
- * rather than inventing a looser one is what keeps this fold from swallowing a
- * user message or the answer; this extra rule is what keeps「执行过程」meaning
- * "work", not "everything that happened".
- *
- * SECOND: the thinking printed inside such a row still belongs to the fold.
- * Otherwise every collapsed segment would be followed immediately by a stray
- * 「已思考」box — the reasoning of the very message the fold stops at. dsh hides
- * that same box while its own fold is closed (`AssistantNodeView.tsx:23-27`);
- * it just never gets the chance in a session past fifty messages, which is the
- * whole reason this plugin exists.
- *
- * @param nodes - the turn's Chat nodes in flow order.
- * @param range - this segment's seq window.
- * @returns folded node keys and the counts shown on the row.
+ * 选择一个 segment 的折叠行并汇总统计。
+ * 成员判定沿用 dsh 的 `processMember`（`ChatNodeSeat.tsx:69-73`），再额外排除正式 assistant message，同时保留这些行内部的 thinking，确保「执行过程」只表示工作而不是所有事件。
+ * @param nodes - 按 flow 顺序排列的 turn Chat nodes。
+ * @param range - 本 segment 的 seq 窗口。
+ * @returns 要折叠的 node keys 及行上显示的计数。
  */
 export function execProcessStats(
   nodes: readonly ExecNodeView[],
@@ -272,10 +214,7 @@ export function execProcessStats(
   let toolCallCount = 0
   let failureCount = 0
   let lastAction: ExecLastAction | null = null
-  // Tracked apart from `lastAction` so the row can say「进行中」about work that
-  // genuinely still is. Parallel tool calls are the case that makes this worth
-  // a second variable: the newest row may already have settled while an earlier
-  // sibling is still running, and "the last one started" would then be a lie.
+  // 与 `lastAction` 分开记录，使行能对确实仍在进行的工作显示「进行中」。并行 tool call 时最新一行可能已结束、较早的 sibling 仍在运行，单看“最后启动的动作”会失真。
   let lastRunning: ExecLastAction | null = null
   const note = (action: ExecLastAction): void => {
     lastAction = action
@@ -284,19 +223,17 @@ export function execProcessStats(
   for (const node of nodes) {
     if (INDEPENDENT_KINDS.has(node.kind)) continue
     if (node.anchorSeq < range.startSeq || node.anchorSeq > range.endSeq) continue
-    // The finalized answer sits exactly ON the bound; a mid-turn formal message
-    // sits just inside it, below the header its own step opened.
+    // 最终答案正好位于边界上；turn 中途正式消息位于边界内、在其 step 打开的表头下方。
     const closing = node.anchorSeq === range.endSeq
     if (node.kind === 'assistant-step' && (closing || isFormalMessage(node.data))) {
       if (hasVisibleReasoning(node.data)) {
         reasoningOnlyKeys.push(node.key)
         reasoningCount++
       }
-      // `lastAction` deliberately unchanged: thinking that ends in an answer is
-      // not "what the agent was doing", and「最近 read」says more than「最近 思考」.
+      // 刻意不更新 `lastAction`：随答案结束的 thinking 不代表“agent 最近在做什么”，「最近 read」比「最近思考」更有信息。
       continue
     }
-    // Anything else landing on the bound belongs to the next segment.
+    // 其他正好落在边界上的 node 属于下一个 segment。
     if (closing) continue
     memberKeys.push(node.key)
     if (node.kind === 'assistant-step' && hasVisibleReasoning(node.data)) {

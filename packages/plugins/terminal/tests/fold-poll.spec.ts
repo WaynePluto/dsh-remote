@@ -1,28 +1,19 @@
-/**
- * The panel's one piece of stateful decision-making, extracted so it can be
- * tested without a DOM: what one poll does to what is on screen.
- *
- * It exists because of a defect the live browser acceptance caught exactly once
- * in twenty runs — a single "could not answer" poll unmounted the whole panel,
- * and with it the user's typed draft.
- *
- * @module @dsh-remote/dsh-plugin-terminal/tests/fold-poll
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 
 import { describe, expect, it } from 'vitest'
 import { BLIND_POLL_LIMIT, foldPoll } from '../src/shared.js'
 import type { TerminalsSnapshot } from '../src/shared.js'
 
-/** A snapshot with one live terminal. */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 const withTerminal: TerminalsSnapshot = {
   terminals: [{ id: 'pty-1', type: 'shell', running: true, sending: false }],
   now: 1,
 }
 
-/** A snapshot the Host could not answer. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 const noAgent: TerminalsSnapshot = { terminals: [], unavailable: 'no-agent', now: 2 }
 
-/** A definitive "this conversation has no terminals". */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 const empty: TerminalsSnapshot = { terminals: [], now: 3 }
 
 describe('foldPoll', () => {
@@ -31,13 +22,13 @@ describe('foldPoll', () => {
   })
 
   it('hides the panel the moment the model really closed the terminal', () => {
-    // A definitive empty answer must NOT be held back: the panel disappearing
-    // when the last terminal closes is the correct behaviour.
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
     expect(foldPoll(withTerminal, empty, 0)).toStrictEqual({ snapshot: empty, blindPolls: 0 })
   })
 
   it('keeps showing what it has when one poll cannot answer', () => {
-    // The whole point: this is what protects a half-typed password.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const folded = foldPoll(withTerminal, noAgent, 0)
     expect(folded.snapshot).toBe(withTerminal)
     expect(folded.blindPolls).toBe(1)

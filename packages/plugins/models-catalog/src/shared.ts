@@ -1,155 +1,150 @@
 /**
- * The wire contract between this plugin's two halves.
- *
- * Both halves are built from this file, so an endpoint name or a view field
- * cannot drift between the Host that answers and the panel that asks.
+ * 本插件两半共享的 wire contract。
+ * Host 与 panel 都从此文件构建，endpoint 名和 view field 不会在请求方与应答方之间漂移。
  *
  * @module @dsh-remote/dsh-plugin-models-catalog/shared
  */
 
 /**
- * The logical RPC channel this plugin owns.
- *
- * Registered through `ctx.connection.rpc.handle()`, which mounts it as its own
- * top-level route and applies dsh's Host/Origin fence plus browser
- * authentication before any request reaches us — the same gate `/api` gets.
+ * 本插件拥有的逻辑 RPC channel。
+ * 通过 `ctx.connection.rpc.handle()` 注册为顶层 route；请求到达本插件前先经过 dsh 的 Host/Origin fence 和 browser authentication，与 `/api` 相同。
  */
 export const CHANNEL = '/models-catalog'
 
-/** The settings namespace of the adapter family whose routes this plugin edits. */
+/** 本插件编辑的 adapter family route 所属 settings namespace。 */
 export const PI_AI_NAMESPACE = 'llm-pi-ai'
 
 /**
- * This plugin's own settings namespace, holding provenance only.
- *
- * Provenance cannot be derived from the pi-ai section: a `models` list written
- * by a person (or by our sibling `copilot-auth`, which narrows the Copilot
- * route to what the account may call) is indistinguishable at rest from one we
- * wrote. Recording what we added is what lets every later pass touch our own
- * entries and nothing else.
- *
- * Named after the package, this project's convention for every plugin-owned
- * namespace: a section in a shared `settings.yaml` should say which plugin owns
- * it, and a `dsh-plugin-` prefix cannot collide with an upstream dsh namespace.
+ * 本插件自己的 settings namespace，只保存 provenance。
+ * 静态 `models` 无法区分用户、`copilot-auth` 或本插件写入的条目；记录 additions 才能让后续 pass 只触碰本插件拥有的 entries。
+ * 名称沿用包名和项目的 plugin namespace 约定，`dsh-plugin-` 前缀也不会与上游 dsh namespace 冲突。
  */
 export const SELF_NAMESPACE = 'dsh-plugin-models-catalog'
 
-/** Where the model facts come from. Overridable so a blocked network can point at a mirror. */
+/** 模型事实来源；可覆盖，以便 network blocked 时指向 mirror。 */
 export const DEFAULT_SOURCE_URL = 'https://models.dev/api.json'
 
-/** Every endpoint this channel answers. */
+/** 本 channel 应答的全部 endpoint。 */
 export const ENDPOINTS = ['status', 'preview', 'apply', 'revert'] as const
 
-/** One endpoint of {@link CHANNEL}. */
+/** {@link CHANNEL} 的一个 endpoint。 */
 export type CatalogEndpoint = (typeof ENDPOINTS)[number]
 
 /**
- * Whether a decoded endpoint name is one we serve.
- * @param endpoint - the channel-relative endpoint name.
- * @returns true when the endpoint is ours.
+ * 判断解码后的 endpoint 名是否由本插件提供。
+ * @param endpoint - 相对 channel 的 endpoint 名称。
+ * @returns endpoint 属于本插件时为 true。
  */
 export function isCatalogEndpoint(endpoint: string): endpoint is CatalogEndpoint {
   return (ENDPOINTS as readonly string[]).includes(endpoint)
 }
 
-/** A request modality dsh's pi-ai seam accepts; models.dev names more, and the rest are dropped. */
+/** dsh pi-ai seam 接受的 request modality；models.dev 的其他 modality 会被丢弃。 */
 export type Modality = 'text' | 'image'
 
 /**
- * One model this plugin would add to a route, in the shape a `models` entry
- * takes. Deliberately only the fields models.dev can actually answer: the wire
- * protocol, reasoning-effort spellings, and compat switches are not in that
- * data set, so nothing here pretends to know them.
+ * 本插件将添加到 route 的一个 model，形状与 `models` entry 一致。
+ * 只保留 models.dev 实际能回答的字段；该数据不含 wire protocol、reasoning-effort spellings 或 compat switches，因此不假装知道它们。
  */
 export interface ModelAddition {
-  /** Model id, sent to the provider verbatim. */
+  /** Model id，原样发送给 provider。 */
   id: string
-  /** Display name for selectors. */
+  /** 供 selector 显示的名称。 */
   name: string
-  /** Combined request+response capacity, when models.dev states one. */
+  /** models.dev 声明时的 request+response 容量。 */
   contextWindow?: number
-  /** Output capability, when models.dev states one. */
+  /** models.dev 声明时的输出容量。 */
   maxTokens?: number
-  /** Request modalities, narrowed to the two dsh accepts. */
+  /** Request modalities，收窄到 dsh 接受的两种。 */
   input?: readonly Modality[]
-  /**
-   * Whether models.dev calls this a reasoning model. Reported for the panel to
-   * warn with, NOT written: dsh needs the per-level wire spellings that
-   * models.dev does not carry, so an added reasoning model reaches the picker
-   * without thinking levels.
-   */
+  /** models.dev 是否将其称为 reasoning model；只供 panel 警告，不写入 dsh，因为缺少 per-level wire spellings，新增模型不会带 thinking levels。 */
   reasoningUnavailable?: boolean
 }
 
-/** Why one route cannot take additions at all. */
+/**
+ * runtime pi-ai catalog addition 持久化的最小 model facts。
+ * `api` 来自已安装同 id entry 或 naming fallback；dsh `models` schema 没有 per-model protocol field，因此永不写入其中。
+ */
+export interface RuntimeModelSpec {
+  /** Model id，原样发送给 provider。 */
+  id: string
+  /** 供 selector 显示的名称。 */
+  name: string
+  /** models.dev 声明时的 request+response 容量。 */
+  contextWindow?: number
+  /** models.dev 声明时的输出容量。 */
+  maxTokens?: number
+  /** Request modalities，收窄到 dsh 接受的两种。 */
+  input?: Modality[]
+  /** runtime catalog model 选择的 wire protocol。 */
+  api: string
+  /** 拥有该 model 的 provider route，供 runtime-only 调用使用。 */
+  route: string
+}
+
+/** 一个 route 无法接收 additions 的原因。 */
 export type RouteBlock =
-  /** The installed catalog spans several wire protocols and an entry cannot name one. */
-  | 'multi-protocol'
-  /** models.dev describes no provider we can match to this route. */
+  /** 没有可用于构造 addition 的原生 pi-ai provider/model template。 */
+  | 'no-template'
+  /** models.dev 没有可匹配该 route 的 provider。 */
   | 'no-source'
-  /** Someone else owns this route's `models` list (a person, or the copilot-auth plugin). */
+  /** 为旧 browser bundle 保留的 view marker；新的 planning 会追加到已有列表。 */
   | 'foreign-models'
 
-/** What one route would gain, lose, or refuse. */
+/** 一个 route 将获得、回收或拒绝的内容。 */
 export interface RoutePreview {
-  /** llm-pi-ai route key (the `providers` dict key). */
+  /** llm-pi-ai route key（`providers` 字典 key）。 */
   route: string
-  /** Name the Models page shows for it. */
+  /** Models 页面显示的名称。 */
   displayName: string
-  /** models.dev provider id this route was matched to, when one matched. */
+  /** 该 route 匹配到的 models.dev provider id（若有）。 */
   source?: string
-  /** Model ids this plugin currently has in the route's list. */
+  /** 本插件当前在该 route 列表中的 model ids。 */
   ownedIds: readonly string[]
-  /** Models models.dev describes that neither dsh nor our overlay serves yet. */
+  /** models.dev 描述、但 dsh 和 overlay 都尚未提供的 models。 */
   additions: readonly ModelAddition[]
-  /** Ids our overlay carries that dsh now ships natively; applying drops them. */
+  /** overlay 携带、但 dsh 已原生提供的 ids；apply 会移除它们。 */
   reclaimed: readonly string[]
-  /** Why nothing can be added here, when nothing can. */
+  /** 无法添加内容时的原因。 */
   blocked?: RouteBlock
 }
 
-/** One route's share of the last automatic cleanup. */
+/** 最近一次自动清理在一个 route 上回收的内容。 */
 export interface ReclaimedNotice {
-  /** llm-pi-ai route key. */
+  /** llm-pi-ai route 的 key。 */
   route: string
-  /** Name the Models page shows for it. */
+  /** Models 页面显示的名称。 */
   displayName: string
-  /** Ids that went back to being dsh's. */
+  /** 恢复为 dsh 原生条目的 ids。 */
   ids: readonly string[]
 }
 
-/** Everything the panel renders. */
+/** panel 渲染的完整状态。 */
 export interface CatalogStatusView {
-  /** The URL the facts were read from. */
+  /** 读取模型事实的 URL。 */
   sourceUrl: string
-  /** When pi-ai's installed snapshot of models.dev was generated (epoch ms), when it says. */
+  /** pi-ai 内置 models.dev snapshot 的生成时间（epoch ms，若提供）。 */
   builtinSnapshotAt?: number
-  /** When this process last read the source (epoch ms); absent before the first read. */
+  /** 本进程最近读取 source 的时间（epoch ms）；首次读取前缺席。 */
   fetchedAt?: number
-  /** One entry per configurable pi-ai route, in directory order. */
+  /** 每个可配置 pi-ai route 一项，按目录顺序排列。 */
   routes: readonly RoutePreview[]
-  /**
-   * What the automatic cleanup removed on its way here.
-   *
-   * The cleanup is this plugin's one unasked write, so it reports itself: the
-   * routes it touched are already clean by the time the view is built, and
-   * without this the removal would be invisible.
-   */
+  /** 自动清理移除的内容。清理是本插件唯一的 unasked write，因此必须自报：view 构造时涉及的 route 已经 clean，否则移除会不可见。 */
   reconciled?: readonly ReclaimedNotice[]
-  /** Why the last read or write failed; absent on success. */
+  /** 最近一次 read/write 失败原因；成功时缺席。 */
   error?: string
 }
 
-/** Payload of `apply` and `revert`: the routes the human chose. */
+/** `apply` 和 `revert` 的 payload：用户选择的 route。 */
 export interface RouteSelection {
-  /** Route keys to act on; an unknown key is refused rather than skipped. */
+  /** 要操作的 route keys；未知 key 会被拒绝而不是静默跳过。 */
   routes: readonly string[]
 }
 
 /**
- * Whether a decoded payload is a route selection.
- * @param payload - the value the browser sent.
- * @returns true when it carries a string array under `routes`.
+ * 判断解码后的 payload 是否为 route selection。
+ * @param payload - browser 发送的值。
+ * @returns 是否携带 `routes` 字符串数组。
  */
 export function isRouteSelection(payload: unknown): payload is RouteSelection {
   if (typeof payload !== 'object' || payload === null) return false

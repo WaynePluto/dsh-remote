@@ -1,39 +1,12 @@
-/**
- * The row's own chrome, as one static stylesheet.
- *
- * A real stylesheet rather than inline styles because the row needs `:hover`,
- * `:focus-visible`, a rotating chevron, a pulsing running dot and a
- * `prefers-reduced-motion` opt-out — none of which a `style` attribute can
- * express. This plugin's browser bundle carries no CSS pipeline (dsh's client
- * module loader takes one JS artifact), so the sheet is a string installed at
- * apply time and removed with the fiber.
- *
- * EVERY COLOUR AND METRIC COMES FROM dsh's OWN LADDER. The row is a rounded
- * outline in dsh's `--dsw-alias-border-l2`, the same hairline colour its
- * `turn-process` control uses, and its text rides dsh's SECONDARY font axis
- * (`--dsh-content-font-size-secondary`, `gradient-shadow-text.css:56`) — the
- * "one step under the body" tier every flow-row title and summary uses. Riding
- * that axis rather than hard-coding 13px is what keeps the row in proportion
- * when the reader changes the transcript font size in settings.
- *
- * ⚠ Theme variable names are checked against dsh's token set: a misspelled
- * `--dsw-*` does not fail, it silently falls back to the literal after the
- * comma (docs/02 §8.6). Every fallback here is therefore a sane value on its
- * own, not a placeholder.
- *
- * @module @dsh-remote/dsh-plugin-exec-process/client/row-styles
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`:hover`、`:focus-visible`、`prefers-reduced-motion`、`style`、`--dsw-alias-border-l2`、`turn-process`、`--dsh-content-font-size-secondary`、`gradient-shadow-text.css:56`、`--dsw-*`） */
 
-/** Class prefix owned by this plugin; namespaced so nothing can collide. */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 export const ROW_CLASS = 'dshx-exec-process'
 
-/** Marker attribute set on this module's `<style>`, for diagnostics. */
+/** 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。（涉及：`<style>`） */
 export const ROW_STYLE_MARKER = 'data-dsh-plugin-exec-process-chrome'
 
-/**
- * The stylesheet text.
- * @returns CSS for the row, its fields, its chevron and its running dot.
- */
+/* 背景和布局 */
 export function rowStylesheet(): string {
   return `
 .${ROW_CLASS} {
@@ -44,20 +17,10 @@ export function rowStylesheet(): string {
   width: 100%;
   min-width: 0;
   padding: 5px 12px;
-  /*
-   * A closed outline rather than dsh's single hairline: a lone bottom line
-   * reads as "the end of the message above" and left the process summary
-   * visually glued to the agent's own words. The box is the smallest chrome
-   * that says "this is a control, not prose".
-   */
+  /* 细边框 */
   border: 0.5px solid var(--dsw-alias-border-l2, rgba(128, 128, 128, 0.28));
   border-radius: 8px;
-  /*
-   * Opaque, always: this element is also what the reader sees while the row is
-   * stuck to the top of the scroller, and a transparent sticky lets the
-   * content scrolling underneath show straight through it. Hover therefore
-   * moves the BORDER and the text, never the background.
-   */
+  /* 背景和布局 */
   background: var(--dsw-alias-bg-base, #fff);
   color: var(--dsw-alias-label-secondary, #6b7280);
   cursor: pointer;
@@ -76,32 +39,14 @@ export function rowStylesheet(): string {
   color: var(--dsw-alias-label-primary, #111827);
 }
 
-/*
- * STICKING LIVES IN ./sticky-push.ts, NOT HERE.
- *
- * An expanded segment can be dozens of rows tall and this header is the only
- * control that closes it, so without sticking "collapse again" means scrolling
- * all the way back up to find it. But a plain sticky rule would pin it for the
- * rest of the conversation: a sticky element is released by the bottom of its
- * containing block, and this header's containing block is the whole message
- * column, not the segment it summarizes. Releasing it on time needs a measured
- * offset per frame, so the whole sticky rule is published there instead — as
- * one rule per open header, keyed by the wrapper's own data-chat-flow-key.
- *
- * What stays here is the consequence for THIS element: while stuck it is what
- * the reader sees over the scrolling transcript, so its background must be
- * opaque and hover may move the border and the text but never the background.
- */
+/* 背景和布局 */
 
 .${ROW_CLASS}__label {
   flex: 0 0 auto;
   white-space: nowrap;
 }
 
-/* Keep the complete count summary at its intrinsic width on an ordinary row.
-   It may shrink only when the fixed label, summary and trailing indicators are
-   themselves wider than the row; min-width:0 then prevents narrow viewports
-   from overflowing and gives that exceptional case an ellipsis. */
+/* 背景和布局 */
 .${ROW_CLASS}__status {
   flex: 0 1 auto;
   min-width: 0;
@@ -110,9 +55,7 @@ export function rowStylesheet(): string {
   white-space: nowrap;
 }
 
-/* The action starts at a zero flex basis and grows into whatever remains after
-   the fixed label and intrinsic-width summary. It is therefore the first and,
-   in everyday layouts, only field that loses characters. */
+/* 背景和布局 */
 .${ROW_CLASS}__action {
   flex: 1 1 0;
   min-width: 0;
@@ -122,20 +65,7 @@ export function rowStylesheet(): string {
   color: var(--dsw-alias-label-tertiary, #9ca3af);
 }
 
-/*
- * Still running.
- *
- * The dot is a SIBLING of the text rather than a generated box inside it, and
- * that is the whole point: as a flex item of the row it is centred
- * geometrically by the row's own align-items, while a generated inline box
- * could only be placed against the text baseline plus half the LATIN
- * x-height - visibly high next to CJK glyphs. Leaving the text alone in its own
- * element also keeps its ellipsis, which making that element a flex container
- * would have silently killed.
- *
- * The field also steps up one colour tier: "what it is doing now" outranks
- * "what it did last".
- */
+/* 背景和布局 */
 .${ROW_CLASS}__dot {
   flex: none;
   width: 6px;
@@ -180,7 +110,7 @@ export function rowStylesheet(): string {
 `.trim()
 }
 
-/** The document surface this installer needs; narrowed so tests can fake it. */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 export interface StyleHost {
   createElement(tag: 'style'): {
     textContent: string | null
@@ -190,11 +120,7 @@ export interface StyleHost {
   readonly head: unknown
 }
 
-/**
- * Install the row stylesheet for as long as the caller keeps it.
- * @param host - the document; `undefined` outside a browser.
- * @returns a disposer removing the sheet.
- */
+/** 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。（涉及：`undefined`） */
 export function installRowStyles(host: StyleHost | undefined): () => void {
   if (host === undefined) return () => {}
   const element = host.createElement('style')

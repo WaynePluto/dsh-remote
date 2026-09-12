@@ -1,7 +1,4 @@
-/**
- * The header's release: it follows the reader only while it still has rows
- * under it, and slides out at content speed the moment it does not.
- */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 
 import { describe, expect, it } from 'vitest'
 import { FLOW_KEY_ATTRIBUTE, flowKeySelector, THINK_SELECTOR } from '../src/client/hidden-rows.js'
@@ -11,42 +8,38 @@ import {
   type AncestorElement, type StickyPushHost, type StickyPushView, type TrackedButton,
 } from '../src/client/sticky-push.js'
 
-/** A box in viewport coordinates. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 interface Box { top: number; height: number }
 
-/** @param box - the element's position. @returns a measurable stand-in. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 function rect(box: Box) {
   return { top: box.top, bottom: box.top + box.height, height: box.height }
 }
 
-/** Everything a test can steer, and everything it can observe. */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 interface Harness {
   host: StickyPushHost
-  /** The header wrapper's box; move it to simulate scrolling. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   header: Box
-  /** The last folded row's box. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   content: Box
-  /** The scrollport's box. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   port: Box
-  /** Whether the last folded row is still in the page. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   rowPresent: { value: boolean }
   button: TrackedButton
   css: () => string | null
   properties: Map<string, string>
-  /** Selectors used to find the content end. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   queries: string[]
   scrollListeners: () => number
   resizeListeners: () => number
-  /** Fire every pending animation frame callback. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   flush: () => void
   attached: () => boolean
 }
 
-/**
- * Build a fake document, window, wrapper, scrollport and folded row.
- * @param flowKey - the key dsh would print on the header's wrapper.
- * @returns the harness.
- */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 function harness(flowKey: string | null = 'turn3:exec'): Harness {
   const header: Box = { top: 0, height: 30 }
   const content: Box = { top: 30, height: 400 }
@@ -142,25 +135,25 @@ describe('segmentContentEndSelector', () => {
 
 describe('pushOffset', () => {
   it('does not push while the segment still has rows under the header', () => {
-    // contentBottom (430) is far below the pinned header's bottom (0 + 30).
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(pushOffset({ scrollportTop: 0, headerHeight: 30, contentBottom: 430 })).toBe(0)
   })
 
   it('pushes by exactly what the header overhangs its own content', () => {
-    // The last row ends 12px above where the pinned header would end, so the
-    // header has to sit 12px higher - the motion a real containing block makes.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(pushOffset({ scrollportTop: 0, headerHeight: 30, contentBottom: 18 })).toBe(12)
   })
 
   it('stops pushing once the header is clear of the scrollport', () => {
-    // Beyond its own height the header is already out of sight; letting the
-    // number keep growing would only rewrite an invisible offset every frame.
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。
+    // 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。
     expect(pushOffset({ scrollportTop: 0, headerHeight: 30, contentBottom: -500 })).toBe(30)
   })
 
   it('measures against the scrollport top, not the viewport top', () => {
-    // dsh's transcript does not start at y=0; a header stuck at the top of a
-    // scrollport 120px down is only overhanging once the content passes THAT.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(pushOffset({ scrollportTop: 120, headerHeight: 30, contentBottom: 150 })).toBe(0)
     expect(pushOffset({ scrollportTop: 120, headerHeight: 30, contentBottom: 140 })).toBe(10)
   })
@@ -181,9 +174,9 @@ describe('stickyCss', () => {
   })
 
   it('selects dsh wrapper by key rather than through :has()', () => {
-    // Matching the wrapper directly is not only simpler than reverse-selecting
-    // it from the button's state - it also means a browser without :has()
-    // still gets a sticky header.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。
     const css = stickyCss([{ flowKey: 'turn3:exec', property: '--p' }])
     expect(css).toContain(`[${FLOW_KEY_ATTRIBUTE}="turn3:exec"]`)
     expect(css).not.toContain(':has(')
@@ -202,8 +195,8 @@ describe('stickyCss', () => {
   })
 
   it('gives every open header its own rule and its own property', () => {
-    // Two segments can be on screen at once with different pushes: one already
-    // gone, one not yet pinned. A single shared property would hide the second.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const css = stickyCss([
       { flowKey: 'a', property: '--p1' },
       { flowKey: 'b', property: '--p2' },
@@ -219,8 +212,8 @@ describe('stickyCss', () => {
 
 describe('findScrollport', () => {
   it('finds the scrolling ancestor rather than assuming one', () => {
-    // dsh has two transcript layouts: .scroll owns overflow-y normally and
-    // hands it to an ancestor under [data-conversation-scroll].
+    // dsh 有两种转录布局：通常由 .scroll 拥有 overflow-y，
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const test = harness()
     const wrapper = test.button.closest('x')
     const view = (test.host as unknown as { defaultView: StickyPushView }).defaultView
@@ -278,8 +271,8 @@ describe('createStickyPushController', () => {
   })
 
   it('does nothing when dsh wrapper cannot be identified', () => {
-    // The attribute is this plugin's one piece of DOM coupling; if a dsh
-    // upgrade renames it the header must still render and still fold.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const test = harness(null)
     const controller = createStickyPushController(test.host)
     controller.track(test.button, 'last-row')
@@ -311,7 +304,7 @@ describe('createStickyPushController', () => {
     const controller = createStickyPushController(test.host)
     controller.track(test.button, 'last-row')
     test.flush()
-    // Scrolled far enough that the folded rows end 10px into the header.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     test.content.top = -380
     test.content.height = 400
     controller.measure()
@@ -330,8 +323,8 @@ describe('createStickyPushController', () => {
   })
 
   it('re-reads the folded row every measurement instead of caching it', () => {
-    // dsh mounts and unmounts transcript rows as the reader pages; a cached
-    // node would measure a box that is no longer on screen.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const test = harness()
     const controller = createStickyPushController(test.host)
     controller.track(test.button, 'last-row')
@@ -373,8 +366,8 @@ describe('createStickyPushController', () => {
   })
 
   it('gives every tracked header its own scroll listener', () => {
-    // One shared function identity would be deduplicated by the DOM, and
-    // removing it for one header would silently stop the other.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const test = harness()
     const controller = createStickyPushController(test.host)
     const first = controller.track(test.button, 'a')

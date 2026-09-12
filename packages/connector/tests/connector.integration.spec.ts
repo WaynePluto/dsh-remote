@@ -48,7 +48,7 @@ function request(options: {
   })
 }
 
-/** Stand-in for `dsh web`: echoes the request and mirrors WebSocket frames. */
+/** `dsh web` 的替身：回显请求并镜像 WebSocket 帧。 */
 interface FakeDsh {
   server: http.Server
   wss: WebSocketServer
@@ -111,7 +111,7 @@ const connectors: Connector[] = []
 const upstreams: FakeDsh[] = []
 const directories: string[] = []
 
-/** A fresh device identity per test, so registration state never leaks across tests. */
+/** 每个测试使用新的设备身份，避免注册状态在测试之间泄漏。 */
 function newDeviceKeyPath(): string {
   const directory = mkdtempSync(join(tmpdir(), 'dsh-remote-connector-'))
   directories.push(directory)
@@ -152,12 +152,12 @@ async function waitFor(check: () => Promise<boolean>, timeoutMs: number): Promis
   let lastError: unknown
   while (Date.now() < deadline) {
     try {
-      // eslint-disable-next-line no-await-in-loop -- polling is sequential by nature
+      // eslint-disable-next-line no-await-in-loop -- 轮询本质上是顺序执行的
       if (await check()) return
     } catch (error) {
       lastError = error
     }
-    // eslint-disable-next-line no-await-in-loop -- the poll interval must pause the loop
+    // eslint-disable-next-line no-await-in-loop -- 轮询间隔必须暂停循环
     await delay(200)
   }
   throw new Error(`condition not met within ${String(timeoutMs)}ms${lastError === undefined ? '' : `: ${String(lastError)}`}`)
@@ -285,7 +285,7 @@ describe('connector end to end', () => {
 
     const startedAt = Date.now()
     await expect(connector.run()).rejects.toThrow(/DEVICE_REVOKED/)
-    // A single retry would already cost initialMs, so this proves no backoff ran.
+    // 单次重试就会消耗 initialMs，因此这证明没有执行退避。
     expect(Date.now() - startedAt).toBeLessThan(RECONNECT_BACKOFF.initialMs)
   })
 

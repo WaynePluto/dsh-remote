@@ -1,0 +1,16 @@
+# dsh-remote 的 Agent preset Profile Bundle。它只加入 dsh-remote-web 的 bundle 层，
+# 不作为 launcher 最末 --patch overlay 使用。
+- insert:
+    - id: concise-preset-root
+      name: './dist/index.js'
+
+- id: agent-presets
+  inject:
+    - dshRemoteConcisePresetRoot
+  config:
+    default: standard
+    roots:
+      - path: !!js ctx.dshRemoteConcisePresetRoot.path
+        trust: system
+    includeShippedRoot: true
+    includeUserRoot: true

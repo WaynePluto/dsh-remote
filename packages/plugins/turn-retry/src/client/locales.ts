@@ -1,21 +1,16 @@
 /**
- * Copy for the retry banner. Both dictionaries are complete by construction:
- * `en` defines the key set and `zh` is typed against it, so a missing
- * translation fails the build rather than falling back at runtime.
- *
- * Chinese copy follows the project's own vocabulary table
- * (`docs/01-decisions.md` §2.05) and says 轮 for a turn, matching what dsh's
- * own transcript already calls it.
- *
- * @module @dsh-remote/dsh-plugin-turn-retry/client/locales
+ * 重试栏的文案。`en` 定义 key 集合，`zh` 以它为类型约束；漏翻会在构建期失败。中文遵循项目词表（`docs/01-decisions.md` §2.05），用“轮”称呼 turn，与 dsh 转录一致。
  */
 
-/** English copy; also the key set of this namespace. */
+/** 英文文案；同时作为本 namespace 的 key 集合。 */
 export const en = {
   title: 'The last turn failed',
   stoppedTitle: 'You stopped the last turn',
   interruptedTitle: 'The last turn never finished',
   reason: '{code}: {message}',
+  details: 'Details',
+  detailsTitle: 'Failure details',
+  close: 'Close',
   retry: 'Retry',
   retrying: 'Retrying…',
   resume: 'Continue',
@@ -30,15 +25,18 @@ export const en = {
   subagent: 'A subagent turn belongs to its parent agent and cannot be retried here.',
 } as const
 
-/** One copy key of this namespace. */
+/** 本 namespace 的文案 key 类型。 */
 export type RetryKey = keyof typeof en
 
-/** Simplified Chinese copy. */
+/** 中文文案，按 `en` 的 key 集合实现。 */
 export const zh: Record<RetryKey, string> = {
   title: '上一轮失败了',
   stoppedTitle: '上一轮被你停止了',
   interruptedTitle: '上一轮没有跑完',
   reason: '{code}：{message}',
+  details: '查看原因',
+  detailsTitle: '失败详情',
+  close: '关闭',
   retry: '重试',
   retrying: '正在重试…',
   resume: '继续',
@@ -53,12 +51,7 @@ export const zh: Record<RetryKey, string> = {
   subagent: '子 agent 的轮次归它的父 agent 管，不能在这里重试。',
 }
 
-/**
- * Fill `{name}` placeholders in one copy string.
- * @param text - the translated string.
- * @param values - placeholder values by name.
- * @returns the filled string; an unknown placeholder is left as written.
- */
+/** 填充 `{name}` 等占位符；未知占位符保持原样。 */
 export function fill(text: string, values: Readonly<Record<string, string | number>>): string {
   return text.replace(/\{(\w+)\}/gu, (match, key: string) =>
     Object.hasOwn(values, key) ? String(values[key]) : match)

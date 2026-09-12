@@ -1,83 +1,47 @@
-/**
- * Reading models.dev and reducing it to the few facts dsh can actually store.
- *
- * EXTERNAL DATA, PARSED DEFENSIVELY. `api.json` is a third-party document that
- * changes without telling us, so nothing here asserts a shape: every field is
- * probed, a value of the wrong type is dropped, and a model that ends up with
- * nothing but an id still passes (dsh's route defaults will size it). The
- * alternative — a strict schema — turns an upstream field rename into "the
- * button stopped working" instead of "one field went missing".
- *
- * WHAT IS DELIBERATELY NOT READ. models.dev carries no wire protocol, no
- * reasoning-effort spellings, and no compatibility switches, which are exactly
- * the fields `llm-pi-ai` cannot infer for a model its installed catalog does
- * not describe (`packages/llm/llm-pi-ai/src/catalog.ts`). Cost is not read
- * either: dsh zeroes pi-ai's cost metadata and reports no spend.
- *
- * @module @dsh-remote/dsh-plugin-models-catalog/models-dev
- */
+/** models.dev `api.json` 的受限读取和向 pi-ai facts 的投影。 */
 
 import type { Modality, ModelAddition } from './shared.js'
 
-/**
- * Ceiling on the document we will read. The full catalog is a couple of
- * megabytes; anything an order of magnitude past that is either not this
- * document or not something we should hold in memory. Enforced on the bytes
- * actually read, because a server may under-declare or stream.
- */
+/** source JSON 的最大字节数。 */
 export const MAX_SOURCE_BYTES = 24 * 1024 * 1024
 
-/** How long one read may take before it is abandoned. */
+/** source fetch 的 timeout。 */
 export const SOURCE_TIMEOUT_MS = 30_000
 
-/** One provider as models.dev describes it, reduced to what we use. */
+/** models.dev provider 的收窄形状。 */
 export interface SourceProvider {
-  /** models.dev provider id (its key in the document). */
+  /** provider 的 id。 */
   id: string
-  /** Display name, when stated. */
+  /** provider 的显示名称。 */
   name?: string
-  /** Model facts by model id, in document order. */
+  /** 可添加的 model facts。 */
   models: readonly ModelAddition[]
 }
 
-/** The whole document, reduced. */
+/** provider id 到 facts 的 source catalog。 */
 export type SourceCatalog = ReadonlyMap<string, SourceProvider>
 
-/** A record, or undefined for anything else. */
+/** 从未知 JSON 值读取普通 record。 */
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined
 }
 
-/** A non-empty string field, or undefined. */
+/** 读取非空字符串字段。 */
 function text(source: Record<string, unknown>, key: string): string | undefined {
   const value = source[key]
   return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
-/**
- * A positive integer field, or undefined. Non-integral numbers are dropped
- * rather than rounded: dsh refuses a non-integer capacity, and guessing which
- * way to round someone else's number is not our call.
- */
+/** 读取正整数容量字段。 */
 function capacity(source: Record<string, unknown> | undefined, key: string): number | undefined {
   if (source === undefined) return undefined
   const value = source[key]
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined
 }
 
-/**
- * The modalities dsh accepts, in dsh's own order.
- *
- * models.dev names modalities dsh's seam does not model (`audio`, `video`,
- * `pdf`). They are dropped rather than mapped: `input` is a claim about what
- * the endpoint takes, and over-claiming is the expensive mistake — it admits
- * an attachment the provider then rejects mid-turn, after the message is
- * durable (`packages/llm/llm-pi-ai/src/config.ts`, DEFAULT_INPUT).
- * @param model - one raw model record.
- * @returns the accepted modalities, or undefined when none survive.
- */
+/** 将 models.dev modalities 收窄到 dsh 接受的 `text`/`image`。 */
 function modalities(model: Record<string, unknown>): readonly Modality[] | undefined {
   const input = record(model['modalities'])?.['input']
   if (!Array.isArray(input)) return undefined
@@ -87,12 +51,7 @@ function modalities(model: Record<string, unknown>): readonly Modality[] | undef
   return kept.length === 0 ? undefined : kept
 }
 
-/**
- * Reduce one raw model record.
- * @param id - the model's key in the provider's `models` dict.
- * @param raw - the raw record.
- * @returns the addition we could write, or undefined when the record is not one.
- */
+/** 从一个 models.dev raw model 读取 ModelAddition。 */
 export function readModel(id: string, raw: unknown): ModelAddition | undefined {
   const model = record(raw)
   if (model === undefined || id.length === 0) return undefined
@@ -110,11 +69,7 @@ export function readModel(id: string, raw: unknown): ModelAddition | undefined {
   }
 }
 
-/**
- * Reduce the whole document.
- * @param document - the parsed JSON.
- * @returns providers by id; a provider with no readable model is omitted.
- */
+/** 从 models.dev JSON 过滤出可用 provider/model catalog。 */
 export function readCatalog(document: unknown): SourceCatalog {
   const root = record(document)
   const providers = new Map<string, SourceProvider>()
@@ -134,16 +89,7 @@ export function readCatalog(document: unknown): SourceCatalog {
   return providers
 }
 
-/**
- * Read the body of a response, refusing one that outgrows the ceiling. A
- * declared length is checked first so an honest server is turned away without
- * transferring anything; the accumulated total is what actually enforces the
- * bound. Overflow rejects rather than truncating, because a truncated JSON
- * document is not parseable anyway.
- * @param response - the fetch response.
- * @returns the decoded body text.
- * @throws Error when the body outgrows {@link MAX_SOURCE_BYTES}.
- */
+/** 有界读取 response body，拒绝超过 source ceiling 的 declared/实际内容。 */
 async function readBody(response: Response): Promise<string> {
   const declared = Number(response.headers.get('content-length') ?? Number.NaN)
   if (Number.isFinite(declared) && declared > MAX_SOURCE_BYTES) {
@@ -169,24 +115,7 @@ async function readBody(response: Response): Promise<string> {
   return new TextDecoder().decode(joined)
 }
 
-/**
- * Fetch and reduce the source document.
- *
- * PLAIN `fetch`, AND THAT IS THE POINT. A machine whose only route out is a
- * proxy configures it once in Settings → Proxy, which points undici's global
- * dispatcher at it for the whole process
- * (`@dsh-remote/dsh-plugin-proxy`). Carrying a proxy option here as well would
- * mean two places to configure, two places to get wrong, and a plugin that
- * reaches the internet when the rest of dsh cannot.
- *
- * The failure message keeps the URL in it because the errors this call fails
- * with — a connect timeout, a TLS refusal — name neither the host nor the
- * reason.
- * @param url - the document to read.
- * @param signal - caller cancellation, joined with this module's own timeout.
- * @returns providers by id.
- * @throws Error naming the URL when the read, the size check, or JSON parsing fails.
- */
+/** 通过 fetch + timeout 读取 JSON source，并将 HTTP/parse 错误带回调用方。 */
 export async function fetchCatalog(url: string, signal?: AbortSignal): Promise<SourceCatalog> {
   const timeout = AbortSignal.timeout(SOURCE_TIMEOUT_MS)
   const abort = signal === undefined ? timeout : AbortSignal.any([signal, timeout])

@@ -1,27 +1,10 @@
 /**
- * skills-inspector 宿主半：把「当前会话看得见哪些技能」+「哪些已经加载进上下文」
- * 合成一份快照，经私有 RPC 通道交给页面。
- *
- * 为什么要这个插件：dsh 把技能目录只发给**模型**（`<available_skills>` 那段
- * system-reminder），页面上没有任何地方能看到会话里有哪些技能、来自哪一层、
- * agent 到底加载过哪些。
- *
- * ## 三条必须记住的事实（完整证据链见 docs/02 §16）
- *
- * 1. **`skills.list()` 的 scope 必须传 `ctx.agents.get(sessionId)`**，与
- *    `ctx.tools.schemas(scope)` 完全同一个坑（docs/02 §15.3）：技能 provider 由
- *    agent preset 挂在每会话 scope 下，不传 scope 只读得到全局层。dsh 自己的
- *    `skill` 工具也是这么做的（`tool-skill/src/index.ts:133`：`scope: exec.agent`）。
- * 2. **「已加载」能精确回放**：模型路径是 `tool/call`（name=`skill`），用户路径是
- *    `user/message`（`source.kind === 'skill-invocation'`），两者都是持久化事件。
- *    见 `loaded.ts` 的模块注释。
- * 3. **精确文件路径不在 `SkillSummary` 上**：`list()` 投影掉了 `path`，只留
- *    `resourceBase`（技能**目录**）。精确的 `SKILL.md` 路径在 `SkillCandidate.path`，
- *    只能靠 `skills.get(name)` 取 —— 而那会连带把整个正文读进内存。所以
- *    **列表不批量取路径**，单独开一个 `locate` 端点，用户点开某一行时才要一次。
- *
- * 本插件是**只读观察窗口**：不注册技能、不注册工具、不 restrict、不 guard，
- * 对 agent 行为零影响。
+ * skills-inspector 宿主半：按会话 scope 读取技能目录，回放历史加载事件，经
+ * `/skills-inspector` RPC 向页面提供 `snapshot`/`locate`。
+ * `skills.list()` 的 scope 必须是 `ctx.agents.get(sessionId)`；加载来源是
+ * `tool/call`/`user/message` 持久事件。`SkillSummary` 只有 `resourceBase`，
+ * 精确 `SKILL.md` 路径需按需调用 `skills.get(name)`，所以 `locate` 不批量执行。
+ * 本插件只读，不注册技能或工具，也不改变 agent 行为。
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -169,12 +152,14 @@ async function buildSnapshot(ctx: Context, sessionId: string): Promise<SkillsSna
 
   const entries: SkillEntry[] = catalog.skills.map((summary) => {
     const loaded = loadOf(replay, summary.name)
+    const fullDescription = summary.description
     const directory = summary.resourceBase?.kind === 'directory'
       ? summary.resourceBase.path
       : undefined
     return {
       name: summary.name,
-      description: condense(summary.description, MAX_DESCRIPTION),
+      description: condense(fullDescription, MAX_DESCRIPTION),
+      fullDescription,
       ...summary.whenToUse === undefined
         ? {}
         : { whenToUse: condense(summary.whenToUse, MAX_WHEN_TO_USE) },

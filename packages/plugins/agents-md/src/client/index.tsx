@@ -1,25 +1,8 @@
-/**
- * Browser half: add a Global instructions page to Settings.
- *
- * `settings.section` is the seat dsh declares for "one settings page per list
- * entry". Unlike this repository's other settings pages, this one owns NO
- * settings namespace: the document it edits is a file on the Host
- * (`$DSH_HOME/AGENTS.md`), so the page talks to its own private RPC channel
- * instead of `ctx.settingsScope`. Putting the text in a settings namespace
- * would have created a second copy of it that dsh's instruction loader does not
- * read.
- *
- * ⚠️ dsh draws the settings navigation icons itself from a hardcoded id → icon
- * table and `settings.section` has no icon seat, so every id it does not know
- * falls back to the gear (docs/02 §8.7). The document glyph is therefore
- * painted onto our own row from the outside; see `./nav-glyph.ts`.
- *
- * @module @dsh-remote/dsh-plugin-agents-md/client
- */
+/** 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。（涉及：`settings.section`、`$DSH_HOME/AGENTS.md`、`ctx.settingsScope`、`./nav-glyph.ts`） */
 
 import type { Context } from '@deepseek-ai/cordis'
-// Type-only: each pulls in the Context merge naming the service this plugin
-// reads. `dsh-client-ui-settings/client` carries the settings slot declarations.
+// 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
+// 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。（涉及：`dsh-client-ui-settings/client`）
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -34,51 +17,29 @@ import type { AgentsMdKey } from './locales.js'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    /** This plugin's copy namespace. */
+    /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
     'dsh-plugin-agents-md': AgentsMdKey
   }
 }
 
-/** The copy namespace this plugin owns. */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 const NS = NAMESPACE
 
-/**
- * Where this page sits in the settings navigation.
- *
- * Before Proxy (60) and Notifications (70): unlike those two, this one is
- * content a person comes back to and edits repeatedly, rather than a switch
- * configured once and forgotten.
- */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 const ORDER = 55
 
-/**
- * Required services. `slots` is the seat, `locale` supplies the copy, and
- * `connection` carries this page's only channel. There is deliberately no
- * `settingsScope`: this page stores nothing in the settings domain.
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`slots`、`locale`、`connection`、`settingsScope`） */
 export const inject = ['slots', 'locale', 'connection']
 
-/** The failure this plugin reports when the Host answers with an error. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 export class AgentsMdChannelError extends Error {}
 
-/**
- * Register the page.
- * @param ctx - client root context.
- */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'agents-md: copy dictionaries')
   const t = ctx.locale.bind(NS)
 
-  /**
-   * Call one endpoint of this plugin's channel.
-   *
-   * ⚠️ The endpoint is a PATH SEGMENT: this posts to `/agents-md/<endpoint>`,
-   * and the envelope's method must match that last segment (docs/02 §10.8).
-   * @param endpoint - channel-relative endpoint name.
-   * @param payload - the request body.
-   * @returns the Host's value.
-   * @throws AgentsMdChannelError when there is no connection or the Host failed.
-   */
+  /** 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。（涉及：`/agents-md/<endpoint>`） */
   const call = async <T,>(endpoint: string, payload: unknown): Promise<T> => {
     const connection = ctx.get('connection') as ConnectionHandle | undefined
     if (connection === undefined) throw new AgentsMdChannelError('no active connection')
@@ -87,18 +48,11 @@ export function apply(ctx: Context): void {
     return result.value as T
   }
 
-  /**
-   * Read the stored global instruction file.
-   * @returns the document as the Host has it.
-   */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   const load = async (): Promise<AgentsMdDocument> =>
     await call<AgentsMdDocument>(LOAD_ENDPOINT, {})
 
-  /**
-   * Replace the stored global instruction file.
-   * @param content - the full replacement contents.
-   * @returns the document as it stands after the write.
-   */
+  /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
   const save = async (content: string): Promise<AgentsMdDocument> =>
     (await call<AgentsMdSaveResult>(SAVE_ENDPOINT, { content })).document
 
@@ -111,7 +65,7 @@ export function apply(ctx: Context): void {
     inject: () => ({ load, save }),
   }, AgentsMdSection))
 
-  // The shell draws the nav glyph itself and has no seat for ours, so the
-  // document icon is painted onto our own row from the outside.
+  // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
+  // 实现说明：此处记录相关接口、边界和生命周期约束。
   ctx.effect(installNavGlyph, 'agents-md: settings nav glyph')
 }

@@ -1,19 +1,20 @@
-import pino from 'pino'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   BrowserCookiePolicy,
-  createAuthenticationService,
-  createRelayServer,
-  generateTotp,
-  initializeAdmin,
-  openRelayStore,
-  type RelayServer,
-  type RelayStore,
 } from '../src/index.js'
 import { ADMIN_PATH_PREFIX } from '../src/admin/console-app.js'
 import { LOGIN_PATH } from '../src/admin/auth-app.js'
 import { THEME_PATH } from '../src/admin/theme.js'
-import { cookieHeader, httpRequest, setCookieArray, type HttpResult } from './helpers.js'
+import {
+  closeFixtures,
+  cookieHeader,
+  httpRequest,
+  openPage,
+  setCookieArray,
+  startAuthenticatedRelayFixture,
+  type AuthenticatedRelayTestFixture,
+  type HttpResult,
+} from './helpers.js'
 
 const JWT_SECRET = new Uint8Array(32).fill(0x5e)
 const HOST = 'pc1.dsh.test'
@@ -21,59 +22,26 @@ const PASSWORD = 'Correct horse battery staple 1'
 
 const cookies = new BrowserCookiePolicy({ mode: 'domain-https', domain: 'dsh.test' })
 
-interface Fixture {
-  relay: RelayServer
-  port: number
-  store: RelayStore
-  sessionCookie: string
-}
+type Fixture = AuthenticatedRelayTestFixture
 
 const fixtures: Fixture[] = []
 
 async function startFixture(): Promise<Fixture> {
-  const store = openRelayStore({ path: ':memory:' })
-  const initialized = await initializeAdmin({ store, username: 'admin', password: PASSWORD })
-  const authentication = await createAuthenticationService({ store, jwtSecret: JWT_SECRET })
-  const tokens = await authentication.login({
-    username: 'admin',
-    password: PASSWORD,
-    totpToken: await generateTotp(initialized.enrollment.secret),
-    sourceIp: '127.0.0.1',
+  const fixture = await startAuthenticatedRelayFixture({
+    jwtSecret: JWT_SECRET,
+    account: { kind: 'initialize-admin', username: 'admin', password: PASSWORD },
+    relay: { streamConnectTimeoutMs: 2_000 },
+    cookiePolicy: cookies,
   })
-
-  const relay = createRelayServer({
-    host: '127.0.0.1',
-    port: 0,
-    publicDomain: 'dsh.test',
-    publicScheme: 'https',
-    streamConnectTimeoutMs: 2_000,
-    browserAuth: { cookieMode: 'domain-https' },
-  }, { authentication, logger: pino({ level: process.env.RELAY_TEST_LOG ?? 'silent' }), store })
-  const address = await relay.listen()
-
-  const fixture: Fixture = {
-    relay,
-    port: address.port,
-    store,
-    sessionCookie: cookieHeader(cookies.sessionHeaders(tokens)),
-  }
   fixtures.push(fixture)
   return fixture
 }
 
 function open(fixture: Fixture, path: string, cookie?: string): Promise<HttpResult> {
-  return httpRequest({
-    port: fixture.port,
-    path,
-    headers: {
-      host: HOST,
-      accept: 'text/html',
-      ...cookie === undefined ? {} : { cookie },
-    },
-  })
+  return openPage(fixture, { path, host: HOST, ...cookie === undefined ? {} : { cookie } })
 }
 
-/** The Cookie header a browser would send back after one theme switch. */
+/** 浏览器切换一次主题后会带回的 Cookie header。 */
 function themeCookie(result: HttpResult): string {
   const header = setCookieArray(result.headers)
     .find(value => value.startsWith(`${cookies.names.theme}=`))
@@ -82,10 +50,7 @@ function themeCookie(result: HttpResult): string {
 }
 
 afterEach(async () => {
-  await Promise.all(fixtures.splice(0).map(async (fixture) => {
-    await fixture.relay.close()
-    fixture.store.close()
-  }))
+  await closeFixtures(fixtures)
 })
 
 describe('the appearance switch', () => {
@@ -98,7 +63,7 @@ describe('the appearance switch', () => {
     for (const value of ['light', 'dark', 'system']) {
       expect(machines.body).toContain(`${THEME_PATH}?value=${value}&amp;returnTo=`)
     }
-    // Exactly one choice reads as the current one, and by default it is dsh's.
+    // 恰好一个选项显示为当前选项，默认是 dsh 的默认选项。
     expect([...machines.body.matchAll(/<a href="\/_theme[^"]*" aria-current="true">/g)])
       .toHaveLength(1)
     expect(machines.body).toContain('aria-current="true">跟随系统</a>')
@@ -132,8 +97,8 @@ describe('the appearance switch', () => {
     expect(login.status).toBe(200)
     expect(login.body).toContain('<html lang="zh-CN" data-theme="system">')
 
-    // No session cookie anywhere in this exchange: the switch is answered
-    // before authentication precisely so this page can offer it.
+    // 此交换过程中完全没有会话 cookie：切换会在认证前响应，
+    // 正因为如此该页面才能提供切换。
     const switched = await httpRequest({
       port: fixture.port,
       path: `${THEME_PATH}?value=light&returnTo=${encodeURIComponent(LOGIN_PATH)}`,
@@ -153,7 +118,7 @@ describe('the appearance switch', () => {
 
     const login = await open(fixture, `${LOGIN_PATH}?returnTo=%2F_admin%2Fhub`)
     expect(login.status).toBe(200)
-    // Switching the theme here must not lose the page the operator asked for.
+    // 在这里切换主题不能丢失操作员原本请求的页面。
     const loginWithReturn = `${LOGIN_PATH}?returnTo=${encodeURIComponent('/_admin/hub')}`
     expect(login.body).toContain(`returnTo=${encodeURIComponent(loginWithReturn)}`)
   })

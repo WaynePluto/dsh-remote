@@ -1,0 +1,12 @@
+# dsh-remote 的 dsh 插件叠加层，由 launcher 用 `dsh --patch <这个文件>` 传给 dsh。
+#
+# dsh-web-app 默认挂载 directory-picker-auto。它在 Windows + loopback bind
+# 下会选 native，把对话框弹到被控机桌面；先在 Loader 启动前停掉 auto 行，
+# 再由 Host 半动态挂载 dsh 官方的 browse Host / client 两半，避免 native 与
+# browse 两个 backend 并发注册同一个 directoryPicker service。
+# overlay 的 insert 只引用本插件自己的相对入口，避免把 dsh 包名锚定到 profile 以外。
+- id: directory-picker
+  disabled: true
+- insert:
+    - id: directory-picker-browse-remote
+      name: './dist/index.js'

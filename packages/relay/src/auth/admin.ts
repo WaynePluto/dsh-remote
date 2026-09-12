@@ -26,7 +26,7 @@ export class AdminNotFoundError extends Error {
   }
 }
 
-/** More than one account exists, so "the administrator" is not a single row. */
+/** 存在多个账号，因此“管理员”不再对应单独一行。 */
 export class AdminAmbiguousError extends Error {
   constructor(count: number) {
     super(`this relay holds ${String(count)} accounts; pick one with --username`)
@@ -35,17 +35,14 @@ export class AdminAmbiguousError extends Error {
 }
 
 /**
- * Resolve which account a recovery command acts on.
+ * 确定恢复命令要操作的账号。
  *
- * v1 has exactly one administrator whose name the operator chose in the setup
- * wizard, so defaulting the CLI to the literal `admin` would break every relay
- * set up under a different name. Asking the database instead keeps `passwd` and
- * `totp reset` working without the operator having to remember anything.
- * @param store - the relay store.
- * @param requested - an explicit `--username`, when given.
- * @returns The account name to act on.
- * @throws AdminNotFoundError When no account exists yet.
- * @throws AdminAmbiguousError When several exist and none was named.
+ * v1 的管理员名称由初始设置向导选择；查询数据库而非假定 `admin`，
+ * 才能让 `passwd` 和 `totp reset` 支持操作员选择的名称。
+ * @param store relay store。
+ * @param requested 显式提供的 `--username`。
+ * @returns 要操作的账号名。
+ * @throws AdminNotFoundError 尚无账号，或 AdminAmbiguousError 存在多个账号且未指定名称时抛出。
  */
 export function resolveAdminUsername(store: RelayStore, requested?: string): string {
   if (requested !== undefined) return requested
@@ -58,13 +55,13 @@ export function resolveAdminUsername(store: RelayStore, requested?: string): str
 
 export interface InitializeAdminResult {
   readonly user: UserRecord
-  /** Display once for QR provisioning; never log or persist outside the user row. */
+  /** 仅为 QR 绑定显示一次；绝不记录日志，也不在用户行之外持久化。 */
   readonly enrollment: TotpEnrollment
 }
 
 /**
- * Bootstrap the sole v1 administrator. The TOTP secret is staged but remains
- * disabled until a code from the authenticator is confirmed.
+ * 初始化唯一的 v1 管理员。TOTP secret 会暂存，但仍保持
+ * 禁用，直到验证器动态码得到确认。
  */
 export async function initializeAdmin(options: {
   store: RelayStore
@@ -96,7 +93,7 @@ export async function initializeAdmin(options: {
   return { user, enrollment }
 }
 
-/** Confirm the staged secret once; the accepted time step is consumed immediately. */
+/** 确认暂存的 secret 一次；接受的时间步会立即消耗。 */
 export async function confirmAdminTotp(options: {
   store: RelayStore
   userId: string
@@ -138,17 +135,17 @@ function requireAdmin(store: RelayStore, username: string): UserRecord {
 
 export interface ChangeAdminPasswordResult {
   readonly user: UserRecord
-  /** Sessions invalidated by the change; every browser must log in again. */
+  /** 因此次更改失效的会话；所有浏览器都必须重新登录。 */
   readonly revokedSessions: number
 }
 
 /**
- * Local recovery command: set a new password without knowing the old one.
+ * 本地恢复命令：无需知道旧密码即可设置新密码。
  *
- * Requiring the current password would make this useless for its actual
- * purpose, and would add no protection: anyone who can run this already has
- * read/write access to the SQLite file. Every existing session is revoked so a
- * stolen cookie cannot outlive the change.
+ * 要求当前密码会让这个命令失去实际
+ * 用途，也不会增加保护：能运行此命令的人已经拥有
+ * SQLite 文件的读写权限。吊销所有现有会话，确保被
+ * 窃取的 cookie 不会在更改后继续有效。
  */
 export async function changeAdminPassword(options: {
   store: RelayStore
@@ -181,8 +178,8 @@ export interface ResetAdminTotpResult {
 }
 
 /**
- * Local recovery command for a lost authenticator: stage a fresh secret and
- * leave TOTP disabled until the next successful login confirms the new code.
+ * 验证器丢失时的本地恢复命令：暂存新的 secret，并
+ * 保持 TOTP 禁用，直到下一次成功登录确认新动态码。
  */
 export function resetAdminTotp(options: {
   store: RelayStore

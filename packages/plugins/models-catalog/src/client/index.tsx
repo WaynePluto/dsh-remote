@@ -1,28 +1,11 @@
-/**
- * Browser half: put the models.dev panel at the foot of the Models page.
- *
- * dsh declares `settings.models.footer` as an "ordered extension area after the
- * provider rows and the add controls"
- * (`packages/client/ui-settings-models/src/client/slot-contract.ts`). It is a
- * list seat, which is what this plugin needs: the keyed provider-card seat
- * allows one entry per settings namespace and our sibling `copilot-auth`
- * already holds `llm-pi-ai`.
- *
- * Nothing here imports another plugin's runtime: collaboration goes through
- * cordis services (`ctx.slots`, `ctx.locale`, `ctx.connection`), which is both
- * dsh's rule and what keeps this bundle loadable from the frozen module table.
- *
- * @module @dsh-remote/dsh-plugin-models-catalog/client
- */
+/** browser half：在 `settings.models.footer` 注册 catalog panel，通过 private RPC 读取 Host route plans。 */
 
 import type { Context } from '@deepseek-ai/cordis'
-// Type-only: each pulls in the Context merge naming the service this plugin
-// reads. Value imports across plugins are forbidden (and unresolvable from the
-// page's frozen module table); services are the seam.
+// 仅类型：激活 renderer、locale 和 settings-models Context merge。
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
-// Type-only: pulls in the SlotMap merge that declares the seat we occupy.
+// 仅类型：激活 settings footer slot merge。
 import type {} from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import type { CatalogStatusView } from '../shared.js'
 import { CHANNEL, SELF_NAMESPACE } from '../shared.js'
@@ -32,41 +15,27 @@ import type { CatalogKey } from './locales.js'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    /** This plugin's copy namespace; the same string as its settings namespace. */
+    /** 本插件的 locale namespace。 */
     'dsh-plugin-models-catalog': CatalogKey
   }
 }
 
-/** The copy namespace this plugin owns; it matches the settings namespace. */
+/** 本插件拥有的 namespace。 */
 const NS = SELF_NAMESPACE
 
-/**
- * Required services. `connection` carries the channel, `slots` is the seat,
- * `locale` supplies the panel's copy.
- */
+/** 所需 service：slots、locale 和 connection。 */
 export const inject = ['slots', 'locale', 'connection']
 
-/** The failure this plugin reports when the Host answers with an error. */
+/** RPC channel 错误。 */
 export class CatalogChannelError extends Error {}
 
-/**
- * Register the panel.
- * @param ctx - client root context.
- */
+/** 注册文案和 settings footer slot。 */
 export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'models-catalog: copy dictionaries')
 
-  /**
-   * Call one endpoint of the Host half.
-   * @param endpoint - channel-relative endpoint name.
-   * @param payload - endpoint payload.
-   * @returns the status view the Host answered with.
-   * @throws CatalogChannelError when the Host reported a failure.
-   */
+  /** 调用 catalog RPC endpoint，并将 Host 错误转换为 CatalogChannelError。 */
   const call = async (endpoint: string, payload?: unknown): Promise<CatalogStatusView> => {
-    // Read per call, and typed at the read: the browser half of the connection
-    // package provides this service without declaring it on Context, and
-    // `inject` above is what guarantees it is there.
+    // 每次调用时读取 connection 并定型；`inject` 保证该 service 存在。
     const connection = ctx.get('connection') as ConnectionHandle | undefined
     if (connection === undefined) throw new CatalogChannelError('no active connection')
     const result = await connection.rpc.call(CHANNEL, endpoint, payload ?? {})

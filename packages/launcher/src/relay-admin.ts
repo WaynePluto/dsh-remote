@@ -2,16 +2,11 @@ import { existsSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 
 /**
- * Whether this machine's console already has its administrator.
- *
- * Read-only and defensive on purpose: a database that does not exist yet, one
- * the relay is still creating, and one that predates the `users` table all mean
- * the same thing — nobody has been through the browser setup wizard. The relay
- * owns every write to this file and serves the wizard itself; the launcher only
- * asks the question that decides what the banner says, so no answer here may
- * ever stop a start-up.
- * @param dataPath - the relay's SQLite file.
- * @returns True when at least one account exists.
+ * 这台机器的控制台是否已有管理员。
+ * 只读且防御式处理：缺失、正在创建或早于 `users` 表的数据库都表示尚未完成浏览器设置向导。
+ * relay 负责所有写入并提供向导；launcher 只询问 banner 所需的问题，任何答案都不能阻止启动。
+ * @param dataPath - relay 的 SQLite 文件。
+ * @returns 至少存在一个账号时为 true。
  */
 export function relayAdminInitialized(dataPath: string): boolean {
   if (!existsSync(dataPath)) return false

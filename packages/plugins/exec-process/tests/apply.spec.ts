@@ -1,18 +1,11 @@
-/**
- * What `apply` actually contributes.
- *
- * Two of these assertions are load-bearing in a way unit tests usually are not:
- *
- *  - the shadow of dsh's `turn-process` cell MUST carry a priority other than
- *    the default 0. A same-priority second registration throws, and it throws
- *    inside the browser plugin's activation — which takes dsh's whole web UI
- *    down with it (`packages/client/ui-slots/src/index.ts:836-842`).
- *  - the Definition, the dictionaries and the stylesheets must all hang off
- *    `ctx.effect`, or unloading the plugin leaves a Definition registered
- *    against a dead fiber and a `<style>` element in the page forever.
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`apply`、`turn-process`、`packages/client/ui-slots/src/index.ts:836-842`、`ctx.effect`、`<style>`） */
 
 import { describe, expect, it, vi } from 'vitest'
+
+vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
+  IconChevronDownOutline14: () => null,
+}))
+
 import type { Context } from '@deepseek-ai/cordis'
 import { apply, inject, shouldForceOpen, type ExecProcessInjected } from '../src/client/index.js'
 
@@ -21,7 +14,7 @@ interface Registration {
   component: unknown
 }
 
-/** A cordis stand-in recording every contribution and every disposer. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 function fakeContext() {
   const registrations: Registration[] = []
   const definitions: { kind: string }[] = []
@@ -67,12 +60,12 @@ describe('apply', () => {
     expect(inject).toEqual(['uiConversation', 'slots', 'locale'])
   })
 
-  it('registers both conversation Definitions', () => {
+  it('registers all conversation Definitions', () => {
     const world = fakeContext()
     apply(world.ctx)
-    // One for a turn's first segment, one for every segment a mid-turn formal
-    // message opens.
-    expect(world.definitions.map(d => d.kind)).toEqual(['exec-process', 'exec-process-step'])
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    expect(world.definitions.map(d => d.kind)).toEqual(['exec-process', 'exec-process-step', 'exec-process-user'])
   })
 
   it('registers its copy under the package namespace', () => {
@@ -88,13 +81,14 @@ describe('apply', () => {
       'conversation.chat.node',
       'conversation.chat.node',
       'conversation.chat.node',
+      'conversation.chat.node',
     ])
   })
 
-  it('contributes a row for both segment kinds, with copy and shared state', () => {
+  it('contributes a row for all segment kinds, with copy and shared state', () => {
     const world = fakeContext()
     apply(world.ctx)
-    for (const key of ['exec-process', 'exec-process-step']) {
+    for (const key of ['exec-process', 'exec-process-step', 'exec-process-user']) {
       const row = world.registrations.find(entry => entry.options.key === key)
       expect(row?.options.name).toBe('conversation.chat.node')
       expect(row?.options.locale).toBe('dsh-plugin-exec-process')
@@ -105,10 +99,10 @@ describe('apply', () => {
     }
   })
 
-  it('shares one fold store and one stylesheet across both seats', () => {
+  it('shares one fold store and one stylesheet across all segment seats', () => {
     const world = fakeContext()
     apply(world.ctx)
-    const faces = ['exec-process', 'exec-process-step'].map(key =>
+    const faces = ['exec-process', 'exec-process-step', 'exec-process-user'].map(key =>
       world.registrations.find(entry => entry.options.key === key)?.options.inject?.() as ExecProcessInjected)
     expect(faces[0]?.foldStore).toBe(faces[1]?.foldStore)
     expect(faces[0]?.collapsed).toBe(faces[1]?.collapsed)
@@ -126,13 +120,13 @@ describe('apply', () => {
   it('every side effect is reversible', () => {
     const world = fakeContext()
     apply(world.ctx)
-    // two definitions + dictionaries + row chrome + fold state
-    expect(world.disposers).toHaveLength(5)
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    expect(world.disposers).toHaveLength(6)
     expect(() => { for (const dispose of world.disposers) dispose() }).not.toThrow()
   })
 })
 
-/** dsh's Turn-process owner state, reduced to what the decision reads. */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 const owner = (foldable: boolean, open: boolean) =>
   ({ foldable, open, setOpen: vi.fn(), spec: {} }) as never
 

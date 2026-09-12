@@ -1,578 +1,49 @@
 /**
- * The collapsible terminal panel, rendered above the composer.
+ * composer 上方的可折叠 terminal panel。
  *
- * WHY IT POLLS. dsh's one Host→Client push seam is session projections, and the
- * three PTY packages publish none — no projection, no event, nothing appended
- * to the session log (see `../shared.ts`). So the page asks. The cost is kept
- * where a phone on a relay can afford it:
- *
- * - The session list is polled slowly ({@link LIST_POLL_MS}); the screen is
- *   polled quickly ({@link SCREEN_POLL_MS}) and ONLY while the panel is open.
- * - The screen poll carries the last `revision`, so an idle terminal answers
- *   with one short string instead of a screen.
- * - Everything stops while the tab is hidden and catches up on return.
- *
- * WHY THE DRAFT SURVIVES A REFUSAL. `ctx.terminals` allows exactly one active
- * send and throws on the second, so a keystroke can bounce. The Host waits out
- * that window and, if it still cannot deliver, says so with `busy: true` — and
- * this panel then KEEPS what was typed. Silently clearing an input box that
- * just swallowed a password is the one failure this component must not have.
+ * TerminalPanel 保留 dock 的 DOM 结构；状态、轮询和样式分别位于同目录的职责模块。
  *
  * @module @dsh-remote/dsh-plugin-terminal/client/TerminalDock
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, KeyboardEvent } from 'react'
-// dsh's own glyph set, taken from the page's frozen module table rather than
-// bundled — see the dock-card convention in this repository's AGENTS.md.
 import {
-  IconApiOutline14, IconChevronDownOutline14, IconChevronUpOutline14,
+  Button, IconApiOutline14, IconChevronDownOutline14, IconChevronUpOutline14, Pill,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { foldPoll, terminalLabel } from '../shared.js'
-import type {
-  TerminalReadResultView, TerminalSendResultView, TerminalView, TerminalsSnapshot,
-} from '../shared.js'
-import { fill } from './locales.js'
-import type { TerminalKey } from './locales.js'
+import { terminalLabel } from '../shared.js'
+import type { TerminalPanelProps } from './terminal-dock.types.js'
+import {
+  bodyStyle, chevronStyle, errorStyle, headerStyle, inputClass, inputRowStyle, inputStyles, leadStyle,
+  MONO, noteStyle, rootStyle, screenStyle, summaryStyle, summaryTextStyle, tabsStyle, titleStyle,
+} from './terminal-dock.styles.js'
+import { useTerminalPanel } from './use-terminal-panel.js'
 
-/** How often the session list refreshes while the tab is visible, in ms. */
-export const LIST_POLL_MS = 5000
-
-/** How often the open panel refreshes the screen, in ms. */
-export const SCREEN_POLL_MS = 1500
-
-/** How long the panel refreshes fast after the user sent something, in ms. */
-const EAGER_WINDOW_MS = 4000
-
-/** The fast cadence used inside {@link EAGER_WINDOW_MS}. */
-const EAGER_POLL_MS = 400
+export { LIST_POLL_MS, SCREEN_POLL_MS } from './use-terminal-polling.js'
+export type { TerminalDockInjected, TerminalPanelProps } from './terminal-dock.types.js'
 
 /**
- * How many consecutive "could not answer" polls it takes to clear the panel.
- *
- * At {@link LIST_POLL_MS} this is a few seconds of the Host having no agent to
- * look in, which is long enough to ride out a session remount and short enough
- * that a genuinely dead conversation does not keep a stale panel.
- *
- * The decision itself lives in `../shared.ts` as {@link foldPoll}: it is pure,
- * it is the one piece of state machinery in this component that can lose a
- * user's typed draft, and it deserves a test that needs no DOM.
+ * 不依赖 slot plumbing 的 panel body，便于测试直接渲染。
+ * @param props - conversation、Host 操作和 locale seat。
+ * @returns panel；当前 conversation 没有 terminal 时返回空。
  */
+export function TerminalPanel(props: TerminalPanelProps) {
+  const {
+    translate, collapsed, setCollapsed, terminals, selected, selectTerminal, draft, setDraft,
+    note, pending, screenRef, onScroll, send, interrupt, onKeyDown, current, summary, body,
+  } = useTerminalPanel(props)
 
-/** What this plugin injects into its own registration. */
-export interface TerminalDockInjected {
-  /** Ask the Host which terminals this conversation's agent owns. */
-  onList: () => Promise<TerminalsSnapshot>
-  /** Ask the Host for one terminal's screen, skipping an unchanged one. */
-  onRead: (terminalId: string, revision: string | undefined) => Promise<TerminalReadResultView>
-  /** Ask the Host to write the user's keystrokes into one terminal. */
-  onSend: (terminalId: string, text: string, submit: boolean) => Promise<TerminalSendResultView>
-  /** Ask the Host to SIGINT one terminal's foreground process group. */
-  onInterrupt: (terminalId: string) => Promise<TerminalSendResultView>
-}
-
-/**
- * dsh's own dock-card geometry, copied deliberately.
- *
- * `conversation.input.dock` entries are children of a plain column flex stack,
- * so an entry with no width of its own stretches to the WHOLE conversation
- * column — wider than the input card by two side clearances. dsh's own entries
- * solve it by restating the shared width axis, and this is that axis.
- */
-const CLEARANCE = 'var(--dsh-composer-side-clearance, 16px)'
-const INSET = 'var(--dsh-composer-dock-inset, 8px)'
-const CARD_MAX = 'var(--dsh-composer-card-max-width, 952px)'
-
-/**
- * ⚠️ Theme tokens are spelled exactly as dsh defines them. A misspelt custom
- * property does not warn — it silently falls back to the literal after the
- * comma — so `--dsw-alias-border-l1` is an L, not a 1 (docs/02 §8.6).
- *
- * ⚠️ `--dsw-font-mono` is spelt correctly and is NEVER DEFINED. Measured in a
- * real page: `getPropertyValue('--dsw-font-mono')` comes back empty, and dsh's
- * own CSS references it four times without defining it once. So the FALLBACK is
- * the value that actually renders, and it is dsh's own complete stack rather
- * than a two-item one — `ui-monospace` is an Apple-platform generic, so a short
- * fallback drops straight to the browser's default fixed font on Windows
- * (docs/02 §8.6b).
- */
-const BORDER = 'var(--dsw-alias-border-l1, rgba(128,128,128,0.3))'
-const SECONDARY = 'var(--dsw-alias-label-secondary, #6b7280)'
-const TERTIARY = 'var(--dsw-alias-label-tertiary, #6b7280)'
-const MONO = 'var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)'
-
-/**
- * The card surface, taken from dsh's own todo panel rather than invented.
- *
- * `--dsw-specific-tip` is the ELEVATED surface rung dsh's dock cards and menus
- * use — `rgb(245,246,247)` in light, `rgb(53,54,56)` in dark
- * (`ui-conversation/.../TodoPanel.module.css:22-24`). The first version used
- * `--dsw-alias-bg-base`, which in the light palette is plain white, so this
- * card dissolved into the page beside dsh's own todo strip. The fallback is a
- * neutral translucent grey rather than either literal: it darkens a light
- * surface and lightens a dark one, so a renamed token still leaves a visible
- * card in BOTH themes.
- */
-const SURFACE = 'var(--dsw-specific-tip, rgba(128,128,128,0.1))'
-
-const rootStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  flex: 'none',
-  margin: '0 auto',
-  width: `calc(100% - ${CLEARANCE} * 2 - ${INSET} * 4)`,
-  maxWidth: `calc(${CARD_MAX} - ${INSET} * 4)`,
-  minWidth: 0,
-  boxSizing: 'border-box',
-  // 0.5px and 12px are dsh's own numbers for this card, not rounded versions:
-  // sitting directly beside the todo panel, a 1px border and a 10px radius
-  // read as a different component rather than a sibling.
-  borderRadius: '12px',
-  border: `0.5px solid ${BORDER}`,
-  background: SURFACE,
-  fontSize: '13px',
-  lineHeight: 1.5,
-  overflow: 'hidden',
-}
-
-/**
- * ⚠️ 表头对齐全部交给 flex，**不写任何固定尺寸**。
- *
- * dsh 自己的表头是 `lead`(14px svg) + 标题(line-height 24px) + 摘要(20px) +
- * chevron(14px)，靠 `align-items:center` 对齐 —— 它对齐的是**盒子中心**，而这四个
- * 盒子高度各不相同，图标的几何中心与文字 ink 的视觉中心就差出肉眼可见的一两像素
- * （用户实机反馈）。这里用两层 flex 代替：表头 `align-items:stretch` 把四个块拉成
- * 同一高度（由内容决定，不是写死的数字），每个块再自己 `display:flex;
- * align-items:center` 把内容居中。
- * ⚠️ 摘要要省略号就得把文字放进**内层 span**：flex 容器自己做不了 ellipsis。
- */
-const headerStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'stretch',
-  gap: '10px',
-  width: '100%',
-  padding: '8px 12px',
-  border: 'none',
-  background: 'transparent',
-  color: 'inherit',
-  font: 'inherit',
-  textAlign: 'left',
-  cursor: 'pointer',
-  minWidth: 0,
-  boxSizing: 'border-box',
-}
-
-/**
- * ⚠️ 图标的**光学**下移量，不是随手写的数字：flex 把各格拉成等高、各自居中之后，
- * 量真实截图（`sharp` 读墨迹包围盒，1× 无缩放）仍是「文字墨迹中心 y=48.0、图标墨
- * 迹中心 y=46.5」—— 汉字字面在行盒里天然偏下，而 svg 按几何中心摆，这 1.5px 靠
- * flex 补不回来。写成 em（1.5 ÷ 13 ≈ 0.115em）让它跟字号走；用 `transform` 而不是
- * margin，纯视觉位移不参与布局。
- */
-const GLYPH_OPTICAL_SHIFT = 'translateY(0.115em)'
-
-/**
- * The header's leading glyph cell — centres the icon in the stretched row.
- * `line-height: 0` 让这一格的高度只由 svg 决定，行盒的半行距不会把图标顶偏。
- */
-const leadStyle: CSSProperties = {
-  display: 'flex',
-  flex: 'none',
-  alignItems: 'center',
-  justifyContent: 'center',
-  lineHeight: 0,
-  transform: GLYPH_OPTICAL_SHIFT,
-  color: TERTIARY,
-}
-
-/** The disclosure chevron cell — the same centring and optical shift as the lead. */
-const chevronStyle: CSSProperties = {
-  display: 'flex',
-  flex: 'none',
-  alignItems: 'center',
-  justifyContent: 'center',
-  lineHeight: 0,
-  transform: GLYPH_OPTICAL_SHIFT,
-  color: TERTIARY,
-}
-
-const titleStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  flex: '0 0 auto',
-  fontSize: '13px',
-  fontWeight: 500,
-  color: 'var(--dsw-alias-label-primary, inherit)',
-  whiteSpace: 'nowrap',
-}
-
-const summaryStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  color: TERTIARY,
-  fontSize: '13px',
-  flex: '1 1 auto',
-  minWidth: 0,
-}
-
-/** The summary's text box — the ellipsis lives here, not on the flex cell. */
-const summaryTextStyle: CSSProperties = {
-  minWidth: 0,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-}
-
-const bodyStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '6px',
-  padding: '0 12px 10px',
-  minWidth: 0,
-}
-
-const tabsStyle: CSSProperties = {
-  display: 'flex',
-  gap: '6px',
-  flexWrap: 'wrap',
-  minWidth: 0,
-}
-
-const buttonStyle: CSSProperties = {
-  padding: '2px 9px',
-  borderRadius: '7px',
-  border: `1px solid ${BORDER}`,
-  background: 'transparent',
-  color: 'inherit',
-  cursor: 'pointer',
-  font: 'inherit',
-  fontSize: '12px',
-  whiteSpace: 'nowrap',
-  flex: '0 0 auto',
-}
-
-const activeTabStyle: CSSProperties = {
-  ...buttonStyle,
-  fontFamily: MONO,
-  // Neutral translucent grey rather than a layer token, for the same reason the
-  // root background is opaque: the light palette's layers are one colour.
-  background: 'rgba(128,128,128,0.18)',
-}
-
-const screenStyle: CSSProperties = {
-  maxHeight: '18em',
-  overflowY: 'auto',
-  overflowX: 'auto',
-  // Keeps a flick that reaches the end of this box from scrolling the
-  // transcript behind it — the mobile failure mode a nested scroller creates.
-  overscrollBehavior: 'contain',
-  margin: 0,
-  padding: '6px 8px',
-  borderRadius: '8px',
-  border: `1px solid ${BORDER}`,
-  background: 'rgba(128,128,128,0.1)',
-  fontFamily: MONO,
-  fontSize: '11px',
-  lineHeight: 1.45,
-  whiteSpace: 'pre',
-  minWidth: 0,
-  maxWidth: '100%',
-  boxSizing: 'border-box',
-}
-
-const inputRowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '6px',
-  minWidth: 0,
-}
-
-const inputStyle: CSSProperties = {
-  flex: '1 1 auto',
-  minWidth: 0,
-  padding: '4px 8px',
-  borderRadius: '7px',
-  border: `1px solid ${BORDER}`,
-  background: 'transparent',
-  color: 'inherit',
-  font: 'inherit',
-  fontFamily: MONO,
-  fontSize: '12px',
-}
-
-const noteStyle: CSSProperties = {
-  color: SECONDARY,
-  fontSize: '12px',
-  minWidth: 0,
-  overflowWrap: 'anywhere',
-}
-
-const errorStyle: CSSProperties = {
-  ...noteStyle,
-  color: 'var(--dsw-alias-state-error-primary, #dc2626)',
-}
-
-/** Everything the panel reads. */
-export interface TerminalPanelProps {
-  /** The conversation this panel belongs to; a change resets everything. */
-  sessionId: string | undefined
-  /** The Host verbs, absent before the registration binds. */
-  actions?: Partial<TerminalDockInjected> | undefined
-  /** Locale seat bound to this plugin's namespace. */
-  t?: ((key: TerminalKey) => string) | undefined
-}
-
-/**
- * Whether the document is currently visible.
- *
- * Guarded because the browser half is also imported by unit tests, where
- * `document` may be absent; treating that as "visible" keeps a test's first
- * fetch happening.
- * @returns whether polling should run.
- */
-function documentVisible(): boolean {
-  return typeof document === 'undefined' || document.visibilityState !== 'hidden'
-}
-
-/**
- * The panel body, free of slot plumbing so tests can render it directly.
- * @param props - the conversation, the Host verbs, and the locale seat.
- * @returns the panel, or nothing when this conversation owns no terminals.
- */
-export function TerminalPanel({ sessionId, actions, t }: TerminalPanelProps) {
-  const translate = useCallback((key: TerminalKey): string => t?.(key) ?? key, [t])
-  const [collapsed, setCollapsed] = useState(true)
-  const [snapshot, setSnapshot] = useState<TerminalsSnapshot | undefined>(undefined)
-  const [selected, setSelected] = useState<string | undefined>(undefined)
-  const [screen, setScreen] = useState<TerminalReadResultView | undefined>(undefined)
-  const [draft, setDraft] = useState('')
-  const [note, setNote] = useState<{ text: string, bad: boolean } | undefined>(undefined)
-  const [pending, setPending] = useState<'send' | 'interrupt' | undefined>(undefined)
-  const [eagerUntil, setEagerUntil] = useState(0)
-
-  const screenRef = useRef<HTMLPreElement | null>(null)
-  const followRef = useRef(true)
-  // Refs keep the poll effects from being torn down and restarted every time a
-  // response lands: an effect depends on the verb, not on the data.
-  const listRef = useRef(actions?.onList)
-  listRef.current = actions?.onList
-  const readRef = useRef(actions?.onRead)
-  readRef.current = actions?.onRead
-  const revisionRef = useRef<string | undefined>(undefined)
-  /** Consecutive polls that could not answer; see {@link loadList}. */
-  const blindPolls = useRef(0)
-
-  const terminals: readonly TerminalView[] = useMemo(() => snapshot?.terminals ?? [], [snapshot])
-
-  const loadList = useCallback(async (): Promise<void> => {
-    const fetchList = listRef.current
-    if (fetchList === undefined) return
-    try {
-      const next = await fetchList()
-      setSnapshot((previous) => {
-        const folded = foldPoll(previous, next, blindPolls.current)
-        blindPolls.current = folded.blindPolls
-        return folded.snapshot
-      })
-    } catch (cause: unknown) {
-      setNote({ text: fill(translate('failed'), { message: describe(cause) }), bad: true })
-    }
-  }, [translate])
-
-  const loadScreen = useCallback(async (terminalId: string): Promise<void> => {
-    const fetchScreen = readRef.current
-    if (fetchScreen === undefined) return
-    try {
-      const next = await fetchScreen(terminalId, revisionRef.current)
-      revisionRef.current = next.revision
-      // An unchanged answer carries no text on purpose; keeping the previous
-      // screen is the whole point of asking with a revision.
-      if (!next.unchanged) setScreen(next)
-      else setScreen(previous => previous === undefined ? next : { ...previous, running: next.running })
-    } catch (cause: unknown) {
-      setNote({ text: fill(translate('failed'), { message: describe(cause) }), bad: true })
-    }
-  }, [translate])
-
-  // Poll the session list while visible; stop while hidden and catch up.
-  useEffect(() => {
-    if (sessionId === undefined) return
-    let timer: ReturnType<typeof setInterval> | undefined
-    const start = (): void => {
-      if (timer !== undefined) return
-      void loadList()
-      timer = setInterval(() => { void loadList() }, LIST_POLL_MS)
-    }
-    const stop = (): void => {
-      if (timer === undefined) return
-      clearInterval(timer)
-      timer = undefined
-    }
-    const onVisibility = (): void => {
-      if (documentVisible()) start()
-      else stop()
-    }
-    if (documentVisible()) start()
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      stop()
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
-  }, [sessionId, loadList])
-
-  // A different conversation is a different agent, and therefore different
-  // terminals: drop everything rather than showing the previous one's screen.
-  useEffect(() => {
-    setSnapshot(undefined)
-    setSelected(undefined)
-    setScreen(undefined)
-    setDraft('')
-    setNote(undefined)
-    revisionRef.current = undefined
-    blindPolls.current = 0
-  }, [sessionId])
-
-  // Keep a valid selection without ever silently switching the user away from
-  // the terminal they are typing into.
-  useEffect(() => {
-    if (terminals.length === 0) {
-      if (selected !== undefined) setSelected(undefined)
-      return
-    }
-    if (selected !== undefined && terminals.some(entry => entry.id === selected)) return
-    setSelected(terminals[terminals.length - 1]?.id)
-    setScreen(undefined)
-    revisionRef.current = undefined
-  }, [terminals, selected])
-
-  // Poll the screen only while the panel is open: a collapsed panel showing one
-  // summary line has no use for 1.5-second screen fetches.
-  useEffect(() => {
-    if (collapsed || selected === undefined) return
-    let timer: ReturnType<typeof setTimeout> | undefined
-    let stopped = false
-    const tick = (): void => {
-      if (stopped) return
-      void loadScreen(selected)
-      timer = setTimeout(tick, Date.now() < eagerUntil ? EAGER_POLL_MS : SCREEN_POLL_MS)
-    }
-    const onVisibility = (): void => {
-      if (!documentVisible() || stopped) return
-      if (timer !== undefined) clearTimeout(timer)
-      tick()
-    }
-    if (documentVisible()) tick()
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      stopped = true
-      if (timer !== undefined) clearTimeout(timer)
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
-  }, [collapsed, selected, eagerUntil, loadScreen])
-
-  // Follow the output the way a terminal does, but stop following the moment
-  // the user scrolls up to read something.
-  useEffect(() => {
-    const element = screenRef.current
-    if (element === null || !followRef.current) return
-    element.scrollTop = element.scrollHeight
-  }, [screen])
-
-  const onScroll = useCallback((): void => {
-    const element = screenRef.current
-    if (element === null) return
-    followRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 24
-  }, [])
-
-  const send = useCallback((text: string, submit: boolean): void => {
-    const verb = actions?.onSend
-    if (verb === undefined || selected === undefined) return
-    setPending('send')
-    setNote(undefined)
-    void (async () => {
-      try {
-        const result = await verb(selected, text, submit)
-        // ⚠️ Only a delivered send clears the box. A refusal — above all a busy
-        // one — keeps what was typed, because the text never reached the shell
-        // and re-typing a password nobody can read back is the worse outcome.
-        if (result.ok) setDraft('')
-        else setNote({ text: result.message, bad: true })
-        followRef.current = true
-        setEagerUntil(Date.now() + EAGER_WINDOW_MS)
-      } catch (cause: unknown) {
-        setNote({ text: fill(translate('failed'), { message: describe(cause) }), bad: true })
-      } finally {
-        setPending(undefined)
-      }
-    })()
-  }, [actions, selected, translate])
-
-  const interrupt = useCallback((): void => {
-    const verb = actions?.onInterrupt
-    if (verb === undefined || selected === undefined) return
-    setPending('interrupt')
-    setNote(undefined)
-    void (async () => {
-      try {
-        const result = await verb(selected)
-        setNote({ text: result.message, bad: !result.ok })
-        setEagerUntil(Date.now() + EAGER_WINDOW_MS)
-      } catch (cause: unknown) {
-        setNote({ text: fill(translate('failed'), { message: describe(cause) }), bad: true })
-      } finally {
-        setPending(undefined)
-      }
-    })()
-  }, [actions, selected, translate])
-
-  const onKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>): void => {
-    if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
-    event.preventDefault()
-    send(draft, true)
-  }, [draft, send])
-
-  const current = terminals.find(entry => entry.id === selected)
-
-  const summary = useMemo(() => {
-    if (current === undefined) return ''
-    const state = current.sending
-      ? translate('sending')
-      : current.running
-        ? translate('running')
-        : current.exitCode === undefined || current.exitCode === null
-          ? translate('exited')
-          : fill(translate('exitedWithCode'), { code: current.exitCode })
-    const label = `${terminalLabel(current)} · ${state}`
-    return terminals.length === 1
-      ? fill(translate('summaryOne'), { label })
-      : fill(translate('summaryMany'), { count: terminals.length, label })
-  }, [current, terminals.length, translate])
-
-  // No terminal has ever been opened in this conversation: no panel at all. A
-  // permanently empty box above the composer would cost every user vertical
-  // space to tell them about a feature they are not using.
+  // 本 conversation 从未打开 terminal：完全不显示 panel。composer 上方的永久空框会浪费垂直空间。
   if (terminals.length === 0) return null
-
-  const body = screen === undefined
-    ? translate('loading')
-    : screen.text === '' ? translate('emptyScreen') : screen.text
 
   return (
     <section style={rootStyle} aria-label={translate('title')} data-dsh-terminal-panel="">
+      <style>{inputStyles}</style>
       <button
         type="button"
         style={headerStyle}
         aria-expanded={!collapsed}
         onClick={() => { setCollapsed(value => !value) }}
       >
-        {/* dsh's dock cards all lead their title with an outline glyph and
-            close the header with the shared disclosure chevron — collapsed
-            points UP, expanded points DOWN, exactly as dsh's todo panel does
-            (`TodoPanel.tsx:101-106`). The API mark is a terminal prompt in a
-            rounded square, which is literally what this panel shows; the
-            services panel deliberately uses the same glyph (user's call —
-            the two cards are never mistaken for each other, their titles
-            differ and they rarely appear together). */}
+        {/* dsh dock card 都用 outline glyph 开头、用共用 disclosure chevron 结束；收起向上、展开向下。 */}
         <span aria-hidden style={leadStyle}><IconApiOutline14 /></span>
         <span style={titleStyle}>{translate('title')}</span>
         <span style={summaryStyle}><span style={summaryTextStyle}>{summary}</span></span>
@@ -586,23 +57,16 @@ export function TerminalPanel({ sessionId, actions, t }: TerminalPanelProps) {
           {terminals.length > 1 && (
             <div style={tabsStyle} role="tablist">
               {terminals.map(entry => (
-                <button
+                <Pill
                   key={entry.id}
-                  type="button"
                   role="tab"
                   aria-selected={entry.id === selected}
-                  style={entry.id === selected ? activeTabStyle : { ...buttonStyle, fontFamily: MONO }}
-                  onClick={() => {
-                    if (entry.id === selected) return
-                    setSelected(entry.id)
-                    setScreen(undefined)
-                    setNote(undefined)
-                    revisionRef.current = undefined
-                    followRef.current = true
-                  }}
+                  active={entry.id === selected}
+                  style={entry.id === selected ? undefined : { fontFamily: MONO }}
+                  onClick={() => { selectTerminal(entry.id) }}
                 >
                   {terminalLabel(entry)}
-                </button>
+                </Pill>
               ))}
             </div>
           )}
@@ -615,7 +79,7 @@ export function TerminalPanel({ sessionId, actions, t }: TerminalPanelProps) {
             ? (
                 <div style={inputRowStyle}>
                   <input
-                    style={inputStyle}
+                    className={inputClass}
                     value={draft}
                     aria-label={translate('inputLabel')}
                     placeholder={translate('inputPlaceholder')}
@@ -623,22 +87,22 @@ export function TerminalPanel({ sessionId, actions, t }: TerminalPanelProps) {
                     onChange={event => { setDraft(event.target.value) }}
                     onKeyDown={onKeyDown}
                   />
-                  <button
-                    type="button"
-                    style={buttonStyle}
-                    disabled={pending !== undefined || actions?.onSend === undefined}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={pending !== undefined || props.actions?.onSend === undefined}
                     onClick={() => { send(draft, true) }}
                   >
                     {draft === '' ? translate('sendEmpty') : translate('send')}
-                  </button>
-                  <button
-                    type="button"
-                    style={buttonStyle}
-                    disabled={pending !== undefined || actions?.onInterrupt === undefined}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={pending !== undefined || props.actions?.onInterrupt === undefined}
                     onClick={interrupt}
                   >
                     {pending === 'interrupt' ? translate('interrupting') : translate('interrupt')}
-                  </button>
+                  </Button>
                 </div>
               )
             : <div style={noteStyle}>{translate('exitedHint')}</div>}
@@ -649,13 +113,4 @@ export function TerminalPanel({ sessionId, actions, t }: TerminalPanelProps) {
       )}
     </section>
   )
-}
-
-/**
- * One sentence for a thrown value.
- * @param cause - the thrown value.
- * @returns its message.
- */
-function describe(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
 }

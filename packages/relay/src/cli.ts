@@ -55,10 +55,10 @@ function bindHost(value: string): string {
 }
 
 /**
- * Audit sink for the one-shot recovery commands.
+ * 单次恢复命令使用的审计日志出口。
  *
- * It writes to stderr so the machine-readable audit lines never interleave with
- * the human-facing output the operator is reading.
+ * 它写入 stderr，避免机器可读的审计行与操作员正在阅读的
+ * 面向人类输出交错。
  */
 function cliAuditLogger(): Logger {
   return pino({ level: process.env.LOG_LEVEL ?? 'info' }, pino.destination(2))
@@ -104,7 +104,7 @@ async function hiddenPrompt(label: string): Promise<string> {
   })
 }
 
-/** Expected operator mistake: report it as a message, never as a stack trace. */
+/** 预期的操作员错误：作为消息报告，绝不输出堆栈跟踪。 */
 class CliUserError extends Error {
   constructor(message: string) {
     super(message)
@@ -114,7 +114,7 @@ class CliUserError extends Error {
 
 const PASSWORD_ATTEMPTS = 3
 
-/** Turn the known operator mistakes into one clean line instead of a stack. */
+/** 将已知操作员错误转换成一行简洁消息，而不是堆栈。 */
 function reportExpectedError(error: unknown): void {
   if (error instanceof AdminAlreadyInitializedError) program.error(error.message)
   if (error instanceof AdminNotFoundError) program.error(error.message)
@@ -140,7 +140,7 @@ async function newAdminPassword(): Promise<string> {
 
   console.log(`管理员密码至少 ${String(PASSWORD_MIN_CHARACTERS)} 个字符，且要用上大写字母、小写字母、数字、符号里的至少 ${String(PASSWORD_REQUIRED_CLASSES)} 类，用于保护远程访问这台机器的入口。`)
   for (let attempt = 1; attempt <= PASSWORD_ATTEMPTS; attempt += 1) {
-    // eslint-disable-next-line no-await-in-loop -- an interactive prompt is sequential by nature
+    // eslint-disable-next-line no-await-in-loop -- 交互式提示本来就必须顺序执行
     const first = await hiddenPrompt('管理员密码: ')
     try {
       validateNewPassword(first)
@@ -149,7 +149,7 @@ async function newAdminPassword(): Promise<string> {
       console.log(`  密码不符合要求：${error.message}`)
       continue
     }
-    // eslint-disable-next-line no-await-in-loop -- the confirmation must follow the first entry
+    // eslint-disable-next-line no-await-in-loop -- 确认输入必须跟在第一次输入之后
     const second = await hiddenPrompt('再次输入密码: ')
     if (first === second) return first
     console.log('  两次输入的密码不一致。')
@@ -179,11 +179,11 @@ async function serveRelay(options: ServeOptions, command: Command): Promise<void
     : options.domain === undefined
       ? undefined
       : { cookieMode: 'domain-https' as const }
-  // Connectors authenticate against registered devices, so the tunnel needs the
-  // store even when no browser authentication is configured.
+  // connector 根据已注册设备进行认证，因此隧道即使在未配置浏览器认证时
+  // 也需要 store。
   const store = openRelayStore({ path: options.data })
-  // One sink for the relay's own logs and its audit lines, so a shipped log
-  // file holds both the traffic context and the security events.
+  // relay 自身日志和审计行共用一个出口，使发布的日志
+  // 文件同时包含流量上下文和安全事件。
   const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
   let relay: ReturnType<typeof createRelayServer> | undefined
   try {
@@ -193,8 +193,8 @@ async function serveRelay(options: ServeOptions, command: Command): Promise<void
       if (encodedSecret === undefined) {
         command.error('browser authentication requires DSH_REMOTE_JWT_SECRET (32+ random base64url bytes)')
       }
-      // No admin yet is a normal first-run state, not an error: the relay
-      // serves its loopback setup wizard until someone creates the account.
+      // 尚无管理员是正常的首次运行状态，不是错误：relay
+      // 会提供 loopback 设置向导，直到有人创建账号。
       authentication = await createAuthenticationService({
         store,
         jwtSecret: decodeJwtSecret(encodedSecret),

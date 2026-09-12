@@ -1,189 +1,136 @@
 /**
- * The contract both halves of this plugin agree on: the RPC channel, its
- * endpoints, the wire shapes, and the few pure functions that would otherwise
- * be written twice.
- *
- * This module is compiled into BOTH programs (`tsconfig.json` and
- * `tsconfig.client.json`), so it must not import `node:*` or any dsh package —
- * a browser bundle cannot carry either.
- *
- * WHY THE PANEL POLLS INSTEAD OF BEING PUSHED. dsh has exactly one Host→Client
- * push seam a plugin may use — session projections — and a projection folds
- * SESSION EVENTS. The three PTY packages publish none: `ctx.terminals` keeps
- * its sessions in private in-process maps and registers no projection, emits no
- * event, and appends nothing to the log. Inventing an event type is not an
- * option either: `Session.append()` takes no `ignorable` flag
- * (`packages/core/session/src/index.ts:668-672`), and a persisted event whose
- * type is outside the build-time `KNOWN_SESSION_EVENT_TYPES` set makes the
- * persistence layer refuse to load that session ever again
- * (`session-persistence/src/coordinator.ts:1248-1253`).
- *
- * So the page asks. `TerminalReadResult.revision` is what makes that cheap: an
- * unchanged screen answers with one short string instead of the screen, which
- * is what a phone on a relay actually pays for.
+ * 两半共享的 terminal contract：RPC channel、端点、wire shape 及纯校验/投影函数。
+ * dsh 的 PTY package 不发布 session projection 或事件，且插件不能追加自定义 session event，因此 browser 通过 revision poll 向 Host 请求最新 screen。
  *
  * @module @dsh-remote/dsh-plugin-terminal/shared
  */
 
-/**
- * This plugin's identity: the RPC channel, the copy namespace and the slot
- * entry id all derive from the package suffix, so one string is the single
- * source of that name.
- */
+/** 本插件 identity；RPC channel、文案 namespace 和 slot entry id 都由 package suffix 派生。 */
 export const SELF_NAMESPACE = 'dsh-plugin-terminal'
 
 /**
- * The absolute RPC channel the Host registers and the page calls.
- *
- * ⚠️ The endpoint is part of the URL PATH: the browser must POST to
- * `/terminal/<endpoint>`, and the envelope's `method` has to equal that same
- * path segment. Calling `/terminal` alone is a flat 404 (docs/02 §10.8).
+ * Host 注册、页面调用的绝对 RPC channel。endpoint 是 URL path segment：必须 POST `/terminal/<endpoint>`，单独调用 `/terminal` 是 flat 404（docs/dsh/transport.md）。
  */
 export const CHANNEL = '/terminal'
 
 /**
- * Every endpoint this channel serves.
- *
- * ⚠️ There is deliberately no `open` and no `close`. Creating a shell is the
- * one action on this surface that manufactures new capability rather than
- * steering capability the user can already see, and it belongs where dsh put
- * it: the model-facing `interactive_terminal_open` tool (wrapping upstream `terminal_open`), which runs inside the turn with the transcript
- * and the approval stack around it. See the README's security section.
+ * 本 channel 提供的 endpoint。刻意没有 `open`/`close`：创建 shell 会制造新能力，应留在 model-facing `interactive_terminal` start action tool（上游 `terminal_open`），而不是页面按钮。
  */
 export const ENDPOINTS = ['list', 'read', 'send', 'interrupt'] as const
 
-/** One endpoint name. */
+/** 一个 endpoint 名称。 */
 export type Endpoint = typeof ENDPOINTS[number]
 
 /**
- * Whether a decoded endpoint belongs to this channel.
- * @param endpoint - the channel-relative endpoint name.
- * @returns whether this plugin serves it.
+ * 判断解码后的 endpoint 是否属于本 channel。
+ * @param endpoint - 相对 channel 的 endpoint 名称。
+ * @returns 本插件是否提供它。
  */
 export function isTerminalEndpoint(endpoint: string): endpoint is Endpoint {
   return (ENDPOINTS as readonly string[]).includes(endpoint)
 }
 
-/** Failure code for an endpoint this channel does not serve. */
+/** 本 channel 不提供 endpoint 时的错误码。 */
 export const UNKNOWN_ENDPOINT_CODE = 'terminal/unknown-endpoint'
 
-/** Failure code for a payload that does not satisfy its endpoint. */
+/** payload 不满足 endpoint contract 时的错误码。 */
 export const BAD_PAYLOAD_CODE = 'terminal/bad-payload'
 
-/** Failure code for an unexpected Host-side throw. */
+/** Host 侧意外抛错时的错误码。 */
 export const INTERNAL_CODE = 'terminal/internal'
 
-/** Why the panel is showing nothing. */
+/** panel 没有显示内容的原因。 */
 export type TerminalsUnavailable =
-  /** `ctx.terminals` is not mounted, or is still waiting for its injections. */
+  /** `ctx.terminals` 未挂载或仍在等待依赖注入。 */
   | 'no-service'
-  /** The session has no live agent, so it owns no terminals. */
+  /** session 没有 live agent，因此不拥有 terminal。 */
   | 'no-agent'
 
-/** One live PTY session, as the page sees it. */
+/** 页面看到的一项 live PTY session。 */
 export interface TerminalView {
-  /** Service-minted session id (`pty-1`, `pty-2`, …). */
+  /** service 生成的 session id（`pty-1`、`pty-2`、…）。 */
   id: string
-  /** Owner-local display name, when `interactive_terminal_open` was given one. */
+  /** owner 本地显示名；`interactive_terminal` start action 提供时存在。 */
   name?: string
-  /** Backend type the session was opened with (`shell`). */
+  /** 创建 session 时使用的 backend type（`shell`）。 */
   type: string
-  /**
-   * Top-level process id, when the substrate reports one.
-   *
-   * ConPTY reports `0` on Windows, so this is a diagnostic, never an identity.
-   */
+  /** 顶层 process id（substrate 提供时）；Windows ConPTY 报告 `0`，因此只能诊断，不能作为身份。 */
   pid?: number
-  /** Whether the top-level shell is still running. */
+  /** 顶层 shell 是否仍在运行。 */
   running: boolean
-  /** Exit code, once the top-level shell has exited. */
+  /** 顶层 shell 退出后的 exit code。 */
   exitCode?: number | null
   /**
-   * Whether THIS PLUGIN currently has a send in flight on the session.
-   *
-   * ⚠️ It is not "the session is idle". A send started by model-facing `interactive_terminal_send` (upstream `terminal_send`) is
-   * invisible from here — the registry keeps the active operation private — so
-   * a `false` here does not promise the next send will be accepted. The Host
-   * handles that case by waiting rather than by predicting it; see
-   * {@link TerminalSendResultView}.
-   */
+ * 本插件当前是否正在向该 session 发送内容。
+ * ⚠️ 这不等于“session idle”：model-facing `interactive_terminal` 的发送在这里不可见，因此 false 不能保证下一次 send 一定被接受；Host 会等待并返回结果，见 {@link TerminalSendResultView}。
+ */
   sending: boolean
 }
 
-/** Everything one `list` call reports. */
+/** 一次 `list` 调用报告的全部内容。 */
 export interface TerminalsSnapshot {
-  /** Live sessions owned by this conversation's agent, in publication order. */
+  /** 本 conversation agent 拥有的 live sessions，按发布顺序排列。 */
   terminals: TerminalView[]
-  /** Present only when there is nothing to show, saying which kind of nothing. */
+  /** 没有内容可显示时才存在，说明具体的 unavailable 原因。 */
   unavailable?: TerminalsUnavailable
-  /** The Host's clock at snapshot time, for the page's own elapsed-time math. */
+  /** Host 构造 snapshot 时的时钟，供页面计算本地经过时间。 */
   now: number
 }
 
-/** Result of one `read` call. */
+/** 一次 `read` 调用的结果。 */
 export interface TerminalReadResultView {
-  /** The session this page is about. */
+  /** 本页面对应的 session。 */
   id: string
   /**
-   * Cheap content fingerprint of the returned screen.
-   *
-   * The page sends the previous one back; an unchanged screen answers with
-   * `unchanged: true` and no text at all. Over a relay, from a phone, that is
-   * the difference between a poll costing a screen and a poll costing nothing.
-   */
+ * 返回 screen 的轻量 content fingerprint。页面回传上次 revision；不变时 Host 只返回 `unchanged: true` 和空 text，relay 上的 poll 无需传输 screen。
+ */
   revision: string
-  /** True when `revision` matched, in which case `text` is empty. */
+  /** `revision` 匹配时为 true，此时 `text` 为空。 */
   unchanged: boolean
-  /** The trailing lines of retained scrollback; empty when `unchanged`. */
+  /** 保留 scrollback 的末尾行；`unchanged` 时为空。 */
   text: string
-  /** How many lines the backend is retaining in total. */
+  /** backend 总共保留的行数。 */
   totalLines: number
-  /** Whether the backend dropped output to satisfy its byte cap. */
+  /** backend 是否为满足字节上限丢弃了输出。 */
   truncated: boolean
-  /** Whether the top-level shell is still running. */
+  /** 顶层 shell 是否仍在运行。 */
   running: boolean
 }
 
-/** Result of one `send` or `interrupt` call. */
+/** 一次 `send` 或 `interrupt` 调用的结果。 */
 export interface TerminalSendResultView {
-  /** Whether the input reached the terminal. */
+  /** 输入是否到达 terminal。 */
   ok: boolean
-  /** One human sentence, already final — including a refusal. */
+  /** 已经可直接展示的一句人类文案，包括拒绝原因。 */
   message: string
-  /**
-   * Whether the refusal was "something else is already sending".
-   *
-   * The page uses it to keep the user's draft instead of clearing the box: the
-   * text was never delivered, and losing a typed password is worse than
-   * retyping a command.
-   */
+  /** refusal 是否因为已有其他 send 正在执行；页面据此保留 draft，因为文本未送达，丢失密码比重新输入命令更糟。 */
   busy?: boolean
 }
 
-/** Payload of `list`. */
+/** `list` 的 payload。 */
 export interface ListRequest {
-  /** The conversation whose agent owns the terminals. */
+  /** agent 拥有 terminal 的 conversation。 */
   sessionId: string
 }
 
-/** Payload of `read`, `send` and `interrupt`. */
+/** `read`、`send` 和 `interrupt` 的 payload。 */
 export interface TerminalRequest extends ListRequest {
-  /** Target PTY session id, as reported by `list`. */
+  /** `list` 报告的目标 PTY session id。 */
   terminalId: string
-  /** `read`: trailing line count. */
+  /** `read`：末尾行数。 */
   lines?: number
-  /** `read`: the revision the page already has. */
+  /** `read`：页面已有的 revision。 */
   revision?: string
-  /** `send`: the text to write. */
+  /** `send`：要写入的文本。 */
   text?: string
-  /** `send`: whether to append the shell's Enter sequence. Defaults to true. */
+  /** `send`：是否追加 shell 的 Enter sequence；默认 true。 */
   submit?: boolean
 }
 
 /**
- * Whether a decoded payload carries a session id.
- * @param value - the browser's payload.
- * @returns whether it satisfies {@link ListRequest}.
+ * 判断解码后的 payload 是否携带 session id。
+ * @param value - browser payload。
+ * @returns 是否满足 {@link ListRequest}。
  */
 export function isListRequest(value: unknown): value is ListRequest {
   return typeof value === 'object' && value !== null
@@ -192,9 +139,9 @@ export function isListRequest(value: unknown): value is ListRequest {
 }
 
 /**
- * Whether a decoded payload names a terminal, with well-formed optionals.
- * @param value - the browser's payload.
- * @returns whether it satisfies {@link TerminalRequest}.
+ * 判断解码后的 payload 是否命名 terminal 且 optional 字段格式正确。
+ * @param value - browser payload。
+ * @returns 是否满足 {@link TerminalRequest}。
  */
 export function isTerminalRequest(value: unknown): value is TerminalRequest {
   if (!isListRequest(value)) return false
@@ -208,24 +155,20 @@ export function isTerminalRequest(value: unknown): value is TerminalRequest {
   return true
 }
 
-/** Trailing lines returned by `read` when the page does not say. */
+/** 页面未指定时 `read` 返回的末尾行数。 */
 export const DEFAULT_READ_LINES = 200
 
-/** Hard cap on trailing lines, so one poll cannot ship the whole scrollback. */
+/** 末尾行数硬上限，避免一次 poll 传输全部 scrollback。 */
 export const MAX_READ_LINES = 2000
 
-/** Longest text one `send` may carry, in UTF-16 code units. */
+/** 一次 `send` 可携带的最大文本长度（UTF-16 code units）。 */
 export const MAX_SEND_LENGTH = 8192
 
 /**
- * Fingerprint one screen, cheaply and deterministically.
- *
- * FNV-1a over the text plus the retained line count: it is not a security
- * hash, it is a "did anything change" hash, and both halves must agree on it
- * only in the sense that the page hands back whatever the Host last gave it.
- * @param text - the rendered screen.
- * @param totalLines - the backend's retained line count.
- * @returns a short hex fingerprint.
+ * 以便宜且确定的方式为一张 screen 生成 fingerprint。FNV-1a 结合文本和保留行数；它不是 security hash，只用于判断内容是否变化。
+ * @param text - 渲染后的 screen。
+ * @param totalLines - backend 保留的行数。
+ * @returns 短的十六进制 fingerprint。
  */
 export function revisionOf(text: string, totalLines: number): string {
   let hash = 0x811c9dc5
@@ -237,41 +180,23 @@ export function revisionOf(text: string, totalLines: number): string {
 }
 
 /**
- * Describe one terminal in the one line a collapsed panel header has room for.
- * @param terminal - the session to describe.
- * @returns its display label.
+ * 将一个 terminal 描述为收起 panel 表头容纳的一行文案。
+ * @param terminal - 要描述的 session。
+ * @returns display label。
  */
 export function terminalLabel(terminal: TerminalView): string {
   return terminal.name === undefined || terminal.name === '' ? terminal.id : `${terminal.name} (${terminal.id})`
 }
 
-/**
- * How many consecutive "could not answer" polls it takes to clear the panel.
- *
- * At the panel's list cadence this is a few seconds of the Host having no agent
- * to look in — long enough to ride out a session remount, short enough that a
- * genuinely dead conversation does not keep a stale panel.
- */
+/** 连续多少次“无法回答”的 poll 后清除 panel；在 session remount 与真正 dead conversation 之间取平衡。 */
 export const BLIND_POLL_LIMIT = 3
 
 /**
- * Decide what one poll does to what the panel is showing.
- *
- * ⚠️ A poll that could not ANSWER must not be read as "there are no terminals".
- * {@link TerminalsSnapshot.unavailable} means the Host had nothing to look in —
- * the agent is momentarily absent while a session remounts — and taking it at
- * face value unmounts the panel, which throws away the user's DRAFT. An input
- * box that vanishes mid-password is precisely the failure this plugin must not
- * have, and it was caught exactly once in twenty live browser runs, which is
- * how a bug like this reaches a user rather than a test.
- *
- * A definitive answer always wins, so a terminal the model closed disappears
- * immediately. A genuinely dead agent clears the panel once the blind polls
- * reach {@link BLIND_POLL_LIMIT}, rather than leaving a stale panel forever.
- * @param previous - what the panel is showing now.
- * @param next - the poll's answer.
- * @param blindPolls - how many polls in a row have already failed to answer.
- * @returns the snapshot to show and the new blind-poll count.
+ * 决定一次 poll 如何更新 panel。`unavailable` 表示 Host 暂时没有 agent 可查，不等于没有 terminal；短暂期间保留 previous，避免输入框消失丢掉用户 draft。确定答案立即生效，连续达到 {@link BLIND_POLL_LIMIT} 次才清除真正失效的 panel。
+ * @param previous - panel 当前显示内容。
+ * @param next - 本次 poll 的回答。
+ * @param blindPolls - 连续无法回答的次数。
+ * @returns 要显示的 snapshot 和新的计数。
  */
 export function foldPoll(
   previous: TerminalsSnapshot | undefined,

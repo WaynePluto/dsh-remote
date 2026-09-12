@@ -3,38 +3,35 @@ import { join } from 'node:path'
 import { LauncherError } from './errors.js'
 import { launcherDirectory } from './dsh.js'
 
-/** Where the connector lives and how it has to be started. */
+/** Connector 所在位置及其启动方式。 */
 export interface ConnectorEntry {
   readonly path: string
-  /** True for a TypeScript source, which needs tsx preloaded to run. */
+  /** TypeScript 源文件为 true，运行时需要预加载 tsx。 */
   readonly needsTsx: boolean
 }
 
 /**
- * Locate the connector relative to the launcher's own installed location.
- *
- * Anchoring on this file, rather than on the working directory, is what makes
- * one launcher work both from the checkout and from an unzipped green package
- * that the user may have put anywhere.
- * @param directory - the launcher's directory; injected in tests.
- * @param exists - existence predicate; injected in tests.
- * @returns The first candidate that exists.
- * @throws LauncherError When no connector can be found.
+ * 相对于 launcher 自己的安装位置定位 connector。
+ * 以此文件为锚点而不是工作目录，launcher 才能既从 checkout 又从任意位置解压的绿色包运行。
+ * @param directory - launcher 目录；测试中注入。
+ * @param exists - 存在性谓词；测试中注入。
+ * @returns 第一个存在的候选路径。
+ * @throws LauncherError 找不到 connector 时抛出。
  */
 export function resolveConnectorEntry(
   directory: string = launcherDirectory(),
   exists: (path: string) => boolean = existsSync,
 ): ConnectorEntry {
   const candidates = [
-    // Green package, and the workspace too: the connector is a real dependency
-    // of the launcher, so both layouts put it at
-    // <root>/node_modules/@dsh-remote/connector. Started in place for the same
-    // reason as the relay (see resolveRelayEntry): a bundle copied away from its
-    // package directory stops seeing the dependencies pnpm nested underneath it.
+    // 绿色包和 workspace 都是如此：connector 是 launcher 的真实依赖，
+    // 因此两种布局都会把它放在
+    // <root>/node_modules/@dsh-remote/connector。原地启动的原因与 relay 相同，
+    //（见 resolveRelayEntry）：复制到其他位置的 bundle 会失去
+    // 包目录，因此看不到 pnpm 嵌套在其下方的依赖。
     join(directory, '..', 'node_modules', '@dsh-remote', 'connector', 'dist', 'cli.js'),
-    // Workspace, built: packages/launcher/{dist,src} -> packages/connector/dist.
+    // Workspace，已构建：packages/launcher/{dist,src} -> packages/connector/dist。
     join(directory, '..', '..', 'connector', 'dist', 'cli.js'),
-    // Workspace, sources only.
+    // Workspace，仅源码。
     join(directory, '..', '..', 'connector', 'src', 'cli.ts'),
   ]
   const found = candidates.find(candidate => exists(candidate))
@@ -48,14 +45,14 @@ export function resolveConnectorEntry(
 }
 
 /**
- * Build the argv of the connector child process.
+ * 构建 connector 子进程的 argv。
  *
- * Deliberately no `--relay` / `--slug`: without them the connector reads
- * `membership.json` itself and idles until an admin console joins this machine
- * to a hub (D16). Passing them here would freeze that choice at start-up.
- * @param entry - the resolved connector entry point.
- * @param options - the dsh-remote home and the local dsh port.
- * @returns The arguments to pass to `node`.
+ * 特意不传 `--relay` / `--slug`：没有它们时 connector 会读取
+ * `membership.json`，并空闲等待管理控制台将这台机器
+ * 加入 hub（D16）。在这里传入它们会在启动时冻结这一选择。
+ * @param entry - 已解析的 connector 入口点。
+ * @param options - dsh-remote home 和本地 dsh 端口。
+ * @returns 要传给 `node` 的参数。
  */
 export function connectorArguments(entry: ConnectorEntry, options: {
   readonly home: string

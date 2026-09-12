@@ -13,7 +13,7 @@ function newDirectory(): string {
   return directory
 }
 
-/** A database shaped like the relay's, so the launcher's probe is realistic. */
+/** 形状与 relay 相同的数据库，使 launcher 的探测真实可靠。 */
 function databaseWith(users: number): string {
   const path = join(newDirectory(), 'relay.db')
   const database = new DatabaseSync(path)
@@ -40,8 +40,8 @@ describe('relay admin probe', () => {
   })
 
   it('answers instead of throwing when even the home directory is missing', () => {
-    // The relay creates both the directory and the file on its own first start,
-    // so the launcher can legitimately ask before either exists.
+    // relay 首次启动时会自己创建目录和文件，
+    // 因此 launcher 可以在二者都不存在前合法地询问。
     const path = join(newDirectory(), 'not-created-yet', 'relay.db')
     expect(() => relayAdminInitialized(path)).not.toThrow()
     expect(relayAdminInitialized(path)).toBe(false)

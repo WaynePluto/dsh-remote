@@ -7,7 +7,7 @@ async function waitFor(check: () => boolean, timeoutMs = 10_000): Promise<void> 
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     if (check()) return
-    // eslint-disable-next-line no-await-in-loop -- the poll interval must pause the loop
+    // eslint-disable-next-line no-await-in-loop -- 轮询间隔必须暂停循环
     await delay(25)
   }
   throw new Error(`condition not met within ${String(timeoutMs)}ms`)

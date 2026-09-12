@@ -1,9 +1,4 @@
-/**
- * The wire contract's pure parts: endpoint guard, payload validation, the
- * change fingerprint, and the one-line label.
- *
- * @module @dsh-remote/dsh-plugin-terminal/tests/shared
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 
 import { describe, expect, it } from 'vitest'
 import {
@@ -19,9 +14,9 @@ describe('channel identity', () => {
 
   it('serves exactly four endpoints, and neither open nor close', () => {
     expect([...ENDPOINTS]).toStrictEqual(['list', 'read', 'send', 'interrupt'])
-    // The panel deliberately cannot manufacture a shell; that stays with the
-    // `interactive_terminal_open` tool, inside the turn. Locking it here so a future
-    // convenience endpoint has to argue with a failing test first.
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`interactive_terminal`）
+    // 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。
     expect(isTerminalEndpoint('open')).toBe(false)
     expect(isTerminalEndpoint('close')).toBe(false)
   })
@@ -81,9 +76,9 @@ describe('revisionOf', () => {
   })
 
   it('changes when only the retained line count changes', () => {
-    // A screen whose tail is identical but whose scrollback grew is not the
-    // same screen: the page would otherwise stop refreshing during a burst of
-    // output that repeats a line.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(revisionOf('same', 10)).not.toBe(revisionOf('same', 11))
   })
 
@@ -101,8 +96,8 @@ describe('terminalLabel', () => {
   })
 
   it('keeps the id visible beside a name', () => {
-    // The model refers to a session by id; a label that hid it would make the
-    // transcript and the panel talk about different things.
+    // 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(terminalLabel({ ...view, name: 'build' })).toBe('build (pty-2)')
   })
 })

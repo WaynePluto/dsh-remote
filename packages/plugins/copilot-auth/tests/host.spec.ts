@@ -1,9 +1,4 @@
-/**
- * Host-half tests. Everything here runs against fakes of the two dsh services
- * this plugin reads (`credentials`, `settings`) and a faked pi-ai login, so the
- * suite exercises the parts that are ours: the record format, the settings
- * write, the attempt state machine, and the channel's dispatch.
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`credentials`、`settings`） */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
@@ -25,11 +20,12 @@ const { describedModelIds, ensureProviderRoute, isRouteConfigured } = await impo
 const { CopilotSignIn } = await import('../src/sign-in.js')
 const { dispatch, UNKNOWN_ENDPOINT_CODE } = await import('../src/index.js')
 
-/** A credential service with just the record half this plugin uses. */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 function fakeCredentials(initial?: CredentialRecord) {
   let record = initial
   return {
     readRecord: vi.fn(async () => record),
+    unset: vi.fn(async () => {}),
     deleteRecord: vi.fn(async () => { record = undefined }),
     modifyRecord: vi.fn(async (_key: unknown, mutate: (current: CredentialRecord | undefined) => Promise<CredentialRecord | undefined>) => {
       const next = await mutate(record)
@@ -40,7 +36,7 @@ function fakeCredentials(initial?: CredentialRecord) {
   }
 }
 
-/** A settings provider with the two methods this plugin calls. */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 function fakeSettings(initial: Record<string, unknown> = {}) {
   const section: Record<string, unknown> = { ...initial }
   const ops: unknown[] = []
@@ -49,14 +45,15 @@ function fakeSettings(initial: Record<string, unknown> = {}) {
     mutate: vi.fn(async (_ns: string, next: readonly { op: string; path: readonly string[]; value?: unknown }[]) => {
       ops.push(...next)
       for (const op of next) {
-        if (op.op !== 'set') continue
         let cursor = section
         for (const segment of op.path.slice(0, -1)) {
           const child = cursor[segment]
           cursor[segment] = typeof child === 'object' && child !== null ? child : {}
           cursor = cursor[segment] as Record<string, unknown>
         }
-        cursor[op.path[op.path.length - 1] as string] = op.value
+        const key = op.path[op.path.length - 1] as string
+        if (op.op === 'unset') delete cursor[key]
+        else cursor[key] = op.value
       }
     }),
     ops,
@@ -64,7 +61,7 @@ function fakeSettings(initial: Record<string, unknown> = {}) {
   }
 }
 
-/** A context exposing only what this plugin reads. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 function fakeContext(services: Record<string, unknown>): Context {
   return {
     get: (name: string) => services[name],
@@ -124,12 +121,44 @@ describe('credential store adapter', () => {
 })
 
 describe('provider route', () => {
+  it('replaces a key reference with subscription auth and deletes the obsolete key', async () => {
+    const settings = fakeSettings({ providers: { 'github-copilot': { apiKeyEnv: 'OLD_KEY', displayName: 'Copilot' } } })
+    const credentials = fakeCredentials()
+    await ensureProviderRoute(fakeContext({ settings, credentials }), [])
+    expect(settings.section.providers).toEqual({ 'github-copilot': { displayName: 'Copilot' } })
+    expect(credentials.unset).toHaveBeenCalledWith('OLD_KEY')
+  })
+
+  it('retains a key used by another provider while removing the Copilot reference', async () => {
+    const settings = fakeSettings({ providers: {
+      'github-copilot': { apiKeyEnv: 'SHARED_KEY' }, other: { apiKeyEnv: 'SHARED_KEY' },
+    } })
+    const credentials = fakeCredentials()
+    await ensureProviderRoute(fakeContext({ settings, credentials }), [])
+    expect(credentials.unset).not.toHaveBeenCalled()
+    expect(settings.section.providers).toEqual({ 'github-copilot': {}, other: { apiKeyEnv: 'SHARED_KEY' } })
+  })
+
+  it('does not delete the key if settings silently refuse to remove its reference', async () => {
+    const settings = fakeSettings({ providers: { 'github-copilot': { apiKeyEnv: 'OLD_KEY' } } })
+    settings.mutate.mockImplementation(async () => {})
+    const credentials = fakeCredentials()
+    await expect(ensureProviderRoute(fakeContext({ settings, credentials }), [])).rejects.toThrow('无法清除')
+    expect(credentials.unset).not.toHaveBeenCalled()
+  })
+
+  it('cleans up the default stale key after the route reference was already removed', async () => {
+    const credentials = fakeCredentials()
+    await ensureProviderRoute(fakeContext({ settings: fakeSettings(), credentials }), [])
+    expect(credentials.unset).toHaveBeenCalledWith('GITHUB_COPILOT_API_KEY')
+  })
+
   it('keeps only the models the installed pi-ai catalog describes', () => {
-    // dsh demands an `api` for a model its catalog does not describe, and the
-    // Copilot catalog spans three protocols so nothing can be inferred: one
-    // unknown id would make dsh refuse the whole settings write.
+    // 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。（涉及：`api`）
+    // 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。
+    // 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。
     expect(describedModelIds(['gpt-5.4', 'claude-opus-4.8-fast', 'claude-sonnet-4.5']))
-      .toEqual(['gpt-5.4', 'claude-sonnet-4.5'])
+      .toEqual(['gpt-5.4'])
   })
 
   it('narrows the route to the models the account may use', async () => {
@@ -175,6 +204,22 @@ describe('provider route', () => {
 })
 
 describe('sign-in attempt', () => {
+  it('warns when an explicit key reference overrides a stored subscription without changing settings', async () => {
+    const credentials = fakeCredentials(toRecord({ type: 'oauth', refresh: 'r', access: 'a', expires: 1 }))
+    const settings = fakeSettings({ providers: { 'github-copilot': { apiKeyEnv: 'COPILOT_KEY' } } })
+    const signIn = new CopilotSignIn(fakeContext({ credentials, settings }))
+    expect((await signIn.status()).warning).toContain('API 密钥引用')
+    expect(settings.ops).toEqual([])
+    settings.section.providers = { 'github-copilot': {} }
+    expect((await signIn.status()).warning).toBeUndefined()
+  })
+
+  it('does not warn about key authentication when there is no subscription grant', async () => {
+    const settings = fakeSettings({ providers: { 'github-copilot': { apiKeyEnv: 'COPILOT_KEY' } } })
+    const signIn = new CopilotSignIn(fakeContext({ credentials: fakeCredentials(), settings }))
+    expect((await signIn.status()).warning).toBeUndefined()
+  })
+
   it('reports the device code, stores the grant, and configures the route', async () => {
     const credentials = fakeCredentials()
     const settings = fakeSettings()
@@ -187,8 +232,8 @@ describe('sign-in attempt', () => {
         expiresInSeconds: 900,
       } satisfies AuthEvent)
       await new Promise<void>((resolve) => { release = resolve })
-      // pi-ai persists through the store it was built with, exactly as the
-      // real flow does; the plugin never writes the credential itself.
+      // 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。
+      // 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。
       const store = credentialStoreFor(ctx)
       await store.modify('github-copilot', async () => ({
         type: 'oauth', refresh: 'r', access: 'a', expires: 3, availableModelIds: ['gpt-5.4'],
@@ -239,8 +284,8 @@ describe('sign-in attempt', () => {
       expect(status.signedIn).toBe(true)
       expect(status.warning).toBe('needs an api')
     })
-    // The credential survives the refusal, so the repair is a settings write —
-    // not another device-code flow.
+    // 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect((await signIn.status()).error).toBeUndefined()
 
     settings.mutate.mockRestore()

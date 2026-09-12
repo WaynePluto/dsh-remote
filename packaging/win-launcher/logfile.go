@@ -12,22 +12,22 @@ import (
 const (
 	logFileName = "dsh-remote.log"
 
-	// One backup generation, swapped at 2 MiB, so the pair can never take more
-	// than 4 MiB. Chosen over both "append forever" (a stack left running for
-	// weeks would fill the disk) and a dated file per run (nobody cleans those
-	// up either). Rotation happens on the write that would cross the line, so a
-	// single long run is capped just as tightly as a hundred short ones.
+	// 只保留一代备份，在 2 MiB 时轮换，因此两个文件最多占用
+	// 4 MiB。它优于“无限追加”（stack 连续运行数
+	// 周会填满磁盘）和每次运行生成日期文件（没人会清理这些文件）；
+	// 在即将越过上限的写入时轮换，因此
+	// 一次长时间运行与一百次短运行受到同样严格的限制。
 	logSizeCapBytes = 2 << 20
 
 	logTimeFormat = "2006-01-02 15:04:05"
 )
 
-// rotatingLog is where the children's stdout and stderr end up.
+// rotatingLog 是子进程 stdout 和 stderr 的去处。
 //
-// A -H windowsgui process has nowhere to print: no console is allocated, and
-// the whole point of the tray is that no window is left open. Everything the
-// launcher would have said in a terminal has to survive somewhere the user can
-// open later, which is what 查看日志 hands to the shell.
+// -H windowsgui 进程没有可供打印的控制台：不会分配控制台，
+// 而托盘的目的正是不留下任何窗口。launcher 原本会在终端输出的所有内容
+// 都必须保存在用户之后可以打开的位置，
+// “查看日志”就是把这个位置交给 shell。
 type rotatingLog struct {
 	mu     sync.Mutex
 	path   string
@@ -70,8 +70,8 @@ func (l *rotatingLog) Write(payload []byte) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.file == nil {
-		// A log that could not be reopened must not stop the stack; the child is
-		// still running and its output is simply dropped from here on.
+		// 无法重新打开的日志不能让 stack 停止；子进程仍在运行，
+		// 从这里开始它的输出只会被丢弃。
 		return len(payload), nil
 	}
 	if l.size+int64(len(payload)) > logSizeCapBytes {
@@ -85,21 +85,20 @@ func (l *rotatingLog) Write(payload []byte) (int, error) {
 	return written, err
 }
 
-// rotate must be called with the lock held.
+// rotate 必须在持有锁时调用。
 func (l *rotatingLog) rotate() {
 	l.file.Close()
 	l.file = nil
 	os.Remove(l.backup)
-	// A rename can fail because something (an editor, a virus scanner) holds the
-	// file open. Truncating in place then keeps the cap honest, at the cost of
-	// the older half of the log — better than growing without bound.
+	// 重命名可能失败，因为某个程序（编辑器、病毒扫描器）占用了
+	// 文件。原地截断可以继续遵守上限，但代价是
+	// 丢失日志较早的一半；这总比无限增长好。
 	renamed := os.Rename(l.path, l.backup) == nil
 	l.open(!renamed)
 }
 
-// printf writes one of the tray's own lines. Child output goes through
-// unchanged — the launcher's banner is a box drawing and a prefix would tear it
-// apart — so a timestamp is what tells the two apart in the file.
+// printf 写入托盘自己的日志行。子进程输出会原样通过；
+// launcher 的横幅使用框线字符，添加前缀会破坏它，因此用时间戳在文件中区分两者。
 func (l *rotatingLog) printf(format string, arguments ...any) {
 	line := fmt.Sprintf("%s [tray] %s\n", time.Now().Format(logTimeFormat), fmt.Sprintf(format, arguments...))
 	l.Write([]byte(line))
@@ -115,17 +114,17 @@ func (l *rotatingLog) close() {
 	l.file = nil
 }
 
-// lineWatcher passes the child's bytes straight to the log while also handing
-// complete lines to a callback, which is how the tray notices that the console
-// has no administrator yet without parsing anything twice.
+// lineWatcher 将子进程的字节原样传给日志，同时把
+// 完整行交给回调；托盘借此得知控制台
+// 尚无管理员，而无需重复解析输出。
 type lineWatcher struct {
 	sink   *rotatingLog
 	onLine func(string)
 	buffer []byte
 }
 
-// A line this long is not a line; flush it so a child that never emits a
-// newline cannot grow this buffer without bound.
+// 超过此长度的内容不再视为一行；立即刷新，避免从不输出
+// 换行符的子进程无限增大缓冲区。
 const maxWatchedLineBytes = 64 * 1024
 
 func (w *lineWatcher) Write(payload []byte) (int, error) {
@@ -136,8 +135,8 @@ func (w *lineWatcher) Write(payload []byte) (int, error) {
 	return written, err
 }
 
-// scan is safe without a lock: os/exec gives each of stdout and stderr its own
-// goroutine and its own writer, so only one goroutine ever touches one buffer.
+// scan 无需加锁：os/exec 为 stdout 和 stderr 各自提供
+// goroutine 和 writer，因此每个缓冲区始终只有一个 goroutine 访问。
 func (w *lineWatcher) scan(payload []byte) {
 	w.buffer = append(w.buffer, payload...)
 	for {

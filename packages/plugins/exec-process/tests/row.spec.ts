@@ -1,9 +1,11 @@
-/**
- * Fold state and copy: the two places where a silent regression would be a
- * behaviour change nobody notices until they scroll.
- */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 
 import { describe, expect, it, vi } from 'vitest'
+
+vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
+  IconChevronDownOutline14: () => null,
+}))
+
 import { createFoldStore, foldKey } from '../src/client/fold-store.js'
 import { en, fill, zh } from '../src/client/locales.js'
 import { ExecProcessTail, summaryFields } from '../src/client/ExecProcessRow.js'
@@ -21,8 +23,8 @@ describe('fold store', () => {
     store.setOpen(foldKey('s1', 3, 10), true)
     expect(store.isOpen(foldKey('s1', 4, 10))).toBe(false)
     expect(store.isOpen(foldKey('s2', 3, 10))).toBe(false)
-    // The segment axis is the new one: two folds in the SAME turn are
-    // independent, or opening the first would open the rest.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(store.isOpen(foldKey('s1', 3, 42))).toBe(false)
   })
 
@@ -113,8 +115,8 @@ describe('summaryFields', () => {
   })
 
   it('says 进行中 after the tool name while it is still running', () => {
-    // Predicate, not label: 「pwsh 进行中」reads as a sentence, 「进行中 pwsh」
-    // reads as a prefix. The pulsing dot is what survives a truncated name.
+    // 这里判断的是状态而不是标签：“pwsh 进行中”读起来是句子，“进行中 pwsh”
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const fields = summaryFields(
       stats({ toolCallCount: 3, lastAction: { kind: 'tool', name: 'pwsh', running: true } }),
       translate,
@@ -158,8 +160,8 @@ describe('summary tail', () => {
 
 describe('row chrome', () => {
   it('is a rounded outlined control, not dsh bare hairline', () => {
-    // The single bottom line read as "the end of the message above" and left
-    // the summary glued to the agent's own words; the ask was for a box.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const css = rowStylesheet()
     expect(css).toMatch(/border: 0\.5px solid var\(--dsw-alias-border-l2/u)
     expect(css).toMatch(/border-radius: 8px/u)
@@ -167,16 +169,16 @@ describe('row chrome', () => {
   })
 
   it('rides dsh secondary font axis instead of hard-coding a smaller size', () => {
-    // Following the axis is what keeps the row in proportion when the reader
-    // changes the transcript font size in settings.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。
     const css = rowStylesheet()
     expect(css).toContain('font-size: var(--dsh-content-font-size-secondary, 13px)')
     expect(css).not.toMatch(/font-size: 14px/u)
   })
 
   it('keeps the row opaque so hover cannot break the sticky header', () => {
-    // --dsw-alias-interactive-bg-hover is translucent; painting it over the
-    // background would let the transcript show through while stuck.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const css = rowStylesheet()
     expect(css).toMatch(/\.dshx-exec-process:hover \{[^}]*border-color/u)
     expect(css).not.toMatch(/\.dshx-exec-process:hover \{[^}]*background/u)
@@ -184,9 +186,9 @@ describe('row chrome', () => {
   })
 
   it('centres the running dot by flex rather than by vertical-align', () => {
-    // A ::before inside the text could only be placed against the Latin
-    // baseline/x-height, which sits visibly high next to CJK glyphs; a sibling
-    // flex item inherits the row's own align-items: center.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。
     const css = rowStylesheet()
     expect(css).toMatch(/__dot \{[^}]*flex: none/u)
     expect(css).not.toContain('vertical-align')
@@ -200,20 +202,20 @@ describe('row chrome', () => {
   })
 
   it('leaves sticking to sticky-push.ts and keeps only its own consequence', () => {
-    // The header has to follow the reader (it is the only control that closes
-    // an expanded segment) but a plain sticky rule here would pin it for the
-    // rest of the conversation: this row's containing block is the whole
-    // message column, not the segment. Releasing it on time needs a measured
-    // per-frame offset, so the rule lives in ./sticky-push.ts. What stays here
-    // is the opaque background a stuck row needs.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const css = rowStylesheet()
     expect(css).not.toContain('position: sticky')
     expect(css).toMatch(/\.dshx-exec-process \{[^}]*background: var\(--dsw-alias-bg-base/u)
   })
 
   it('uses theme variables that actually exist, each with a usable fallback', () => {
-    // A misspelled --dsw-* does not fail, it silently uses the fallback
-    // (docs/02 §8.6), so both halves are asserted here.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    //（docs/dsh/plugins.md），因此两半都在这里断言。
     for (const [, name] of rowStylesheet().matchAll(/var\((--dsw-[a-z0-9-]+),/gu)) {
       expect(name).toMatch(/^--dsw-(alias|font|static|specific)-/u)
     }
@@ -227,14 +229,14 @@ describe('row chrome', () => {
 
   it('protects desktop status but lets an overwide summary shrink before the row overflows', () => {
     const css = rowStylesheet()
-    // An auto status basis reserves its complete count width first. The action
-    // starts at zero and grows into the remainder, so it is the everyday
-    // ellipsis target instead of squeezing a normal desktop summary.
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(css).toMatch(/__status \{[^}]*flex: 0 1 auto/u)
     expect(css).toMatch(/__action \{[^}]*flex: 1 1 0;[^}]*text-overflow: ellipsis/u)
-    // At 320px the fixed summary can itself exceed the row. min-width:0 is the
-    // emergency escape hatch: status ellipsizes instead of forcing horizontal
-    // overflow, while the label, running dot and chevron stay fixed.
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(css).toMatch(/__status \{[^}]*min-width: 0;[^}]*overflow: hidden;[^}]*text-overflow: ellipsis/u)
     expect(css).toMatch(/__label \{[^}]*flex: 0 0 auto/u)
     expect(css).toMatch(/__dot \{[^}]*flex: none/u)

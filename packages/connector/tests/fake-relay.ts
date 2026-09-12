@@ -21,18 +21,18 @@ import {
 } from '@dsh-remote/protocol'
 
 /**
- * A stand-in relay for connector tests: it speaks the real control protocol and
- * really verifies Ed25519 signatures, but keeps the connector suite independent
- * of the relay package's own device store and browser authentication.
+ * Connector 测试使用的 relay 替身：它使用真实控制协议，并
+ * 真正验证 Ed25519 签名，但让 connector 测试套件独立于
+ * relay 包自己的设备存储和浏览器认证。
  */
 export interface FakeRelayOptions {
-  /** Reuse a port so a test can restart "the same" relay. */
+  /** 复用端口，使测试可以重启“同一个” relay。 */
   readonly port?: number
-  /** Device public keys (base64url) the relay already knows. */
+  /** relay 已知的设备公钥（base64url）。 */
   readonly knownDevices?: Iterable<string>
-  /** Device public keys the relay answers with DEVICE_REVOKED. */
+  /** relay 会以 DEVICE_REVOKED 回答的设备公钥。 */
   readonly revokedDevices?: Iterable<string>
-  /** Accepted `ed25519-enroll` token; enrollment is refused when unset. */
+  /** 接受的 `ed25519-enroll` token；未设置时拒绝注册。 */
   readonly enrollToken?: string
   readonly streamConnectTimeoutMs?: number
 }
@@ -44,11 +44,11 @@ export interface RecordedError {
 
 export interface FakeRelay {
   readonly port: number
-  /** Error frames the connector reported, newest last. */
+  /** Connector 报告的错误帧，最新的在最后。 */
   readonly connectorErrors: readonly RecordedError[]
   readonly knownDevices: ReadonlySet<string>
   isOnline(slug: string): boolean
-  /** The dsh web token this machine reported over `dsh-auth`, if any. */
+  /** 这台机器通过 `dsh-auth` 报告的 dsh web token（如果有）。 */
   dshTokenOf(slug: string): string | undefined
   close(): Promise<void>
 }
@@ -273,7 +273,7 @@ export async function startFakeRelay(options: FakeRelayOptions = {}): Promise<Fa
       return
     }
 
-    // Mode A: the browser's Host and Origin reach dsh untouched.
+    // Mode A：浏览器的 Host 和 Origin 原样到达 dsh。
     const headers = { ...req.headers, connection: 'close' }
     delete headers.upgrade
     const upstream = http.request({

@@ -1,59 +1,26 @@
 /**
- * Which「执行过程」folds the reader has opened.
- *
- * Default collapsed, deliberately: the whole point of the row is that a turn
- * with sixty tool calls reads as one line until someone asks for more. The
- * state is per session and per turn, lives only in memory, and is not persisted
- * — reopening the page starts collapsed again, which is the same contract dsh's
- * own disclosure has (`createChatStore` starts with an empty `turnProcesses`
- * list, `packages/client/ui-chat/src/client/stores.ts:34`).
- *
- * A module-level store rather than React state because the rows unmount and
- * remount as the transcript window pages, and a fold that reopened itself on
- * every scroll would be worse than no fold at all.
- *
- * @module @dsh-remote/dsh-plugin-exec-process/client/fold-store
+ * 已展开的「执行过程」fold 状态。默认收起且只存在内存中，按 session、turn 和 segment 保存；页面重新打开后恢复收起，符合 dsh disclosure 的约定。
+ * 使用模块级 store 而非 React state，因为转录分页会卸载和重新挂载行。
  */
 
-/**
- * Build the store key for one segment of one turn.
- *
- * The anchor is part of the key because a turn holds one fold per formal
- * message it interrupted itself with, and opening one must not open the rest.
- * @param sessionId - owning session.
- * @param turn - owning turn.
- * @param anchorSeq - the segment header's own anchor.
- * @returns a collision-free store key.
- */
+/** 以 session、turn 和表头 anchor 组成内存 fold key。 */
 export function foldKey(sessionId: string, turn: number, anchorSeq: number): string {
   return `${sessionId}\u0000${String(turn)}\u0000${String(anchorSeq)}`
 }
 
-/** Subscribable set of opened folds. */
+/** 可订阅的已展开 fold 集合。 */
 export interface FoldStore {
-  /**
-   * @param key - fold key from {@link foldKey}.
-   * @returns whether that fold is currently expanded.
-   */
+  /** 判断指定 key 的 fold 是否展开。 */
   isOpen(key: string): boolean
-  /**
-   * @param key - fold key from {@link foldKey}.
-   * @param open - the requested state.
-   */
+  /** 设置指定 key 的展开状态；状态变化时通知订阅者。 */
   setOpen(key: string, open: boolean): void
-  /**
-   * @param listener - called after any fold changes.
-   * @returns the unsubscribe function.
-   */
+  /** 订阅 fold 状态变化，并返回取消订阅函数。 */
   subscribe(listener: () => void): () => void
-  /** Forget every fold; used when the plugin is unloaded. */
+  /** 收起全部 fold 并通知订阅者。 */
   reset(): void
 }
 
-/**
- * Create an in-memory fold store.
- * @returns a fresh store instance.
- */
+/** 创建只存在于当前页面内存中的 fold store。 */
 export function createFoldStore(): FoldStore {
   const open = new Set<string>()
   const listeners = new Set<() => void>()

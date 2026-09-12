@@ -1,9 +1,7 @@
 /**
- * The hub console prints a ready-to-run connector command with the relay URL,
- * the machine name, the enrollment token and the authority to trust already in
- * it. Pasting that single line is the only way to set a remote entry: every
- * value in it comes from the entry machine, so there is nothing left to type by
- * hand and nothing to transcribe wrong.
+ * hub 控制台会打印一条可直接运行的 connector 命令，其中已经包含 relay URL、机器名、
+ * 注册令牌以及要信任的 authority。粘贴这一行是设置远程入口的唯一方式：其中每个值都来自
+ * 入口机器，因此无需手动输入任何内容，也不会抄错内容。
  */
 
 export interface ParsedConnectorCommand {
@@ -13,7 +11,7 @@ export interface ParsedConnectorCommand {
   readonly browserAuthority?: string
 }
 
-/** Shell-ish tokenizer: quotes are honoured, everything else splits on spaces. */
+/** 类 shell 分词器：引号会生效，其余内容按空格拆分。 */
 function tokenize(input: string): string[] {
   const tokens: string[] = []
   let current = ''
@@ -40,7 +38,7 @@ function tokenize(input: string): string[] {
     started = true
   }
   if (started) tokens.push(current)
-  // Line continuations survive a copy-paste from a wrapped terminal.
+  // 从自动换行的终端复制粘贴时，续行符仍会保留。
   return tokens.filter(token => token !== '\\' && token !== '`')
 }
 
@@ -52,14 +50,13 @@ const FLAGS = {
 } as const satisfies Record<string, keyof ParsedConnectorCommand>
 
 /**
- * Pull the join parameters out of a pasted `dsh-remote-connector …` command line.
+ * 从粘贴的 `dsh-remote-connector …` 命令行中提取加入参数。
  *
- * Only the four flags that describe a hub membership are read; the program name
- * and every other flag are ignored, so a command carrying extra local options
- * (`--dsh-port`, `--device-key`, …) still works. Nothing is validated here: the
- * caller runs the same checks it would run on any untrusted input.
- * @param input - the pasted text; may be empty.
- * @returns Whatever the four flags carried, each present only when it had a value.
+ * 只读取描述 hub membership 的四个 flag；程序名和其他 flag 都会忽略，因此带有额外本地选项
+ * （`--dsh-port`、`--device-key` 等）的命令仍能工作。这里不做校验：调用方会对所有不可信输入
+ * 执行相同检查。
+ * @param input - 粘贴的文本；可以为空。
+ * @returns 四个 flag 携带的值；只有有值时才会存在对应字段。
  */
 export function parseConnectorCommand(input: string): ParsedConnectorCommand {
   const tokens = tokenize(input)
@@ -74,8 +71,8 @@ export function parseConnectorCommand(input: string): ParsedConnectorCommand {
       continue
     }
     const value = tokens[index + 1]
-    // A flag followed by another flag carries no value; treat it as absent
-    // rather than swallowing the next flag as this one's argument.
+    // 一个 flag 后面紧跟另一个 flag，说明它没有值；应视为缺失，
+    // 而不是把下一个 flag 吞作当前 flag 的参数。
     if (value === undefined || value.startsWith('--')) continue
     found[key] = value
   }

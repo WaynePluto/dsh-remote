@@ -1,0 +1,4 @@
+# dsh-remote files 增强插件：复用原生文件树/文档预览，增加 Git 状态和右键菜单。
+- insert:
+    - id: files
+      name: './dist/index.js'

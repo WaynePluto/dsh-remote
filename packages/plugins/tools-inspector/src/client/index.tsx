@@ -1,13 +1,8 @@
 /**
- * tools-inspector 浏览器半：往 `conversation.view` 这个 list 槽注册一个「工具」tab。
- *
- * `conversation.view` 就是会话头部那条视图切换栏的来源：`ui-conversation` 把每个槽条目
- * 投影成一个 tab（dsh `client/ui-conversation/src/client/apply.ts:121-132`，
- * 契约在同包 `contract/slots.ts:117`）。dsh 自己的 `ui-trajectory` 也是这么加的第二个 tab，
- * 本文件的注册式照抄它（`ui-trajectory/src/client/index.ts:77-106`）——**不用碰 dsh 源码**。
- *
- * ⚠️ `label` 必须传 **thunk** 而不是字符串：thunk 每次读都会走当前语言，
- * 字符串则会把注册时的语言钉死，切换语言后 tab 文字不跟着变。
+ * tools-inspector 浏览器半：向 `conversation.view` 的 list 槽注册「工具」tab。
+ * dsh 的 `ui-conversation` 把槽条目投影成 tab；实现参照
+ * `client/ui-conversation/src/client/apply.ts:121-132`、`contract/slots.ts:117`，不改 dsh 源码。
+ * `label` 必须是 thunk，切换语言后 tab 文案才会更新。
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -71,7 +66,7 @@ export function apply(ctx: Context): void {
    * 调用本插件私有通道。
    *
    * ⚠️ 端点是**路径段**：这里实际 POST 到 `/tools-inspector/snapshot`，
-   * 只打 `/tools-inspector` 一律 404（docs/02 §10.8）。
+   * 只打 `/tools-inspector` 一律 404（docs/dsh/transport.md）。
    * @param sessionId - 当前会话。
    * @returns 宿主合成的快照。
    */

@@ -1,5 +1,5 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import pino, { type Logger } from 'pino'
@@ -18,14 +18,18 @@ const BROWSER_AUTHORITY = '10.1.2.87:30810'
 const relays: FakeRelay[] = []
 const connectors: Connector[] = []
 const homes: string[] = []
+/** Windows fs.watch 以文本比较监视路径和事件路径；os.tmpdir() 可能是 8.3 短路径。 */
+const TEST_TEMP_DIR = process.platform === 'win32'
+  ? join(homedir(), 'AppData', 'Local', 'Temp')
+  : tmpdir()
 
 function newHome(): string {
-  const home = mkdtempSync(join(tmpdir(), 'dsh-remote-join-'))
+  const home = mkdtempSync(join(TEST_TEMP_DIR, 'dsh-remote-join-'))
   homes.push(home)
   return home
 }
 
-/** The connector defaults its device key to `<home>/device.key`. */
+/** Connector 默认将设备密钥放在 `<home>/device.key`。 */
 function registerDevice(home: string): string {
   return loadOrCreateDeviceKey({ path: join(home, 'device.key') }).publicKey
 }
@@ -40,7 +44,7 @@ function hubOf(relay: FakeRelay, overrides: Partial<MembershipHub> = {}): Member
   return { relayUrl: `ws://127.0.0.1:${String(relay.port)}`, slug: SLUG, joinedAt: Date.now(), ...overrides }
 }
 
-/** Write membership the way the hub admin console does. */
+/** 按 hub 管理控制台的方式写入 membership。 */
 function writeJoin(home: string, hub: MembershipHub | undefined): void {
   writeFileSync(
     membershipFilePath(home),
@@ -48,7 +52,7 @@ function writeJoin(home: string, hub: MembershipHub | undefined): void {
   )
 }
 
-/** Log lines, so tests can count real reconnects instead of guessing from state. */
+/** 记录日志行，让测试能统计真实重连，而不是从状态猜测。 */
 function recordingLogger(): { logger: Logger; lines: string[] } {
   const lines: string[] = []
   const logger = pino({ level: 'debug' }, { write: (line: string) => void lines.push(line) })
@@ -63,8 +67,7 @@ interface Started {
   connector: Connector
   lines: string[]
   finished: Promise<'ok' | 'failed'>
-  /** False while 
-un() is still going, which is how idling is asserted. */
+  /** `un()` 仍在运行时为 false，测试据此断言空闲。 */
   isSettled: () => boolean
 }
 
@@ -87,7 +90,7 @@ async function waitFor(check: () => boolean, timeoutMs: number, what: string): P
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     if (check()) return
-    // eslint-disable-next-line no-await-in-loop -- the poll interval must pause the loop
+    // eslint-disable-next-line no-await-in-loop -- 轮询间隔必须暂停循环
     await delay(50)
   }
   throw new Error(`${what} did not happen within ${String(timeoutMs)}ms`)
@@ -108,7 +111,7 @@ describe('connector membership', () => {
     expect(isSettled()).toBe(false)
     expect(connector.online).toBe(false)
     expect(connector.hub).toBeUndefined()
-    // Exactly one notice: an idle connector waits on the watcher, it does not spin.
+    // 恰好一条提示：空闲 connector 等待 watcher，不会空转。
     expect(count(lines, 'idling until membership appears')).toBe(1)
 
     await connector.stop()
@@ -128,7 +131,7 @@ describe('connector membership', () => {
     expect(connector.online).toBe(true)
     expect(connector.hub?.relayUrl).toBe(`ws://127.0.0.1:${String(relay.port)}`)
     expect(relay.isOnline(SLUG)).toBe(true)
-    // Mode A forwards the browser Host, so dsh has to trust this authority.
+    // Mode A 转发浏览器 Host，因此 dsh 必须信任此 authority。
     expect(connector.browserAuthority).toBe(BROWSER_AUTHORITY)
   }, 20_000)
 
@@ -160,7 +163,7 @@ describe('connector membership', () => {
     await waitFor(() => !relay.isOnline(SLUG), 15_000, 'the hub losing the machine')
     await waitFor(() => connector.hub === undefined, 15_000, 'the connector going idle')
     expect(connector.online).toBe(false)
-    // Idle, not retrying: no backoff warning may follow the deliberate exit.
+    // 空闲而不是重试：主动退出后不应出现退避警告。
     await delay(500)
     expect(count(lines, 'reconnecting after backoff')).toBe(0)
   }, 30_000)
@@ -201,7 +204,7 @@ describe('connector membership', () => {
       version: 1,
       hub: { relayUrl: hub.relayUrl, slug: SLUG, browserAuthority: BROWSER_AUTHORITY, joinedAt: hub.joinedAt },
     })
-    // Rewriting the file must not look like a hub change.
+    // 重写文件不能被视为 hub 变更。
     await delay(500)
     expect(count(lines, 'control channel authenticated')).toBe(1)
     expect(connector.online).toBe(true)
@@ -229,7 +232,7 @@ describe('connector membership', () => {
 
     writeFileSync(membershipFilePath(home), '{ truncated by a crashing writer')
     await waitFor(() => count(lines, 'keeping the last known membership') > 0, 15_000, 'the unusable file being reported')
-    // Loud, but still joined: dropping off the hub over a bad file is worse.
+    // 明确报告错误但仍保持加入：因为坏文件脱离 hub 更糟。
     expect(connector.online).toBe(true)
     expect(relay.isOnline(SLUG)).toBe(true)
   }, 20_000)
@@ -248,7 +251,7 @@ describe('connector membership', () => {
     await delay(500)
     expect(joined.isOnline(SLUG)).toBe(false)
     expect(connector.browserAuthority).toBeUndefined()
-    // The file is not consulted at all, so its unspent token is left untouched.
+    // 完全不会读取该文件，因此其中未使用的 token 保持不变。
     expect(readMembershipFile(membershipFilePath(home))?.hub).toEqual(hub)
   }, 20_000)
 
@@ -262,7 +265,7 @@ describe('connector membership', () => {
     })
     await connector.ready()
 
-    // The one line the hub console prints has to work verbatim in a terminal too.
+    // hub 控制台打印的这一行也必须能在终端中原样工作。
     expect(connector.browserAuthority).toBe(BROWSER_AUTHORITY)
   }, 20_000)
 })

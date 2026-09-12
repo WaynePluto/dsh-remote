@@ -11,21 +11,14 @@ import { formatUptime, isValidName, tailText } from '../src/shared.js'
 
 const roots: string[] = []
 
-/**
- * Create a throwaway project directory.
- * @returns its absolute path.
- */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 function project(): string {
   const root = mkdtempSync(join(tmpdir(), 'dsh-services-'))
   roots.push(root)
   return root
 }
 
-/**
- * Build a service row with sane defaults.
- * @param over - fields to override.
- * @returns the row.
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 function record(over: Partial<ServiceRecord> = {}): ServiceRecord {
   return {
     name: 'web',
@@ -63,7 +56,7 @@ describe('registry I/O', () => {
     const root = project()
     writeRegistry(root, [record()])
     expect(readRegistry(root).services).toEqual([record()])
-    // The temp file is renamed, not left next to the target.
+    // 临时文件会 rename，不会留在目标旁边。
     expect(listLogNames(root)).toEqual([])
     expect(readFileSync(registryPath(root), 'utf8')).toContain('"version": 1')
   })
@@ -177,8 +170,8 @@ describe('shell selection', () => {
     const invocation = shellInvocation('pnpm dev')
     expect(invocation.file).toBe(process.execPath)
     expect(invocation.args[0]).toBe('-e')
-    // The launcher plan is JSON, so a variable-length argv with quotes in it
-    // survives Windows command-line quoting intact.
+    // launcher plan 是 JSON，因此包含引号的可变长度 argv
+    // 可以完整通过 Windows 命令行 quoting。
     const plan = JSON.parse(invocation.args[3] as string) as { f: string; a: string[]; s: boolean }
     expect(plan.a.at(-1)).toContain('pnpm dev')
   })
@@ -187,10 +180,10 @@ describe('shell selection', () => {
     if (process.platform !== 'win32') return
     const invocation = shellInvocation('pnpm dev')
     const plan = JSON.parse(invocation.args[3] as string) as { f: string; a: string[]; s: boolean }
-    // The exact flags dsh's own pwsh executor uses.
+    // dsh 自己 pwsh executor 使用的精确 flags。
     expect(plan.s).toBe(false)
     expect(plan.a.slice(0, 4)).toEqual(['-NoLogo', '-NoProfile', '-NonInteractive', '-Command'])
-    // …and the UTF-8 pin, so a 5.1 fallback does not emit mojibake.
+    // ……以及 UTF-8 固定，避免 5.1 fallback 输出乱码。
     expect(plan.a[4]).toContain('OutputEncoding')
   })
 
@@ -208,8 +201,8 @@ describe('shell selection', () => {
 
   it('marks the Windows path as launcher-mediated, so the caller reads the real pid back', () => {
     if (process.platform !== 'win32') return
-    // `child.pid` there is the launcher, which exits within milliseconds; using
-    // it would make every later identify() report `gone`.
+    // 这里的 `child.pid` 是 launcher，几毫秒就退出；使用它
+    // 会让之后每次 identify() 都报告 `gone`。
     expect(shellInvocation('pnpm dev').viaLauncher).toBe(true)
   })
 
@@ -217,12 +210,12 @@ describe('shell selection', () => {
     if (process.platform !== 'win32') return
     const invocation = shellInvocation('pnpm dev')
     const [stage1, stage2] = [invocation.args[1] as string, invocation.args[2] as string]
-    // Stage 1 is the whole `taskkill /T` fix: start stage 2 detached, then go
-    // away so dsh is no longer a live ancestor.
+    // Stage 1 是完整的 `taskkill /T` 修复：detached 启动 stage 2，然后
+    // 退出，使 dsh 不再是活跃祖先。
     expect(stage1).toContain('detached:true')
     expect(stage1).toContain('process.exit(0)')
-    // Stage 2 must NOT detach the shell — pwsh without a console exits silently
-    // — and must report its own pid and outlive nothing.
+    // Stage 2 绝不能 detach shell——没有 console 的 pwsh 会静默退出
+    // ——并且必须报告自身 pid，不能让 shell 与它一起失去宿主。
     expect(stage2).toContain('writeFileSync')
     expect(stage2).toContain('String(process.pid)')
     expect(stage2).not.toContain('detached:true')

@@ -85,8 +85,8 @@ describe('relay arguments', () => {
   })
 
   it('never binds a non-loopback address without the authenticated LAN flag', () => {
-    // 铁律 11: dropping --lan-http here would make the relay either refuse to
-    // start or serve the LAN without authentication.
+    // 铁律 11：删掉这里的 --lan-http 会让 relay 拒绝
+    // 启动，或在没有认证的情况下服务局域网。
     expect(relayArguments({ path: 'relay.js', needsTsx: false }, options)).toContain('--lan-http')
   })
 })

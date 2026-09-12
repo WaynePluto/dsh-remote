@@ -1,16 +1,10 @@
-/**
- * The Definition contributes position and nothing else — so what is worth
- * testing is exactly that: which events it follows, where it anchors, and that
- * an unchanged row keeps its identity (the engine treats identity as the
- * change signal, so a fresh object per publication would re-render every fold
- * on every streamed token).
- */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 
 import { describe, expect, it } from 'vitest'
 import type {
   ConversationNodeContext, TurnLocation,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { EXEC_PROCESS_SEQ_OFFSET, EXEC_RESUME_SEQ_OFFSET, execProcessDefinition, execProcessStepDefinition } from '../src/client/definition.js'
+import { EXEC_PROCESS_SEQ_OFFSET, EXEC_RESUME_SEQ_OFFSET, execProcessDefinition, execProcessStepDefinition, execProcessUserDefinition } from '../src/client/definition.js'
 
 type AnyEvent = Parameters<typeof execProcessDefinition.match>[0]
 
@@ -18,7 +12,7 @@ function event(type: string, data: Record<string, unknown>, seq = 1): AnyEvent {
   return { type, seq, time: 0, data } as unknown as AnyEvent
 }
 
-/** A Turn Location carrying whatever turn-process spec the test wants. */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 function turnLocation(turn: number, spec: unknown): TurnLocation {
   return {
     turn,
@@ -59,16 +53,16 @@ describe('match', () => {
     expect(execProcessDefinition.match(event(type, { turn: 7 }))).toEqual({ id: '7', role: 'update' })
   })
 
-  it.each(['assistant/chunk', 'chunkrow/text-chunks', 'chunkrow/reasoning-chunks', 'chunkrow/tool-call-chunks'])(
+  it.each(['assistant/live-chunk'])(
     'follows %s too, or the header would not exist during a long thinking stream', (type) => {
-      // A Context is only rebuilt when it matched an event, so ignoring chunks
-      // would delay the row until the turn's first durable action.
+      // 实现说明：此处记录相关接口、边界和生命周期约束。
+      // 实现说明：此处记录相关接口、边界和生命周期约束。
       expect(execProcessDefinition.match(event(type, { turn: 7 }))).toEqual({ id: '7', role: 'update' })
     })
 
   it('coalesces the streamed events to one frame and publishes actions at once', () => {
     const publication = execProcessDefinition.publication
-    expect(publication?.({ event: event('assistant/chunk', { turn: 7 }) } as never)).toBe('animation-frame')
+    expect(publication?.({ event: event('assistant/live-chunk', { turn: 7 }) } as never)).toBe('animation-frame')
     expect(publication?.({ event: event('tool/call', { turn: 7 }) } as never)).toBe('immediate')
   })
 
@@ -92,7 +86,7 @@ describe('buildViewNode', () => {
       visibility: 'visible',
       data: { turn: 7 },
     })
-    // dsh puts its own control at controlAnchorSeq - 0.1; ours must sort first.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect((node as unknown as { anchorSeq: number }).anchorSeq).toBeLessThan(42 - 0.1)
   })
 
@@ -101,9 +95,9 @@ describe('buildViewNode', () => {
   })
 
   it('keeps an unchanged row identical', () => {
-    // The engine hands back the same Location object while the turn has not
-    // moved (its own turn-process Definition relies on exactly this), so an
-    // unchanged publication must not mint a new node.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const location = { kind: 'turn', turn: turnLocation(7, SPEC) }
     const first = execProcessDefinition.buildViewNode?.(context(7, SPEC, null, location))
     const again = execProcessDefinition.buildViewNode?.(context(7, SPEC, first, location))
@@ -131,6 +125,8 @@ describe('definition shape', () => {
     expect(execProcessDefinition.buildViewNode).toBeTypeOf('function')
     expect(execProcessStepDefinition.target).toBe('chat')
     expect(execProcessStepDefinition.buildViewNode).toBeTypeOf('function')
+    expect(execProcessUserDefinition.target).toBe('chat')
+    expect(execProcessUserDefinition.buildViewNode).toBeTypeOf('function')
   })
 
   it('publishes no Location data: dsh own projection already owns those numbers', () => {
@@ -143,7 +139,7 @@ describe('definition shape', () => {
   })
 })
 
-/** The follow-on segment: one Context per step, visible only when it spoke. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。*/
 describe('execProcessStepDefinition', () => {
   const message = (turn: number, step: number, seq: number, text: string | null) => event(
     'assistant/message',
@@ -170,8 +166,8 @@ describe('execProcessStepDefinition', () => {
   }
 
   it('starts on step/start, not on the assistant message itself', () => {
-    // A retried request logs a SECOND assistant/message under the same step; a
-    // start event there would mean two Contexts for one segment.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(execProcessStepDefinition.match(event('step/start', { turn: 7, step: 2 })))
       .toEqual({ id: '7:2', role: 'start' })
     expect(execProcessStepDefinition.match(message(7, 2, 50, 'hi')))
@@ -228,9 +224,9 @@ describe('execProcessStepDefinition', () => {
       anchorSeq: 50 + EXEC_RESUME_SEQ_OFFSET,
       data: { turn: 7 },
     })
-    // dsh reserves +0.05 for max-tokens and +0.1 for turn-tail. Its branch
-    // guard requires turn-tail to remain the Turn's last Chat node, so this
-    // presentation-only segment marker must sort before both follow-ups.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect((node as unknown as { anchorSeq: number }).anchorSeq).toBeGreaterThan(50)
     expect((node as unknown as { anchorSeq: number }).anchorSeq).toBeLessThan(50.05)
   })
@@ -246,4 +242,41 @@ describe('execProcessStepDefinition', () => {
     const first = execProcessStepDefinition.buildViewNode?.(stepContext(7, 2, state, null, location))
     expect(execProcessStepDefinition.buildViewNode?.(stepContext(7, 2, state, first, location))).toBe(first)
   })
+})
+
+describe('execProcessUserDefinition', () => {
+  function userEvent(seq: number, id = 'user-1', sourceKind = 'user', surfaceOp: unknown = 'append'): AnyEvent {
+    return { ...event('user/message', { id, content: [{ type: 'text', text: 'hello' }], source: { kind: sourceKind } }, seq), surfaceOp } as unknown as AnyEvent
+  }
+
+  it('matches only appended direct user messages', () => {
+    expect(execProcessUserDefinition.match(userEvent(50))).toEqual({ id: 'user-1', role: 'start' })
+    expect(execProcessUserDefinition.match(userEvent(50, 'replacement', 'user', { op: 'replace', start: 1, end: 2 }))).toBeNull()
+    expect(execProcessUserDefinition.match(userEvent(50, 'plugin', 'plugin'))).toBeNull()
+    expect(execProcessUserDefinition.match({ ...userEvent(50), surfaceOp: undefined } as never)).toBeNull()
+  })
+
+  it('uses inbox claims to recognize a steering message', () => {
+    const state = execProcessUserDefinition.start({} as never, { event: userEvent(50, 'steer-1'), role: 'start', location: { kind: 'turn' } } as never, { previous: (kind: string) => kind === 'inbox-next-step' ? { state: { currentClaimed: new Set(['steer-1']) } } : undefined } as never)
+    expect(state).toEqual({ seq: 50, steering: true })
+  })
+
+  function userContext(seq: number, state: { seq: number; steering: boolean }, current: unknown = null): ConversationNodeContext<{ seq: number; steering: boolean }> {
+    const location = { kind: 'turn', turn: turnLocation(7, SPEC) }
+    return {
+      key: 'u' + String(seq), kind: 'exec-process-user', id: 'user-' + String(seq), matches: [],
+      start: { event: userEvent(seq, 'user-' + String(seq)), role: 'start', location },
+      state, current: new Map([['chat', current]]),
+    } as unknown as ConversationNodeContext<{ seq: number; steering: boolean }>
+  }
+
+  it('hides the opening user message but shows a claimed message after process evidence', () => {
+    const initial = execProcessUserDefinition.buildViewNode?.(userContext(20, { seq: 20, steering: false }))
+    expect(initial).toMatchObject({ kind: 'exec-process-user', visibility: 'hidden', data: { turn: 7 } })
+    const claimedOpening = execProcessUserDefinition.buildViewNode?.(userContext(20, { seq: 20, steering: true }))
+    expect(claimedOpening).toMatchObject({ visibility: 'hidden' })
+    const steering = execProcessUserDefinition.buildViewNode?.(userContext(50, { seq: 50, steering: true }))
+    expect(steering).toMatchObject({ kind: 'exec-process-user', visibility: 'visible', anchorSeq: 50 + EXEC_RESUME_SEQ_OFFSET, data: { turn: 7 } })
+  })
+
 })

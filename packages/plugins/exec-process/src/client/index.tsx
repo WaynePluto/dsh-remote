@@ -1,74 +1,22 @@
 /**
- * Browser half: one collapsed「执行过程」row per completed turn.
- *
- * ── WHY THIS PLUGIN EXISTS ──────────────────────────────────────────────────
- *
- * dsh already has the idea. `ui-chat` projects a `turn-process` node for every
- * turn and folds everything before the finalized answer behind one thin line.
- * Two facts, both verified in dsh 0.1.2-alpha.4 source, make that invisible in
- * any real working session:
- *
- *   1. `ChatNodeSeat` gates the whole fold on `!historyIncomplete`
- *      (`packages/client/ui-chat/src/client/chat/ChatNodeSeat.tsx:62-68`).
- *   2. The transcript window opens with `maxMessages: PAGE_MESSAGES = 50`
- *      (`packages/api/session-controller/src/client/sessions/session.ts:47,601`),
- *      and `hasMore` stays true until the reader has paged all the way back.
- *
- * So past roughly fifty surface messages — a couple of hours of agent work —
- * dsh switches the fold off for the ENTIRE view. Every thinking row and every
- * tool row stays expanded, and no setting brings the fold back.
- *
- * ── HOW IT IS BUILT, AND WHAT IT REFUSES TO DO ──────────────────────────────
- *
- * Three registrations, and each one is the smallest seam that does its job:
- *
- *   A. A Conversation Node Definition (`./definition.ts`) contributing one row
- *      per turn. It computes nothing: dsh's own turn-process projection already
- *      publishes the process window and the answer boundary as Turn Location
- *      data, and that publication is NOT gated by `historyIncomplete` — only
- *      its presentation is. So this plugin reads dsh's own numbers and supplies
- *      position only.
- *
- *   B. The keyed renderer for that row (`./ExecProcessRow.tsx`), wearing dsh's
- *      own thin-line chrome. Not a box: the ask was explicitly for dsh's line.
- *
- *   C. A SHADOW of dsh's own `turn-process` renderer at `priority: -1`. Keyed
- *      slots in alpha.4 support cell shadowing — entries at distinct priorities
- *      coexist and the lowest renders (`packages/client/ui-slots/src/index.ts:749-755`)
- *      — so this is a supported override, not a hack, and it is independent of
- *      load order. It does two things: it stops dsh drawing a second control
- *      next to ours in the short sessions where dsh's fold does work, and it
- *      forces dsh's own disclosure open so dsh never hides rows behind a
- *      control that is no longer on screen. From then on exactly one mechanism
- *      folds this transcript: ours.
- *
- * The fold itself is a stylesheet keyed by `data-chat-flow-key`
- * (`./hidden-rows.ts`), never a DOM write into dsh's tree. The one piece of DOM
- * coupling — that attribute name — degrades honestly: if a dsh upgrade renames
- * it, the row still renders and simply stops hiding anything. Re-check it when
- * dsh moves.
- *
- * Nothing here imports another plugin's runtime. Collaboration goes through
- * cordis services (`ctx.slots`, `ctx.locale`, `ctx.uiConversation`), which is
- * both dsh's rule and what keeps this bundle loadable from the page's frozen
- * module table.
+ * 浏览器半：每个非空 turn segment 一个折叠的「执行过程」行。
+ * dsh 的 `turn-process` fold 在长会话因 `historyIncomplete` 不可用；本插件读取 dsh projection 的过程窗口，注册独立 node 和 shadow，并用 `data-chat-flow-key` stylesheet 折叠行，不写 dsh DOM。
+ * 与其他插件的协作只通过 `ctx.slots`、`ctx.locale` 和 `ctx.uiConversation` 等 Cordis service，保持浏览器 bundle 可从冻结 module table 加载。
  *
  * @module @dsh-remote/dsh-plugin-exec-process/client
  */
 
 import { useEffect } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
-// Type-only: each pulls in the Context or SlotMap merge naming something this
-// plugin uses. Value imports across plugins are forbidden (and unresolvable
-// from the page's frozen module table); services are the seam.
+// 仅类型：引入本插件使用的 Context/SlotMap merge。插件之间禁止 value import（页面冻结的 module table 无法解析），service 是协作接缝。
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { EXEC_PROCESS_KIND, EXEC_PROCESS_STEP_KIND, SELF_NAMESPACE } from '../shared.js'
-import { execProcessDefinition, execProcessStepDefinition } from './definition.js'
+import { EXEC_PROCESS_KIND, EXEC_PROCESS_STEP_KIND, EXEC_PROCESS_USER_KIND, SELF_NAMESPACE } from '../shared.js'
+import { execProcessDefinition, execProcessStepDefinition, execProcessUserDefinition } from './definition.js'
 import { ExecProcessRow } from './ExecProcessRow.js'
 import { createFoldStore, type FoldStore } from './fold-store.js'
 import { createCollapsedRowsController, type CollapsedRowsController } from './hidden-rows.js'
@@ -83,53 +31,42 @@ export { collapsedRowsCss, createCollapsedRowsController } from './hidden-rows.j
 export { createStickyPushController, pushOffset, stickyCss, findScrollport } from './sticky-push.js'
 export { createSegmentFrameController, segmentFrameCss } from './segment-frame.js'
 export { createFoldStore, foldKey } from './fold-store.js'
-export { execProcessDefinition, execProcessStepDefinition } from './definition.js'
+export { execProcessDefinition, execProcessStepDefinition, execProcessUserDefinition } from './definition.js'
 export type { ExecProcessChatData } from './definition.js'
 export type { ExecProcessKey } from './locales.js'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    /** This plugin's copy namespace; the same string as its package suffix. */
+    /** 本插件的文案命名空间，与包名后缀使用同一字符串。 */
     'dsh-plugin-exec-process': ExecProcessKey
   }
 }
 
-/** The copy namespace this plugin owns. */
+/** 本插件拥有的文案命名空间。 */
 const NS = SELF_NAMESPACE
 
-/** Shared state this plugin injects into its own row registration. */
+/** 注入本插件行注册的共享状态。 */
 export interface ExecProcessInjected {
-  /** Which folds the reader has opened, per session and turn. */
+  /** 按 session 和 turn 记录 reader 打开的 fold。 */
   foldStore: FoldStore
-  /** The stylesheet collapsing folded rows. */
+  /** 折叠过程行的 stylesheet。 */
   collapsed: CollapsedRowsController
-  /** The stylesheet framing the dsh-owned rows of expanded segments. */
+  /** 为展开 segment 的 dsh 行绘制 frame 的 stylesheet。 */
   frame: SegmentFrameController
-  /** The stylesheet sticking an open header to the top, and releasing it. */
+  /** 将打开表头吸附到顶部并在内容结束时释放的 stylesheet。 */
   stickyPush: StickyPushController
 }
 
-/** Full props of the「执行过程」seats; both kinds carry the same shape. */
+/** 「执行过程」各 seat 的完整 props；所有 segment kind 使用同一形状。 */
 export type ExecProcessSeatProps =
-  PropsRuntime<'conversation.chat.node', typeof EXEC_PROCESS_KIND | typeof EXEC_PROCESS_STEP_KIND>
+  PropsRuntime<'conversation.chat.node', typeof EXEC_PROCESS_KIND | typeof EXEC_PROCESS_STEP_KIND | typeof EXEC_PROCESS_USER_KIND>
   & Partial<ExecProcessInjected>
   & PropsLocale<'dsh-plugin-exec-process'>
 
 /**
- * Slot face: pull this turn's facts out of the Chat snapshot and hand them to
- * the row. One seat component serves both node kinds — a turn's first segment
- * and every segment a mid-turn formal message opened differ only in where
- * their header sits, and that is already in `node.anchorSeq`.
- *
- * Each selector is chosen for its change signal, not for convenience.
- * `locations.getTurn(turn)` is exactly right: dsh re-creates that array when
- * this turn's nodes change — membership OR payload, see `MutableChatLocationIndex.touch`
- * in `chat-snapshot-builder.ts:197-217` — and leaves it alone otherwise. So a
- * turn streaming at the bottom of the transcript does not re-render the forty
- * finished rows above it.
- *
- * @param props - composed slot props.
- * @returns the row for this segment.
+ * Slot 接口：从 Chat snapshot 取出本 turn 的事实并交给行组件。selector 按变化信号选择；`locations.getTurn(turn)` 只在该 turn 的 node 成员或 payload 变化时重建数组（`MutableChatLocationIndex.touch`，`chat-snapshot-builder.ts:197-217`），因此底部流式更新不会重渲染上方已完成的行。
+ * @param props - 组装后的 slot props。
+ * @returns 本 segment 的行。
  */
 export function ExecProcessSeat({
   node, useTurnData, useChat, sessionId, foldStore, collapsed, frame, stickyPush, t,
@@ -142,15 +79,11 @@ export function ExecProcessSeat({
   return (
     <ExecProcessRow
       turn={turn}
+      selfKey={node.key}
       sessionId={String(sessionId)}
       turnNodeKeys={turnNodeKeys}
       nodes={nodes}
-      // A fold may only own what is BELOW its own row. dsh's window starts at
-      // `turn/start`, which is earlier than this row — an injected context line
-      // landing in that gap would otherwise be folded away from above the
-      // header, which reads as a row vanishing for no reason. Clamping to this
-      // row's own anchor makes "collapsed" mean exactly "everything under this
-      // line", which is what a disclosure promises.
+      // fold 只能拥有本行下方的内容。dsh 窗口从早于本行的 `turn/start` 开始；若中间插入 context 行，可能从表头上方被折叠，看起来像行无故消失。截到本行 anchor 后，“collapsed”才严格表示“本行以下全部内容”。
       processStartSeq={Math.max(spec?.processStartSeq ?? 0, node.anchorSeq)}
       selfAnchorSeq={node.anchorSeq}
       turnClosed={turnClosed}
@@ -164,17 +97,13 @@ export function ExecProcessSeat({
   )
 }
 
-/** Full props of the shadow occupying dsh's own `turn-process` cell. */
+/** 占据 dsh 自己 `turn-process` cell 的 shadow 的完整 props。 */
 export type TurnProcessSilencerProps = PropsRuntime<'conversation.chat.node', 'turn-process'>
 
 /**
- * Whether dsh's own disclosure has to be pushed open.
- *
- * Only when it is foldable and currently closed. `foldable` false means dsh
- * hides nothing anyway (the long-session case), and re-asserting an already
- * open fold would write to dsh's store on every render.
- * @param turnProcess - dsh's Turn-process owner state, absent outside a turn.
- * @returns whether to call `setOpen(true)` now.
+ * 判断是否需要强制打开 dsh 原生 disclosure：仅在可折叠且当前关闭时执行；`foldable` 为 false 表示长会话中 dsh 本来就不隐藏内容。
+ * @param turnProcess - dsh 的 Turn-process owner state；不在 turn 中时缺席。
+ * @returns 现在是否应调用 `setOpen(true)`。
  */
 export function shouldForceOpen(
   turnProcess: TurnProcessSilencerProps['turnProcess'],
@@ -183,22 +112,10 @@ export function shouldForceOpen(
 }
 
 /**
- * Shadow of dsh's own process control: draw nothing, and keep dsh's disclosure
- * permanently open.
- *
- * Forcing it open is the point. Wherever dsh's fold IS available it would
- * otherwise hide this turn's process rows — including this plugin's own row,
- * which sits inside the same seq window — behind a control that no longer
- * renders, leaving a turn nobody can open. Held open, dsh hides nothing and
- * this plugin's stylesheet is the single fold mechanism in the transcript,
- * identical in short and long sessions alike.
- *
- * `setOpen` is dsh's own owner API (`TurnProcessOwnerProps`), and it no-ops
- * unless the turn has a finalized answer — exactly the case where the fold
- * could have engaged.
- *
- * @param props - composed slot props.
- * @returns nothing; this entry renders no row.
+ * dsh 原生 process control 的 shadow：不绘制行，并保持 dsh disclosure 永久打开。
+ * 这样短会话不会同时出现两个 control，dsh 也不会把本插件的过程行藏在已不显示的原生 control 后；从此整段转录只由本插件 stylesheet 折叠。
+ * @param props - 组装后的 slot props。
+ * @returns 空；该 entry 不渲染行。
  */
 export function TurnProcessSilencer({ turnProcess }: TurnProcessSilencerProps) {
   const force = shouldForceOpen(turnProcess)
@@ -209,12 +126,12 @@ export function TurnProcessSilencer({ turnProcess }: TurnProcessSilencerProps) {
   return null
 }
 
-/** Required services: the Definition registry, the seat, and the copy. */
+/** 所需 service：Definition registry、seat 和文案。 */
 export const inject = ['uiConversation', 'slots', 'locale']
 
 /**
- * Register the Definition, the dictionaries, the stylesheets, and both seats.
- * @param ctx - client root context.
+ * 注册 Definition、字典、stylesheet 以及所有 segment seat。
+ * @param ctx - client root context。
  */
 export function apply(ctx: Context): void {
   const host = typeof document === 'undefined' ? undefined : document
@@ -226,6 +143,10 @@ export function apply(ctx: Context): void {
   ctx.effect(
     () => ctx.uiConversation.events.register(execProcessStepDefinition),
     'exec-process: follow-on segment node definition',
+  )
+  ctx.effect(
+    () => ctx.uiConversation.events.register(execProcessUserDefinition),
+    'exec-process: user-message segment node definition',
   )
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'exec-process: copy dictionaries')
   ctx.effect(() => installRowStyles(host), 'exec-process: row chrome')
@@ -259,10 +180,15 @@ export function apply(ctx: Context): void {
 
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
+    key: EXEC_PROCESS_USER_KIND,
+    locale: NS,
+    inject: seat,
+  }, ExecProcessSeat))
+
+  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+    name: 'conversation.chat.node',
     key: 'turn-process',
-    // Lower renders; dsh's own entry sits at the default 0. Registering at the
-    // SAME priority would throw instead of shadowing — that is the framework's
-    // fail-loud for accidental double registration.
+    // 较低 priority 才会渲染；dsh 自己的 entry 位于默认 0。使用相同 priority 不会 shadow，而会触发框架对意外重复注册的 fail-loud。
     priority: -1,
   }, TurnProcessSilencer))
 }

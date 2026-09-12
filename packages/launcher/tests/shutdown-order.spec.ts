@@ -4,11 +4,11 @@ import { CHILD_START_ORDER } from '../src/children.js'
 import { createSupervisor, type ChildExit } from '../src/supervisor.js'
 
 /**
- * A child process that never really exists.
+ * 一个实际上从未存在的子进程。
  *
- * Shutdown order is a property of the launcher, not of the operating system,
- * and spawning three real relays/dsh instances to observe it would make this a
- * flaky integration test instead of a check of the order itself.
+ * 关闭顺序是 launcher 的属性，而不是操作系统的属性，
+ * 启动三个真实 relay/dsh 实例来观察它会使测试变成
+ * 不稳定的集成测试，而不是对顺序本身的检查。
  */
 const harness = vi.hoisted(() => {
   const killOrder: number[] = []
@@ -37,7 +37,7 @@ const harness = vi.hoisted(() => {
       return true
     }
 
-    /** Let the process finish, the way a killed child eventually closes. */
+    /** 让进程结束，模拟被杀死的子进程最终关闭的方式。 */
     close(): void {
       this.exitCode = 0
       this.handlers.get('close')?.(0, null)
@@ -45,8 +45,8 @@ const harness = vi.hoisted(() => {
   }
 
   const spawn = (command: string, args: readonly string[]): FakeChild => {
-    // Windows kills whole trees through taskkill, so that is where the request
-    // shows up there instead of on the child object.
+    // Windows 通过 taskkill 杀死整个进程树，因此请求会出现在
+    // taskkill 上，而不是子进程对象上。
     if (command === 'taskkill') {
       killOrder.push(Number(args[1]))
       return new FakeChild(-1)
@@ -66,7 +66,7 @@ async function waitFor(check: () => boolean, timeoutMs = 5_000): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     if (check()) return
-    // eslint-disable-next-line no-await-in-loop -- the poll interval must pause the loop
+    // eslint-disable-next-line no-await-in-loop -- 轮询间隔必须暂停循环
     await delay(5)
   }
   throw new Error('condition not met in time')
@@ -87,7 +87,7 @@ describe('shutdown order', () => {
     const stopping = supervisor.stopAll()
     const stopped: string[] = []
     for (let index = 0; index < CHILD_START_ORDER.length; index += 1) {
-      // eslint-disable-next-line no-await-in-loop -- one child is stopped at a time, which is the point
+      // eslint-disable-next-line no-await-in-loop -- 一次停止一个子进程正是目的
       await waitFor(() => harness.killOrder.length === index + 1)
       const pid = harness.killOrder.at(-1)
       const child = harness.children.find(candidate => candidate.pid === pid)
@@ -98,7 +98,7 @@ describe('shutdown order', () => {
     await stopping
 
     expect(stopped).toEqual(['connector', 'relay', 'dsh'])
-    // A child stopped on purpose is not an unexpected exit.
+    // 主动停止的子进程不算意外退出。
     expect(exits).toEqual([])
   })
 })

@@ -1,16 +1,8 @@
 /**
- * Copy for the「执行过程」row. `en` defines the key set and `zh` is typed
- * against it, so a missing translation fails the build instead of falling back
- * at runtime.
- *
- * Chinese wording follows the project's vocabulary table
- * (`docs/01-decisions.md` §2.05) and dsh's own transcript, which already says
- * 「轮」for a turn and 「思考」for a reasoning section.
- *
- * @module @dsh-remote/dsh-plugin-exec-process/client/locales
+ * 「执行过程」行的文案。`en` 定义 key 集合，`zh` 以它为类型约束；漏翻会在构建期失败。中文遵循项目词表（`docs/01-decisions.md` §2.05）和 dsh 转录的「轮」「思考」用词。
  */
 
-/** English copy; also the key set of this namespace. */
+/** 英文文案；同时作为本命名空间的 key 集合。 */
 export const en = {
   label: 'Process',
   thinking: 'thought {count}×',
@@ -25,10 +17,10 @@ export const en = {
   collapse: 'Hide the process of this turn',
 } as const
 
-/** One copy key of this namespace. */
+/** 本命名空间的文案 key 类型。 */
 export type ExecProcessKey = keyof typeof en
 
-/** Simplified Chinese copy. */
+/** 中文文案，按 `en` 的 key 集合实现。 */
 export const zh: Record<ExecProcessKey, string> = {
   label: '执行过程',
   thinking: '思考{count}次',
@@ -46,10 +38,8 @@ export const zh: Record<ExecProcessKey, string> = {
 }
 
 /**
- * Fill `{name}` placeholders in one copy string.
- * @param text - the translated string.
- * @param values - placeholder values by name.
- * @returns the filled string; an unknown placeholder is left as written.
+ * 填充文案中的 `{name}` 等占位符。
+ * 未提供的占位符保持原样。
  */
 export function fill(text: string, values: Readonly<Record<string, unknown>>): string {
   return text.replace(/\{(\w+)\}/gu, (match, key: string) =>

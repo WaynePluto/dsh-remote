@@ -10,3 +10,60 @@ nodeLinker: hoisted
 # pnpm 10 起默认不执行依赖的构建脚本，需要显式放行。
 # 只放行确实需要的，避免绿色包引入编译工具链依赖。
 onlyBuiltDependencies: []
+# pnpm 11+ 用 allowBuilds 表达同一套默认拒绝策略。保持这些包为 false，
+# 使全新安装不会弹出 approve-builds 提示，也不会在非交互终端失败；它们的安装脚本
+# 都不属于绿色包契约。
+allowBuilds:
+  '@deepseek-ai/dsh-subprocess-local': false
+  '@google/genai': false
+  esbuild: false
+  koffi: false
+  node-pty: false
+  protobufjs: false
+
+# pnpm 11+ 默认启用发布时间门槛。选定的 dsh alpha 属于显式批准的依赖族；
+# 其他包继续保留该门槛。
+minimumReleaseAgeExclude:
+  - '@deepseek-ai/dsh'
+  - '@deepseek-ai/dsh-*'
+  - '@deepseek-ai/node-addon-system@0.1.2'
+  - '@deepseek-ai/node-addon-system-darwin-arm64@0.1.2'
+  - '@deepseek-ai/node-addon-system-linux-x64@0.1.2'
+  - 'obug@2.2.0'
+
+# pnpm 10 的 workspace 设置；package.json 不再承载这些键。
+supportedArchitectures:
+  os: [win32, linux, darwin]
+  cpu: [x64, arm64]
+  libc: [glibc]
+ignoredOptionalDependencies:
+  - "*darwin-x64*"
+  - "*linux-arm64*"
+  - "*musl*"
+  - "*win32-arm64*"
+overrides:
+  "@deepseek-ai/dsh-anonymous-user-id": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-attachment": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-authorization": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-bash-local": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-code-runtime": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-compaction": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-fs": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-hook-protocol": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-invariants": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-jobs": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-output-retention": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-sandbox": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-scope": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-sdk-protocol": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-session-persistence": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-session-query": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-session-telemetry": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-session-title-llm": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-settings": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-shell": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-spill": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-subagent-in-process-driver": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-util-time": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-util-workspace-path": "0.1.5-rc.2"
+  "@deepseek-ai/dsh-workflow": "0.1.5-rc.2"

@@ -1,21 +1,21 @@
 /**
- * The account name policy of the sole v1 administrator.
+ * 唯一 v1 管理员的账号名策略。
  *
- * The name is chosen once, in the first-run wizard or `dsh-remote-relay init`,
- * and is typed again on every login from a phone. That is why it is restricted
- * to ASCII letters, digits and `._-`: a name holding spaces, full-width
- * characters or invisible whitespace is one the operator cannot reliably retype
- * on a mobile keyboard, and `users.username` is compared `COLLATE NOCASE`, so
- * lookalike variants would silently collide instead of being distinct accounts.
+ * 名称只在初始设置向导或 `dsh-remote-relay init` 中选择一次，
+ * 手机上的每次登录都要再次输入。因此它限制为
+ * ASCII 字母、数字和 `._-`：包含空格、全角
+ * 字符或不可见空白的名称，操作员无法可靠地在手机键盘上重新输入，
+ * 而且 `users.username` 使用 `COLLATE NOCASE` 比较，因此
+ * 相似变体会静默冲突，而不是成为独立账号。
  */
 
-/** Pre-filled by the setup wizard and by `dsh-remote-relay init`. */
+/** 由设置向导和 `dsh-remote-relay init` 预填。 */
 export const DEFAULT_ADMIN_USERNAME = 'admin'
 
 export const USERNAME_MIN_CHARACTERS = 2
 export const USERNAME_MAX_CHARACTERS = 32
 
-/** Leading character excluded so a name never reads as a flag or a dot-file. */
+/** 排除开头字符，避免名称看起来像 flag 或点文件。 */
 const USERNAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u
 
 export class UsernamePolicyError extends Error {
@@ -26,17 +26,17 @@ export class UsernamePolicyError extends Error {
 }
 
 /**
- * @param raw - what the operator typed.
- * @returns The name with surrounding whitespace removed; the login path trims
- * the same way, so a stored name with edge whitespace could never be entered.
+ * @param raw - 操作员输入的内容。
+ * @returns 去除首尾空白的名称；登录路径也会执行相同 trim，
+ * 因此带首尾空白的存储名称永远无法输入。
  */
 export function normalizeUsername(raw: string): string {
   return raw.trim()
 }
 
 /**
- * @param username - an already {@link normalizeUsername}d name.
- * @throws UsernamePolicyError When the name breaks the policy above.
+ * @param username - 已经经过 {@link normalizeUsername} 的名称。
+ * @throws UsernamePolicyError 名称违反上述策略时抛出。
  */
 export function validateNewUsername(username: string): void {
   const length = [...username].length

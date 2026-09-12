@@ -10,9 +10,9 @@ import {
 } from '@dsh-remote/protocol'
 
 /**
- * A membership file exists but cannot be used. Never treat this as "not joined":
- * silently dropping off the hub is the worst possible outcome, so the connector
- * reports it and lets the operator fix the file.
+ * membership 文件存在但不可用。绝不能将其视为“尚未加入”：
+ * 静默脱离 hub 是最糟糕的结果，因此 connector
+ * 会报告问题，让操作者修复文件。
  */
 export class MembershipFileError extends Error {
   constructor(message: string, options?: { cause: unknown }) {
@@ -22,8 +22,8 @@ export class MembershipFileError extends Error {
 }
 
 /**
- * Editors, atomic renames and the connector's own token rewrite each produce
- * several watch events for one logical change; collapse them before re-reading.
+ * 编辑器、原子重命名以及 connector 自己重写 token 都会为一次逻辑变更
+ * 产生多个 watch 事件；重新读取前先将它们合并。
  */
 const WATCH_DEBOUNCE_MS = 120
 
@@ -37,34 +37,34 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-/** `~/.dsh-remote`; the per-user directory that also holds `device.key`. */
+/** `~/.dsh-remote`；也保存 `device.key` 的每用户目录。 */
 export function defaultDshRemoteHome(): string {
   return join(homedir(), '.dsh-remote')
 }
 
 /**
- * @param home - dsh-remote home directory.
- * @returns Absolute path of the membership file inside that home.
+ * @param home - dsh-remote home 目录。
+ * @returns 该 home 中 membership 文件的绝对路径。
  */
 export function membershipFilePath(home: string): string {
   return join(home, MEMBERSHIP_FILE_NAME)
 }
 
 /**
- * Read this machine's hub membership.
+ * 读取这台机器的 hub membership。
  *
- * @param path - membership file path.
- * @returns The parsed membership, or undefined when the file does not exist,
- * which simply means this machine has not joined a hub yet.
- * @throws MembershipFileError When the file exists but is unreadable or malformed.
+ * @param path - membership 文件路径。
+ * @returns 解析后的 membership；文件不存在时为 undefined，
+ * 这仅表示这台机器尚未加入 hub。
+ * @throws MembershipFileError 文件存在但不可读或格式错误时抛出。
  */
 export function readMembershipFile(path: string): Membership | undefined {
   let raw: string
   try {
     raw = readFileSync(path, 'utf8')
   } catch (error) {
-    // A missing file (or a home directory that was never created) is the normal
-    // "not joined" state, not a failure.
+    // 文件缺失（或 home 目录从未创建）是正常的
+    //“尚未加入”状态，不是失败。
     if (errorCode(error) === 'ENOENT') return undefined
     throw new MembershipFileError(
       `could not read the membership file at ${path}: ${errorMessage(error)}. `
@@ -85,20 +85,20 @@ export function readMembershipFile(path: string): Membership | undefined {
 }
 
 /**
- * Replace the membership file atomically, so a reader never observes a
- * half-written file and a crash can never truncate an existing membership.
+ * 原子替换 membership 文件，使读取方永远不会看到
+ * 半写入文件，崩溃也不会截断已有 membership。
  *
- * @param path - membership file path.
- * @param membership - the membership to persist.
- * @throws MembershipFileError When the file cannot be written or renamed.
+ * @param path - membership 文件路径。
+ * @param membership - 要持久化的 membership。
+ * @throws MembershipFileError 文件无法写入或重命名时抛出。
  */
 export function writeMembershipFile(path: string, membership: Membership): void {
   const directory = dirname(path)
-  // Same directory as the target: rename is only atomic within one filesystem.
+  // 与目标位于同一目录：rename 只在同一文件系统内具有原子性。
   const temporary = join(directory, `${MEMBERSHIP_FILE_NAME}.${String(process.pid)}.tmp`)
   try {
     mkdirSync(directory, { recursive: true, mode: 0o700 })
-    // The file may still carry an unspent enrollment token, so it is a secret.
+    // 文件可能仍携带未使用的注册令牌，因此它是秘密。
     writeFileSync(temporary, serializeMembership(membership), { mode: 0o600 })
     renameSync(temporary, path)
   } catch (error) {
@@ -112,17 +112,13 @@ export function writeMembershipFile(path: string, membership: Membership): void 
 
 
 /**
- * Drop the single-use enrollment token once the hub has accepted it, keeping
- * every other field. A spent secret must not sit on disk.
- *
- * The file is re-read first: the admin console may have re-joined this machine
- * to another hub since the session started, and that hub's fresh token must
- * survive.
- *
- * @param path - membership file path.
- * @param hub - the hub whose token was just spent, as recorded on disk.
- * @returns True when the file was rewritten.
- * @throws MembershipFileError When the file is unreadable, malformed or unwritable.
+ * hub 接受一次性注册令牌后删除它，并保留其他所有字段；已使用的秘密不能留在磁盘上。
+ * 首先重新读取文件：管理控制台可能在会话启动后将这台机器重新加入另一个 hub，
+ * 因此该 hub 的新 token 必须保留。
+ * @param path - membership 文件路径。
+ * @param hub - 刚刚使用其 token、且磁盘记录的 hub。
+ * @returns 文件被重写时为 true。
+ * @throws MembershipFileError 文件不可读、格式错误或不可写时抛出。
  */
 export function clearSpentEnrollToken(path: string, hub: MembershipHub): boolean {
   const membership = readMembershipFile(path)
@@ -136,10 +132,10 @@ export function clearSpentEnrollToken(path: string, hub: MembershipHub): boolean
 }
 
 /**
- * @param a - one membership, or undefined for "not joined".
- * @param b - the other membership.
- * @returns True when both describe exactly the same hub, compared field by
- * field so key order or formatting differences never look like a change.
+ * @param a - 一个 membership；“尚未加入”时为 undefined。
+ * @param b - 另一个 membership。
+ * @returns 两者逐字段描述完全相同的 hub 时为 true；比较每个字段是为了
+ * 避免键顺序或格式差异被误认为变更。
  */
 export function sameMembership(a: Membership | undefined, b: Membership | undefined): boolean {
   const left = a?.hub
@@ -158,21 +154,21 @@ export interface MembershipWatcher {
 
 export interface WatchMembershipOptions {
   readonly path: string
-  /** The value the caller already acted on; the first event is compared to it. */
+  /** 调用方已经处理的值；第一个事件会与它比较。 */
   readonly initial: Membership | undefined
-  /** Called only when the parsed membership really differs from the last one. */
+  /** 仅在解析出的 membership 确实不同于上一个值时调用。 */
   readonly onChange: (membership: Membership | undefined) => void
-  /** Called when a change was observed but the file could not be parsed. */
+  /** 观察到变更但文件无法解析时调用。 */
   readonly onError: (error: MembershipFileError) => void
 }
 
 /**
- * React to membership changes without polling.
+ * 不使用轮询响应 membership 变更。
  *
- * @param options - file to watch plus the change and error callbacks.
- * @returns A handle whose `close()` releases the watcher and any pending timer.
- * @throws MembershipFileError When the home directory cannot be watched, since
- * without a watcher a join would never be noticed.
+ * @param options - 要监视的文件，以及变更和错误回调。
+ * @returns 一个句柄，其 `close()` 会释放 watcher 和任何待处理的计时器。
+ * @throws MembershipFileError home 目录无法监视时抛出，因为
+ * 没有 watcher 就永远无法发现加入。
  */
 export function watchMembershipFile(options: WatchMembershipOptions): MembershipWatcher {
   const directory = dirname(options.path)
@@ -207,12 +203,12 @@ export function watchMembershipFile(options: WatchMembershipOptions): Membership
 
   let watcher: FSWatcher
   try {
-    // Watch the directory, not the file: membership.json usually does not exist
-    // yet, and an atomic rename swaps the inode a file watch is bound to.
-    // Persistent on purpose: an idle, unjoined connector has nothing else
-    // keeping its event loop alive, and it must not exit before it is joined.
+    // 监视目录而不是文件：membership.json 通常还不存在，
+    // 而原子重命名会替换文件 watcher 所绑定的 inode。
+    // 特意设为 persistent：空闲且尚未加入的 connector 没有其他东西
+    // 保持事件循环运行，并且不能在加入前退出。
     watcher = watch(directory, { persistent: true }, (_event, changed) => {
-      // Some platforms report no file name at all; then every event is relevant.
+      // 某些平台完全不报告文件名；此时每个事件都相关。
       if (changed !== null && basename(changed) !== name) return
       if (timer !== undefined) clearTimeout(timer)
       timer = setTimeout(settle, WATCH_DEBOUNCE_MS)
@@ -225,8 +221,8 @@ export function watchMembershipFile(options: WatchMembershipOptions): Membership
       { cause: error },
     )
   }
-  // Errors here are transient (a directory replaced under us); the per-attempt
-  // re-read in the connector loop is the safety net, so never crash the process.
+  // 这里的错误是暂时的（目录被替换）；connector 循环中每次尝试的
+  // 重新读取是安全网，因此绝不能让进程崩溃。
   watcher.on('error', () => undefined)
 
   return {

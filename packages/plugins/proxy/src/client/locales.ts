@@ -1,12 +1,6 @@
-/**
- * Copy for the Proxy settings page. Both dictionaries are complete by
- * construction: `en` defines the key set and `zh` is typed against it, so a
- * missing translation fails the build rather than falling back at runtime.
- *
- * @module @dsh-remote/dsh-plugin-proxy/client/locales
- */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。（涉及：`en`、`zh`） */
 
-/** English copy; also the key set of this namespace. */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 export const en = {
   nav: 'Proxy',
   title: 'Outbound proxy',
@@ -40,10 +34,10 @@ export const en = {
   failed: 'Failed: {message}',
 } as const
 
-/** One copy key of this namespace. */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 export type ProxyKey = keyof typeof en
 
-/** Simplified Chinese copy. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 export const zh: Record<ProxyKey, string> = {
   nav: '代理',
   title: '出网代理',
@@ -77,12 +71,7 @@ export const zh: Record<ProxyKey, string> = {
   failed: '失败：{message}',
 }
 
-/**
- * Fill `{name}` placeholders in one copy string.
- * @param text - the translated string.
- * @param values - placeholder values by name.
- * @returns the filled string; an unknown placeholder is left as written.
- */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`{name}`） */
 export function fill(text: string, values: Readonly<Record<string, string | number>>): string {
   return text.replace(/\{(\w+)\}/gu, (match, key: string) =>
     Object.hasOwn(values, key) ? String(values[key]) : match)

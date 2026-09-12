@@ -1,89 +1,44 @@
 /**
- * The Windows half of "tell the person at the keyboard".
- *
- * WHY POWERSHELL AND NOT A NATIVE MODULE. 铁律 3: no native modules anywhere on
- * the connector/launcher side, because the green package must work unzipped.
- * `Windows.UI.Notifications` is a WinRT API every Windows install already has,
- * and Windows PowerShell 5.1 can project it in one line — so the dependency is
- * a program that ships with the OS rather than a prebuilt binary per Node ABI.
- *
- * WHY THE TEXT TRAVELS IN THE ENVIRONMENT. The obvious implementation
- * interpolates the title and body into the script and doubles the quotes (this
- * is what the pi extension this plugin is modelled on does). That makes the
- * script a template whose correctness depends on an escaping function, and the
- * text here is not ours: a session title comes from a model, and a tool name
- * comes from whatever registered it. Passing them as environment variables
- * makes the script a CONSTANT — there is no interpolation to get wrong — and
- * `CreateTextNode` escapes them into the XML by construction, so neither
- * PowerShell nor the toast document can be injected into.
- *
- * WHY `scenario=reminder`. It is what makes the toast persist until it is
- * dismissed instead of fading after a few seconds; the scenario requires at
- * least one action, which is why a bare "close" button is appended.
+ * Windows 通知实现。使用系统自带 PowerShell 和 WinRT API，不引入原生 Node 模块；标题与正文通过环境变量传给固定脚本，避免把模型或工具输入插值进 PowerShell/XML。
  *
  * @module @dsh-remote/dsh-plugin-notify/toast
  */
 
 import { execFile } from 'node:child_process'
 
-/** One notification, already reduced to what a toast can show. */
+/** 已压缩到 toast 可显示范围的一条通知。 */
 export interface Notice {
-  /** The bold first line. */
+  /** 加粗的第一行。 */
   title: string
-  /** The wrapped second line. */
+  /** 换行显示的第二行。 */
   body: string
 }
 
-/** Anything that can put a notice in front of the person at the machine. */
+/** 能把通知呈现在机器前用户面前的对象。 */
 export interface Notifier {
-  /**
-   * Show one notice.
-   * @param notice - the title and body to show.
-   * @returns fulfillment once the platform accepted it.
-   */
+  /** 显示一条通知；平台接受后 resolve。 */
   send(notice: Notice): Promise<void>
 }
 
-/**
- * The AppID the toast is shown under; Windows prints it as the sender.
- *
- * ⚠️ An AppID that is not a registered AUMID is tolerated by current Windows 10
- * and 11 builds (verified on this machine — an arbitrary string and PowerShell's
- * own AUMID both raised a visible toast), but it is not contractual: a hardened
- * or older build can accept the call and show nothing. That is why the settings
- * page has a test button — a silent toast is otherwise indistinguishable from a
- * plugin that never fired.
- */
+/** toast 使用的 AppID；Windows 将其显示为发送者。 */
 export const APP_ID = 'DeepSeek Harness'
 
-/** The label on the button `scenario=reminder` obliges the toast to carry. */
+/** `scenario=reminder` 要求 toast 携带的按钮标签。 */
 export const DISMISS_LABEL = '关闭'
 
-/** How long a notifier may take before it is abandoned and killed. */
+/** 通知器等待多久后放弃并终止。 */
 export const TOAST_TIMEOUT_MS = 10_000
 
-/**
- * How many notifiers may be in flight at once.
- *
- * A cap rather than a queue: notifications are only interesting while they are
- * fresh, so the right response to a burst is to drop the surplus, not to show
- * it late. Reached only if the machine is so loaded that spawning a shell takes
- * longer than a whole turn.
- */
+/** 同时运行的 notifier 上限；通知过期后不排队，超额直接丢弃。 */
 export const MAX_IN_FLIGHT = 4
 
-/** Longest title this plugin sends; Windows truncates, but not predictably. */
+/** 本插件发送的标题最大长度；Windows 会截断但规则不稳定。 */
 export const TITLE_LIMIT = 90
 
-/** Longest body this plugin sends. */
+/** 本插件发送的正文最大长度。 */
 export const BODY_LIMIT = 180
 
-/**
- * The environment variables the constant script reads its text from.
- *
- * Prefixed so they cannot collide with anything the harness itself sets, and
- * named in the script rather than interpolated — see the module note.
- */
+/** 固定 PowerShell script 从环境变量读取的文本；使用前缀避免与 harness 环境冲突。 */
 export const ENV = {
   title: 'DSH_NOTIFY_TITLE',
   body: 'DSH_NOTIFY_BODY',
@@ -91,24 +46,18 @@ export const ENV = {
   dismiss: 'DSH_NOTIFY_DISMISS',
 } as const
 
-/** WinRT namespace, spelled once. */
+/** WinRT namespace，集中定义一次。 */
 const WINRT = 'Windows.UI.Notifications'
 
-/**
- * The complete toast script.
- *
- * A module-level constant on purpose: it contains no caller data, so there is
- * no per-call string building and nothing to escape. Statements are joined with
- * `; ` so the whole thing survives as one `-Command` argument.
- */
+/** 完整且不插值的 toast script；用 `; ` 拼成一个 `-Command` 参数。 */
 export const TOAST_SCRIPT = [
   `[${WINRT}.ToastNotificationManager, ${WINRT}, ContentType = WindowsRuntime] > $null`,
   `$xml = [${WINRT}.ToastNotificationManager]::GetTemplateContent([${WINRT}.ToastTemplateType]::ToastText02)`,
   `$texts = $xml.GetElementsByTagName('text')`,
   `$texts.Item(0).AppendChild($xml.CreateTextNode($env:${ENV.title})) > $null`,
   `$texts.Item(1).AppendChild($xml.CreateTextNode($env:${ENV.body})) > $null`,
-  // Persist until dismissed. The scenario is only honoured when the toast
-  // carries at least one action, hence the button below.
+  // 持续显示直到关闭。该 scenario 只有在 toast
+  // 至少包含一个 action 时才生效，因此需要下面的按钮。
   `$xml.DocumentElement.SetAttribute('scenario', 'reminder')`,
   `$actions = $xml.CreateElement('actions')`,
   `$action = $xml.CreateElement('action')`,
@@ -121,48 +70,32 @@ export const TOAST_SCRIPT = [
   `[${WINRT}.ToastNotificationManager]::CreateToastNotifier($env:${ENV.appId}).Show($toast)`,
 ].join('; ')
 
-/**
- * Reduce one caller string to something a toast line can hold.
- *
- * Control characters are removed rather than escaped: they cannot break the
- * document (the value never reaches the parser as markup) but a raw newline in
- * a session title makes the toast lay out wrongly, and a NUL cannot be carried
- * in an environment variable at all.
- * @param text - the caller's string.
- * @param limit - the longest result to produce.
- * @returns a single-line string no longer than `limit`.
- */
+/** 去除控制字符、压平为单行并截断到 toast 可容纳的长度。 */
 export function clampLine(text: string, limit: number): string {
-  // eslint-disable-next-line no-control-regex -- removing them is the point
+  // 发送前先移除控制字符；原始换行会破坏 toast layout。
+  // eslint-disable-next-line no-control-regex -- 中文说明：移除控制字符就是这里的目的。
   const flat = text.replace(/[\u0000-\u001F\u007F]+/gu, ' ').replace(/\s+/gu, ' ').trim()
   return flat.length > limit ? `${flat.slice(0, limit - 1)}…` : flat
 }
 
-/** How this notifier reaches a child process; replaced in tests. */
+/** 可替换的 child-process spawner，供测试使用。 */
 export type ExecFile = typeof execFile
 
-/** Everything {@link WindowsToastNotifier} lets a test replace. */
+/** WindowsToastNotifier 的测试 seams。 */
 export interface WindowsToastOptions {
-  /** The platform string to branch on; defaults to `process.platform`. */
+  /** 分支使用的平台字符串；默认 `process.platform`。 */
   platform?: string
-  /** The child-process spawner; defaults to `node:child_process`'s. */
+  /** child-process spawner；默认 `node:child_process` 的 `execFile`。 */
   exec?: ExecFile
-  /** The ambient environment the child inherits; defaults to `process.env`. */
+  /** child 继承的环境；默认 `process.env`。 */
   env?: NodeJS.ProcessEnv
-  /** The AppID toasts are shown under. */
+  /** toast 使用的 AppID。 */
   appId?: string
 }
 
-/**
- * Show notices as persistent Windows toasts, and do nothing anywhere else.
- *
- * Non-Windows is a deliberate silent no-op rather than the terminal-escape
- * fallback the pi extension uses: dsh is a server whose stdout is a log file
- * that somebody reads later, and writing OSC 777 into it produces neither a
- * notification nor a readable log line.
- */
+/** 仅在 Windows 显示持久 toast；其他平台是刻意的 silent no-op。 */
 export class WindowsToastNotifier implements Notifier {
-  /** Whether this machine can show a toast at all. */
+  /** 当前机器是否支持 toast。 */
   readonly supported: boolean
 
   private readonly exec: ExecFile
@@ -170,9 +103,7 @@ export class WindowsToastNotifier implements Notifier {
   private readonly appId: string
   private inFlight = 0
 
-  /**
-   * @param options - test seams; every one defaults to the real thing.
-   */
+  /** 注入测试 seams；未提供时使用真实平台实现。 */
   constructor(options: WindowsToastOptions = {}) {
     this.supported = (options.platform ?? process.platform) === 'win32'
     this.exec = options.exec ?? execFile
@@ -180,17 +111,7 @@ export class WindowsToastNotifier implements Notifier {
     this.appId = options.appId ?? APP_ID
   }
 
-  /**
-   * Show one toast.
-   *
-   * Never rejects for a reason the caller can act on — a machine that cannot
-   * raise toasts is a fact about the machine, not a failure of the turn that
-   * just finished — but it DOES reject when the notifier itself failed, so the
-   * settings page's test button can report why.
-   * @param notice - the notice to show.
-   * @returns fulfillment once the notifier returned.
-   * @throws Error when the notifier ran and failed.
-   */
+  /** 显示一条 toast；平台不支持时静默返回，notifier 真正失败时 reject 供 test button 报告。 */
   async send(notice: Notice): Promise<void> {
     if (!this.supported) return
     if (this.inFlight >= MAX_IN_FLIGHT) return
@@ -201,8 +122,8 @@ export class WindowsToastNotifier implements Notifier {
           'powershell.exe',
           ['-NoProfile', '-NonInteractive', '-Command', TOAST_SCRIPT],
           {
-            // CREATE_NO_WINDOW: without it the child gets a console of its own
-            // and Windows retitles the terminal dsh was started from.
+            // CREATE_NO_WINDOW：否则子进程会拥有自己的控制台
+            // Windows 会改写启动 dsh 的终端标题。
             windowsHide: true,
             timeout: TOAST_TIMEOUT_MS,
             env: {

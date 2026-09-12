@@ -1,21 +1,4 @@
-/**
- * The Host half against fakes of the dsh services it uses (`settings`,
- * `agents`, `connection`, `sessionProjections`).
- *
- * Three behaviours earn the fakes, and each of them is a way this plugin could
- * become the thing people switch off:
- *
- *   · WHEN IT FIRES. `agent/status → idle` is emitted once per driver boundary,
- *     and `kick()` can flip to idle and wake again in the same synchronous run
- *     (`agent.ts:226-230`). Without the debounce that is a toast announcing the
- *     end of work that is still going.
- *   · WHEN IT STAYS QUIET. Subagents settle constantly inside one piece of work;
- *     a permission preset settles most approvals in microseconds. Both must be
- *     silent.
- *   · THAT IT NEVER DECIDES. Both request seams are waterfalls holding an agent
- *     loop open. This plugin is an observer on them and must return what
- *     downstream said, unchanged, however it itself behaved.
- */
+/** 会话与投影契约：此处说明持久事件、投影状态或历史回放边界。（涉及：`settings`、`agents`、`connection`、`sessionProjections`、`agent/status → idle`、`kick()`、`agent.ts:226-230`） */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
@@ -27,56 +10,56 @@ import { DEFAULT_SETTINGS } from '../src/shared.js'
 import type { NotifySettings } from '../src/shared.js'
 import type { Notice, Notifier } from '../src/toast.js'
 
-/** A session, with only the fields this plugin reads. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 interface FakeSession {
-  /** Storage metadata; the working directory is deliberately not in the log. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   header: { cwd?: string }
 }
 
-/** An agent, with only the fields this plugin reads. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 interface FakeAgent {
   status: 'idle' | 'running'
   session: FakeSession
 }
 
-/** Build one agent with its own session. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 function fakeAgent(overrides: Partial<FakeAgent> = {}): FakeAgent {
   return { status: 'idle', session: { header: { cwd: 'D:\\dev\\dsh-remote' } }, ...overrides }
 }
 
-/** A notifier that records instead of spawning. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 function recorder(): Notifier & { sent: Notice[] } {
   const sent: Notice[] = []
   return { sent, send: async (notice: Notice) => { sent.push(notice) } }
 }
 
 interface CtxOptions {
-  /** Agents `roots()` reports. */
+  /** Agents `roots()` 报告的 agent 集合。 */
   roots?: FakeAgent[]
-  /** The stored settings section. */
+  /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
   settings?: Partial<NotifySettings>
-  /** The session title projection answers with this. */
+  /** 会话与投影契约：此处说明持久事件、投影状态或历史回放边界。 */
   title?: string | null
-  /** Whether the `sessionProjections` service is composed at all. */
+  /** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`sessionProjections`） */
   projections?: false
 }
 
-/** What a built context exposes to the assertions. */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 interface Built {
   ctx: Context
-  /** Emit listeners, by event name. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   emit: (name: string, ...args: unknown[]) => void
-  /** Waterfall listeners, by event name. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   waterfall: (name: string, payload: unknown, next: () => Promise<unknown>) => Promise<unknown>
-  /** Whether a listener was registered ahead of the existing chain. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   prepended: Map<string, boolean>
   handled: Map<string, (endpoint: string, payload: unknown) => Promise<unknown>>
-  /** The registered settings section, mutable so a test can change it. */
+  /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
   section: NotifySettings
   disposers: (() => void)[]
 }
 
-/** A context carrying just the service surface this plugin reads. */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 function fakeCtx(options: CtxOptions = {}): Built {
   const listeners = new Map<string, ((...args: never[]) => unknown)[]>()
   const prepended = new Map<string, boolean>()
@@ -134,19 +117,12 @@ function fakeCtx(options: CtxOptions = {}): Built {
   }
 }
 
-/** End a turn in one session, the way `session/event` reports it. */
+/** 会话与投影契约：此处说明持久事件、投影状态或历史回放边界。（涉及：`session/event`） */
 function endTurn(built: Built, session: FakeSession, reason: unknown): void {
   built.emit('session/event', session, { type: 'turn/end', data: { turn: 1, reason } })
 }
 
-/**
- * A promise somebody else settles later.
- *
- * Every "nobody has answered yet" test needs one: the waterfall has to stay
- * genuinely pending while the clock advances, which is exactly the state a
- * human decision puts an agent loop in.
- * @returns the pending promise and the function that settles it.
- */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 function deferred<T>(): { promise: Promise<T>; settle: (value: T) => void } {
   let settle: (value: T) => void
   const promise = new Promise<T>((resolve) => { settle = resolve })
@@ -158,8 +134,8 @@ afterEach(() => { vi.useRealTimers() })
 
 describe('the settings section', () => {
   it('is on out of the box', () => {
-    // A notifier that has to be switched on after installation is a notifier
-    // that stays silent through the one long task it was installed for.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(Settings(undefined as never)).toEqual({ enabled: true, waiting: true })
     expect(DEFAULT_SETTINGS).toEqual({ enabled: true, waiting: true })
   })
@@ -187,9 +163,9 @@ describe('an agent coming to rest', () => {
   })
 
   it('stays quiet when the agent was woken again straight away', () => {
-    // The regression this guards: `kick()` sets the idle phase and then wakes
-    // the driver in the same synchronous run when the inbox refilled
-    // (`agent.ts:226-230`).
+    // 测试契约：此处说明本测试锁定的行为和回归边界。（涉及：`kick()`）
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`agent.ts:226-230`）
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent] })
     const notifier = recorder()
@@ -204,8 +180,8 @@ describe('an agent coming to rest', () => {
   })
 
   it('checks the live status again before it speaks', () => {
-    // Belt and braces for a wake that reaches the agent by a path that does not
-    // re-enter the status listener before the timer fires.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent] })
     const notifier = recorder()
@@ -235,8 +211,8 @@ describe('an agent coming to rest', () => {
   })
 
   it('says nothing for a subagent', () => {
-    // A subagent settles many times inside one piece of work the person asked
-    // for, and nobody is waiting on it directly.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const child = fakeAgent()
     const built = fakeCtx({ roots: [fakeAgent()] })
     const notifier = recorder()
@@ -329,8 +305,8 @@ describe('an agent coming to rest', () => {
 
 describe('a turn stalled on a person', () => {
   it('registers ahead of the answerers, or it would never run', () => {
-    // An answerer that claims a request never calls next(), so a listener
-    // registered after one is simply not consulted.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const built = fakeCtx()
     apply(built.ctx, { notifier: recorder() })
     expect(built.prepended.get('approval/request')).toBe(true)
@@ -450,7 +426,7 @@ describe('a turn stalled on a person', () => {
     answer.settle('allowed-once')
     await pending
 
-    // The settled notice is a different switch and is still on.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     built.emit('agent/status', { agent, status: 'idle' })
     vi.advanceTimersByTime(SETTLE_DEBOUNCE_MS)
     expect(notifier.sent).toHaveLength(1)
@@ -502,8 +478,8 @@ describe('the test channel', () => {
   })
 
   it('reports a notifier that failed as an answer, not as an error', async () => {
-    // The page has to be able to show why nothing appeared; an RPC-level error
-    // would be rendered as "the channel is broken" instead.
+    // 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。
+    // 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。
     const failing: Notifier = { send: async () => { throw new Error('powershell.exe not found') } }
     const result = await dispatch(failing, TEST_ENDPOINT)
 
@@ -511,8 +487,8 @@ describe('the test channel', () => {
   })
 
   it('sends the test even while the switch is off', async () => {
-    // Pressing the button IS the request; a test that silently did nothing
-    // because of a switch would answer the wrong question.
+    // 测试契约：此处说明本测试锁定的行为和回归边界。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const built = fakeCtx({ settings: { enabled: false } })
     const notifier = recorder()
     apply(built.ctx, { notifier })

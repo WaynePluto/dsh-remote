@@ -1,23 +1,11 @@
 // dsh-remote.exe —— Windows 上的双击入口，常驻通知区域。
 //
-// Windows will not run a double-clicked .ps1 (it opens an editor, and a
-// downloaded file is blocked by the execution policy), and PowerShell 7 is not
-// preinstalled, so start.ps1 alone would force a second prerequisite on top of
-// Node. This executable removes both problems and adds one more thing: it keeps
-// the stack under an icon in the notification area instead of under a console
-// window nobody may close.
+// Windows 双击不会执行 .ps1（会打开编辑器，下载文件还受执行策略拦截），PowerShell 7 也非预装；
+// 因此 start.ps1 会给 Node 增加前置条件，本程序把 stack 放到通知区域而非易关闭的控制台。
+// 产品逻辑（含 Node 版本检查）在 launcher，只有“完全没有 node”因 launcher 无法启动而由此检查。
 //
-// It stays thin on purpose. All product logic, including the Node *version*
-// check, lives in the launcher, which reports it in far more detail than this
-// program ever should. The one thing the launcher cannot report is "there is no
-// node at all" — it could not start — so that is the only check made here.
-//
-// Built with -H windowsgui (see scripts/pack.mjs), so there is no console and
-// nothing can be printed: everything the launcher says goes to the log file,
-// and everything this program says goes into a message box or a balloon.
-//
-// Windows-only by construction (it calls user32/shell32/kernel32 directly);
-// scripts/pack.mjs always builds it with GOOS=windows.
+// scripts/pack.mjs 用 -H windowsgui 构建，无控制台：launcher 输出入日志，本程序输出到消息框/气球通知。
+// 仅支持 Windows（直接调用 user32/shell32/kernel32），scripts/pack.mjs 始终用 GOOS=windows 构建。
 package main
 
 import (
@@ -32,19 +20,19 @@ import (
 const (
 	appName         = "dsh-remote"
 	nodeDownloadURL = "https://nodejs.org"
-	// Only quoted in the "no Node" message; the real gate is
-	// packages/launcher/src/node-version.ts.
+	// 只用于“没有 Node”消息；真正的检查项是
+	// 版本常量路径：packages/launcher/src/node-version.ts。
 	minimumNodeVersion = "22.19.0"
 
-	// Session-scoped, so two different users on one machine are not blocked from
-	// each having their own stack; two copies in one session would collide on
-	// the same ports, which is what this guards against.
+	// 按会话隔离，因此同一台机器上的不同用户不会互相阻止
+	// 各自运行自己的 stack；同一会话中的两个副本会争用
+	// 相同端口，这就是它要防止的情况。
 	singleInstanceMutexName = `Local\dsh-remote-tray-single-instance`
 
-	// scripts/pack.mjs runs this before writing the zip. A windowsgui binary
-	// cannot be smoke-tested by watching console output, so it gets a mode that
-	// checks the exe -> node -> dist chain and reports through the exit code,
-	// writing its detail to stderr (a pipe works, a console is not needed).
+	// scripts/pack.mjs 写入 zip 前会运行此模式。windowsgui 二进制文件
+	// 不能通过观察控制台输出做冒烟测试，因此该模式会
+	// 检查 exe -> node -> dist 链路，并通过退出码报告结果，
+	// 详情写入 stderr（管道可用，不需要控制台）。
 	selfCheckFlag = "--selfcheck"
 )
 
@@ -56,8 +44,8 @@ func main() {
 }
 
 func runTray() int {
-	// The window, its message loop and every menu it opens must stay on one
-	// thread; Windows ties window ownership to the thread that created it.
+	// 窗口、消息循环及其打开的所有菜单都必须留在同一个
+	// 线程上；Windows 将窗口所有权绑定到创建它的线程。
 	runtime.LockOSThread()
 
 	mutex, alreadyRunning, err := acquireSingleInstance(singleInstanceMutexName)
@@ -153,19 +141,19 @@ func runTray() int {
 	app.stack.start()
 	runMessageLoop()
 
-	// The loop only ends after 退出, which has already stopped the children;
-	// stopping again is a no-op and covers a WM_QUIT from anywhere else.
+	// 循环只会在“退出”之后结束；此时子进程已经停止，
+	// 再次停止是空操作，也能覆盖来自其他位置的 WM_QUIT。
 	app.stack.stop()
 	app.removeIcon()
 	log.printf("dsh-remote 托盘已退出")
 	return 0
 }
 
-// runSelfCheck verifies everything the tray needs before it would ever show an
-// icon: the package root, dist/index.js next to it, and a node on PATH. It
-// answers through the exit code and writes the detail to stdout/stderr, which
-// work when redirected even without a console. No window is created and nothing
-// is started, so scripts/pack.mjs can run it unattended.
+// runSelfCheck 在托盘显示图标前验证它所需的一切：
+// 软件包根目录、旁边的 dist/index.js，以及 PATH 中的 node。它
+// 通过退出码回答，并将详情写入 stdout/stderr；重定向后即使没有控制台
+// 也能正常工作。不创建窗口，也不启动任何内容，
+// 因此 scripts/pack.mjs 可以无人值守地运行它。
 func runSelfCheck() int {
 	root, err := packageRoot()
 	if err != nil {
@@ -188,8 +176,8 @@ func runSelfCheck() int {
 	return 0
 }
 
-// packageRoot returns the directory holding this executable, with symlinks
-// resolved so a symlinked dsh-remote.exe still finds the real dist/ next to it.
+// packageRoot 返回保存本可执行文件的目录，并解析符号链接，
+// 这样通过符号链接启动的 dsh-remote.exe 仍能找到旁边真实的 dist/。
 func packageRoot() (string, error) {
 	self, err := os.Executable()
 	if err != nil {

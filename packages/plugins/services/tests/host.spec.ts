@@ -11,41 +11,34 @@ import type { ServicesSnapshot } from '../src/shared.js'
 
 const roots: string[] = []
 
-/**
- * Create a throwaway project directory.
- * @returns its absolute path.
- */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 function project(): string {
   const root = mkdtempSync(join(tmpdir(), 'dsh-services-host-'))
   roots.push(root)
   return root
 }
 
-/** Default configuration: the gate is on. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 const ON: Config = { approvalInConfinedSandbox: true }
 
-/** What {@link fakeCtx} may be told to provide. */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 interface CtxOptions {
-  /** Project directory of the live agent, or undefined for a cold session. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   cwd?: string | undefined
-  /** Resolved sandbox mode, or undefined to mount no sandbox at all. */
+  /** 安全与权限契约：此处说明固定权限、审批边界及异常回退。 */
   mode?: string | undefined
-  /** Approval outcome, or undefined to mount no approval service. */
+  /** 安全与权限契约：此处说明固定权限、审批边界及异常回退。 */
   approval?: 'allowed-once' | 'rejected' | 'unavailable' | 'cancelled' | undefined
 }
 
-/** A fake Context plus the spies the tests assert on. */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 interface Harness {
   ctx: Context
   agent: object | undefined
   request: ReturnType<typeof vi.fn>
 }
 
-/**
- * Build the smallest Context this plugin actually reads.
- * @param options - what the composition provides.
- * @returns the fake context and its spies.
- */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 function fakeCtx(options: CtxOptions = {}): Harness {
   const agent = options.cwd === undefined
     ? undefined
@@ -94,7 +87,7 @@ describe('gateSpawn — the sandbox escape gate', () => {
     await expect(gateSpawn(harness.ctx, harness.agent as never, 'start web', ON)).resolves.toBeUndefined()
     expect(harness.request).toHaveBeenCalledOnce()
     const req = harness.request.mock.calls[0]?.[0] as { reason: string; toolName: string }
-    // The prompt must state BOTH escapes, not just the sandbox one.
+    // 安全与权限契约：此处说明固定权限、审批边界及异常回退。
     expect(req.reason).toContain('沙箱之外')
     expect(req.reason).toContain('workspace-write')
     expect(req.toolName).toBe('service_start')

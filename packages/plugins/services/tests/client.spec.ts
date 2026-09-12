@@ -1,121 +1,180 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
-  LOG_DIALOG_CHROME_PX, LOG_DIALOG_HEIGHT, LOG_PATH_MIN_HEIGHT_PX, logDialogRule, logDialogWidth,
+  applyLogDialogMove,
+  applyLogDialogResize,
+  LOG_DIALOG_BODY_HEIGHT_PROP,
+  LOG_DIALOG_CHROME_PX,
+  LOG_DIALOG_HEIGHT,
+  LOG_PATH_MIN_HEIGHT_PX,
+  logDialogMoveBounds,
+  logDialogResizeBounds,
+  logDialogRule,
+  logDialogWidth,
 } from '../src/client/log-dialog.js'
 import { en, fill, zh } from '../src/client/locales.js'
-
-/**
- * The browser half's testable seams.
- *
- * Rendering is not exercised here (this package runs vitest on the `node`
- * environment, with no DOM), and `ServicesDock.tsx` cannot even be imported —
- * it pulls in `@deepseek-ai/dsh-client-ui-primitives`, whose published package
- * ships CSS a Node-environment loader refuses. That is exactly why the pure
- * parts live in `log-dialog.ts`.
- *
- * What is covered is the part that fails SILENTLY: a CSS custom property whose
- * name disagrees between the writer and the rule that reads it does not throw —
- * it just pins the dialog at its fallback width forever, which is the
- * invisible-CSS failure mode this repository keeps rediscovering.
- */
-
+import { assertDialogGeometry } from '@dsh-remote/plugin-ui/test'
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`node`、`ServicesDock.tsx`、`@deepseek-ai/dsh-client-ui-primitives`、`log-dialog.ts`） */
 describe('log dialog width', () => {
   it('takes 80% of the measured panel, which dsh builds to the message width', () => {
-    // dsh builds every dock card to the shared content width W
-    // (`ConversationRoot.module.css:9-12`), so measuring our own card is how
-    // "80% of the conversation message width" is obtained without reading a
-    // variable the body-portaled dialog cannot see.
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。（涉及：`ConversationRoot.module.css:9-12`）
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。
     expect(logDialogWidth(800)).toBe(640)
     expect(logDialogWidth(1000)).toBe(800)
   })
-
   it('falls back to a usable width when the panel has not been measured', () => {
     expect(logDialogWidth(0)).toBe(620)
     expect(logDialogWidth(-1)).toBe(620)
   })
 })
-
 describe('log dialog stylesheet', () => {
   const rule = logDialogRule()
-
   it('reads exactly the custom property the panel writes', () => {
-    // The one assertion that matters: writer and reader must agree on the name.
-    // Both sides derive it from the same constant, and this locks that they do.
+    // 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const declared = /var\((--[\w-]+)/u.exec(rule)?.[1]
     expect(declared).toBe('--dsh-services-log-width')
     expect(rule).toContain('.dsh-services-log-dialog{')
   })
-
   it('carries a fallback, so a missing property degrades to a readable width', () => {
     expect(rule).toContain('620px')
   })
-
   it('wins over dsh\'s equal-specificity .dialog rule regardless of insert order', () => {
-    // dsh's card is `width: min(380px, 100%)` on a class of the same
-    // specificity; without !important the winner would depend on which
-    // stylesheet was appended last.
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。（涉及：`width: min(380px, 100%)`）
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 哪张样式表最后追加。
     expect(rule).toContain('width:min(')
     expect(rule).toContain('!important')
   })
-
   it('never lets the dialog exceed the viewport', () => {
     expect(rule).toContain('max-width:100%')
   })
 })
-
 describe('log dialog height', () => {
   it('is a FIXED height, so the card does not resize when the log lands', () => {
-    // With `max-height` the box grew to its content: the dialog opened small on
-    // "loading…" and jumped to full size the moment the Host answered.
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。（涉及：`max-height`）
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(LOG_DIALOG_HEIGHT).toContain('60vh')
   })
-
   it('reserves the path line too, the second thing that arrived late', () => {
     expect(LOG_PATH_MIN_HEIGHT_PX).toBeGreaterThan(0)
   })
-
   it('still clamps to the viewport, which a fixed height needs even more', () => {
-    // dsh's `.root` is position:fixed + align-items:center and its `.dialog`
-    // has no max-height, so an overflowing card is clipped at BOTH ends with
-    // the top unreachable — there is nothing to scroll. A bare `60vh` does
-    // exactly that below ~555px of viewport height.
+    // dsh 的 `.root` 使用 position:fixed + align-items:center，`.dialog`
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`60vh`）
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。
     expect(LOG_DIALOG_HEIGHT).toContain('min(')
     expect(LOG_DIALOG_HEIGHT).toContain(`100vh - ${String(LOG_DIALOG_CHROME_PX)}px`)
   })
-
   it('reserves more than the chrome dsh actually spends', () => {
-    // 62 header + 20 body margin + 24 path line + 20 gap + 24 footer
-    // + 24 dialog padding-bottom + 48 root padding = 222.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 高度计算：+ 24 dialog padding-bottom + 48 root padding = 222 像素。
     const measuredChrome = 62 + 20 + 24 + 20 + 24 + 24 + 48
     expect(measuredChrome).toBe(222)
     expect(LOG_DIALOG_CHROME_PX).toBeGreaterThanOrEqual(measuredChrome)
   })
-
   it('leaves the card fitting at every viewport height', () => {
-    // With the cap in place, body + chrome never exceeds the viewport.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     for (const viewport of [360, 480, 555, 720, 900, 1440]) {
       const body = Math.min(0.6 * viewport, viewport - LOG_DIALOG_CHROME_PX)
       expect(body + 222).toBeLessThanOrEqual(viewport)
     }
   })
 })
-
 describe('copy', () => {
   it('keeps both dictionaries on the same key set', () => {
-    expect(Object.keys(zh).sort()).toEqual(Object.keys(en).sort())
+    expect(Object.keys(zh).toSorted()).toEqual(Object.keys(en).toSorted())
   })
-
   it('fills placeholders and leaves unknown ones written', () => {
     expect(fill(en.summaryRunning, { count: 3 })).toBe('3 running')
     expect(fill(zh.logTitle, { name: 'demo-web' })).toBe('demo-web 的日志')
     expect(fill('{a} {b}', { a: 'x' })).toBe('x {b}')
   })
-
   it('has no copy left over from the removed stopped-services strip', () => {
-    // The panel now hides entirely when nothing runs, so these keys must be
-    // gone rather than lingering as dead translations.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     for (const key of ['summaryNone', 'summaryStopped', 'stoppedHint', 'hideLogs']) {
       expect(Object.keys(en)).not.toContain(key)
     }
+  })
+})
+describe('shared dialog geometry', () => {
+  it('keeps the services adapter aligned with the shared contract', () => {
+    assertDialogGeometry({
+      expect,
+      applyResize: applyLogDialogResize,
+      resizeBounds: logDialogResizeBounds,
+      applyMove: (start, dx, dy, bounds) => applyLogDialogMove(start, dx, dy, bounds as never),
+      moveBounds: logDialogMoveBounds,
+    }, ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'] as const)
+    expect(LOG_DIALOG_BODY_HEIGHT_PROP).toBe('--dsh-services-log-body-height')
+    expect(logDialogRule()).toContain('var(' + LOG_DIALOG_BODY_HEIGHT_PROP)
+  })
+})
+describe('resize structure', () => {
+  it('keeps eight non-button handles in Modal children', () => {
+    const dialogSource = readFileSync(new URL('../src/client/ServiceLogDialog.tsx', import.meta.url), 'utf8')
+    const panelSource = readFileSync(new URL('../src/client/ServicesDock.tsx', import.meta.url), 'utf8')
+    const resizeSource = readFileSync(new URL('../src/client/dialog-resize.tsx', import.meta.url), 'utf8')
+    expect(dialogSource).toContain('data-dsh-services-log-body')
+    expect(dialogSource).toContain('LogResizeHandle')
+    expect(panelSource).toMatch(/\['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'\]/u)
+    expect(panelSource).toMatch(/\['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'\]/u)
+    expect(resizeSource).toMatch(/touchAction: 'none'/u)
+    expect(resizeSource).toContain('setPointerCapture')
+    expect(resizeSource).toContain('HANDLE_SIZE_PX = 12')
+    expect(resizeSource).toContain('HANDLE_CORNER_SIZE_PX = 14')
+    expect(resizeSource.match(/direction ===/gu)).toHaveLength(7)
+  })
+})
+describe('move math', () => {
+  const rect = { left: 100, right: 600, top: 80, bottom: 480 }
+  const bounds = logDialogMoveBounds(rect, 800, 600)
+  it('clamps every edge to 24px viewport padding', () => {
+    expect(bounds).toEqual({ minDx: -76, maxDx: 176, minDy: -56, maxDy: 96 })
+    expect(applyLogDialogMove({ offsetX: 10, offsetY: -4 }, 1000, -1000, bounds)).toEqual({ offsetX: 186, offsetY: -60 })
+  })
+  it('reuses offsets across consecutive move and resize operations', () => {
+    const first = applyLogDialogMove({ offsetX: 10, offsetY: -4 }, 30, 20, bounds)
+    expect(first).toEqual({ offsetX: 40, offsetY: 16 })
+    const secondBounds = logDialogMoveBounds({ left: 130, right: 630, top: 100, bottom: 500 }, 800, 600)
+    expect(applyLogDialogMove(first, -50, 40, secondBounds)).toEqual({ offsetX: -10, offsetY: 56 })
+    const resized = applyLogDialogResize({ width: 500, bodyHeight: 300, ...first }, 'se', 20, 30, {
+      minWidth: 300,
+      maxWidth: 800,
+      minBodyHeight: 110,
+      maxBodyHeight: 600,
+    })
+    expect(applyLogDialogMove(resized, 10, -10, bounds)).toMatchObject({ offsetX: 60, offsetY: 21 })
+  })
+})
+describe('move handle structure', () => {
+  const dialogSource = readFileSync(new URL('../src/client/ServiceLogDialog.tsx', import.meta.url), 'utf8')
+  const resizeSource = readFileSync(new URL('../src/client/dialog-resize.tsx', import.meta.url), 'utf8')
+  it('is transparent and below the eight resize handles', () => {
+    expect(dialogSource).toContain('LogMoveHandle')
+    expect(resizeSource).toContain('data-dsh-services-move-handle')
+    expect(resizeSource).toContain('aria-hidden={true}')
+    expect(resizeSource).toContain('zIndex: 3')
+    expect(resizeSource).toContain('zIndex: 2')
+    expect(resizeSource).toContain('top: 12')
+    expect(resizeSource).toContain('left: 16')
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    expect(resizeSource).toContain('right: 52')
+    expect(resizeSource).toContain('height: 50')
+    expect(resizeSource).toMatch(/background: 'transparent'/u)
+    expect(resizeSource).not.toContain('linear-gradient')
+    expect(resizeSource).not.toMatch(/opacity\s*:/u)
+  })
+  it('uses the complete guarded pointer lifecycle', () => {
+    expect(resizeSource).toContain('event.button !== 0')
+    expect(resizeSource).toContain('setPointerCapture')
+    expect(resizeSource).toContain('pointerId !== active.pointerId')
+    expect(resizeSource).toContain('requestAnimationFrame')
+    expect(resizeSource).toMatch(/removeEventListener\('pointermove'/u)
+    expect(resizeSource).toMatch(/removeEventListener\('lostpointercapture'/u)
   })
 })

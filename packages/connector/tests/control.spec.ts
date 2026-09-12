@@ -69,7 +69,7 @@ function config(relayUrl: string, overrides: { enrollToken?: string } = {}): Ses
   return toSessionConfig(resolved, { relayUrl, slug: SLUG, ...overrides })
 }
 
-/** Answer hello with a challenge; anything else is left to the caller. */
+/** 用 challenge 回答 hello；其他情况交给调用方处理。 */
 function challengeOnly(collect: (frame: ConnectorToRelayFrame, ws: WebSocket) => void) {
   return (frame: ConnectorToRelayFrame, ws: WebSocket): void => {
     if (frame.type === 'hello') {
@@ -219,7 +219,7 @@ describe('connector control state machine', () => {
         heartbeatIntervalMs: 20,
         heartbeatTimeoutMs: 80,
       }))
-      // Deliberately ignore connector pings after authentication.
+      // 有意忽略认证后的 connector ping。
     }))
 
     try {

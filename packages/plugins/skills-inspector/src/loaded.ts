@@ -1,34 +1,10 @@
 /**
- * 「已加载」的判定：**回放会话日志**，数出每个技能被加载进上下文多少次、由谁发起。
- *
- * ## 为什么能这么做（完整证据链见 docs/02 §16）
- *
- * dsh 有且只有两条把技能正文注入上下文的路径，**两条都会在会话日志里留下持久化事件**：
- *
- * 1. **模型自己加载**：调 `skill` 工具 → `tool/call` 事件，`data.name === 'skill'`，
- *    技能名在 `data.arguments` 里（dsh `packages/skill/tool-skill/src/index.ts:127-156`）。
- * 2. **用户显式加载**：输入 `/技能名` → `agent/pre-step` 往这一步注入一条 `user/message`，
- *    其 `source.kind === 'skill-invocation'`、`source.name` 就是技能名
- *    （同文件 `:177-204`，`SkillInvocationSource` 定义在 `skill/src/index.ts:148`）。
- *
- * `tool/call` 与 `user/message` 都在构建期常量 `KNOWN_SESSION_EVENT_TYPES` 里
- * （dsh `packages/core/session/src/known-event-types.ts:66,72`），
- * 而 `session.snapshotEvents()` 给出整段不可变日志 —— 所以统计覆盖**整个会话历史**，
- * dsh 重启、会话重开之后依然准确。
- *
- * ⚠️ 这正是 tools-inspector 踩过一次的坑的反面：docs/02 §13.2 说的是
- * 「插件不能 **append** 自己的**新事件类型**」，与「能不能 **读** dsh 自己的事件」
- * 是两码事 —— 读是完全可以的。
- *
- * ## ⚠️ `tool/call.arguments` 是**未解析的原始字符串**
- *
- * dsh 的注释写得很明确：「the raw `arguments` JSON string exactly as the model
- * produced it (unparsed)」（`session/src/types.ts:302-306`）。也就是说里面可能是
- * 半截 JSON、可能根本不是 JSON —— 模型产出什么就存什么。所以这里**必须**把
- * `JSON.parse` 包在 try 里：一条畸形的历史记录只应让那一条不计数，
- * 绝不能让整个「技能」tab 崩成错误页。
- *
- * 纯函数，不碰 ctx，便于测试。
+ * 回放会话日志，统计技能加载次数及发起方。
+ * dsh 有两条路径：模型调用 `skill` 产生 `tool/call`，用户输入 `/技能名` 产生
+ * `user/message`（`source.kind === 'skill-invocation'`）；两者都是持久化事件
+ * 事件定义见 `packages/skill/tool-skill/src/index.ts:127-204`。
+ * `tool/call.arguments` 是未解析 JSON 字符串，必须容错 `JSON.parse`，坏记录只跳过一条。
+ * 纯函数，不访问 ctx，便于测试。
  */
 
 import type { LoadedBy, LoadRecord } from './shared.js'
@@ -94,13 +70,9 @@ export function skillNameFromInvocation(data: unknown): string | undefined {
 }
 
 /**
- * 回放一段会话日志，数出每个技能被加载了多少次、由谁发起。
- *
- * 只认「加载成功」之外的事实：这里**不**去配对 `tool/result` 判断加载是否失败。
- * 理由是失败的加载（技能名写错、技能已不可用）不会把任何正文注入上下文，
- * 但它也确实没有污染上下文 —— 而 `tool/call` 是模型的**意图**记录。
- * 对「哪些技能的正文现在在上下文里」这个问题，把失败的那次算进去会高估，
- * 因此下面对模型路径**要求配对的 result 没有 error**。
+ * 回放会话日志，统计每个技能的加载次数及发起方。
+ * 模型调用通常要等 `tool/result` 确认没有 `error`；没有 callId 或结果尚未落盘时按已发起计入，
+ * 让正在加载的技能不会在列表中短暂消失。
  * @param events - 会话日志事件，顺序即日志顺序。
  * @returns 按技能名索引的加载记录与总次数。
  */

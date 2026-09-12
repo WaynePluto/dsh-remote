@@ -1,15 +1,6 @@
-/**
- * Copy for the services panel. Both dictionaries are complete by construction:
- * `en` defines the key set and `zh` is typed against it, so a missing
- * translation fails the build rather than falling back at runtime.
- *
- * Chinese copy follows this project's own vocabulary table
- * (`docs/01-decisions.md` §2.05).
- *
- * @module @dsh-remote/dsh-plugin-services/client/locales
- */
+/** services panel 文案；中文遵循 `docs/01-decisions.md` 词表。 */
 
-/** English copy; also the key set of this namespace. */
+/** 英文文案；同时作为本 namespace 的 key 集合。 */
 export const en = {
   title: 'Services',
   summaryRunning: '{count} running',
@@ -27,10 +18,10 @@ export const en = {
   failed: 'Failed: {message}',
 } as const
 
-/** One copy key of this namespace. */
+/** 本 namespace 的文案 key 类型。 */
 export type ServicesKey = keyof typeof en
 
-/** Simplified Chinese copy. */
+/** 中文文案，按 `en` 的 key 集合实现。 */
 export const zh: Record<ServicesKey, string> = {
   title: '常驻服务',
   summaryRunning: '{count} 个运行中',
@@ -48,12 +39,7 @@ export const zh: Record<ServicesKey, string> = {
   failed: '失败：{message}',
 }
 
-/**
- * Fill `{name}` placeholders in one copy string.
- * @param text - the translated string.
- * @param values - placeholder values by name.
- * @returns the filled string; an unknown placeholder is left as written.
- */
+/** 填充 `{name}` 等文案占位符；未知占位符保持原样。 */
 export function fill(text: string, values: Readonly<Record<string, string | number>>): string {
   return text.replace(/\{(\w+)\}/gu, (match, key: string) =>
     Object.hasOwn(values, key) ? String(values[key]) : match)

@@ -1,13 +1,6 @@
-import pino from 'pino'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  createAuthenticationService,
-  createRelayServer,
   generateTotp,
-  openRelayStore,
-  readCookie,
-  type RelayServer,
-  type RelayStore,
 } from '../src/index.js'
 import { ADMIN_PATH_PREFIX } from '../src/admin/console-app.js'
 import {
@@ -15,64 +8,63 @@ import {
   SETUP_CREATE_PATH,
   SETUP_PATH_PREFIX,
 } from '../src/admin/setup-app.js'
-import { httpRequest, setCookieArray, type HttpResult } from './helpers.js'
+import {
+  closeFixtures,
+  csrfTokensFromResponse,
+  httpRequest,
+  openCsrfPage,
+  postForm,
+  setCookieArray,
+  startRelayFixture,
+  type RelayTestFixture,
+  type HttpResult,
+} from './helpers.js'
 
 const JWT_SECRET = new Uint8Array(32).fill(0x5a)
 const PASSWORD = 'Correct horse battery staple 1'
-/** Socket is still loopback here; only the Host half of D15 is violated. */
+/** 此处 socket 仍是 loopback；只有 D15 的 Host 部分被违反。 */
 const LAN_HOST = '192.168.7.11'
 
-interface Fixture {
-  relay: RelayServer
-  port: number
-  store: RelayStore
-  loopbackHost: string
-  loopbackOrigin: string
-  lanHost: string
+interface Fixture extends RelayTestFixture {
+  readonly loopbackHost: string
+  readonly loopbackOrigin: string
+  readonly lanHost: string
 }
 
 const fixtures: Fixture[] = []
 
-/** A relay with browser authentication configured but not one account yet. */
+/** 已配置浏览器认证但尚未有账号的 relay。 */
 async function startFixture(): Promise<Fixture> {
-  const store = openRelayStore({ path: ':memory:' })
-  const authentication = await createAuthenticationService({ store, jwtSecret: JWT_SECRET })
-  const relay = createRelayServer({
-    host: '127.0.0.1',
-    port: 0,
-    directSlug: 'pc1',
-    publicScheme: 'http',
-    memberPortCount: 0,
-    streamConnectTimeoutMs: 2_000,
-    browserAuth: { cookieMode: 'lan-http' },
-  }, { authentication, logger: pino({ level: process.env.RELAY_TEST_LOG ?? 'silent' }), store })
-  const address = await relay.listen()
+  const base = await startRelayFixture({
+    jwtSecret: JWT_SECRET,
+    relay: {
+      directSlug: 'pc1',
+      publicScheme: 'http',
+      memberPortCount: 0,
+      streamConnectTimeoutMs: 2_000,
+      browserAuth: { cookieMode: 'lan-http' },
+    },
+  })
   const fixture: Fixture = {
-    relay,
-    port: address.port,
-    store,
-    loopbackHost: `127.0.0.1:${String(address.port)}`,
-    loopbackOrigin: `http://127.0.0.1:${String(address.port)}`,
-    lanHost: `${LAN_HOST}:${String(address.port)}`,
+    ...base,
+    loopbackHost: `127.0.0.1:${String(base.port)}`,
+    loopbackOrigin: `http://127.0.0.1:${String(base.port)}`,
+    lanHost: `${LAN_HOST}:${String(base.port)}`,
   }
   fixtures.push(fixture)
   return fixture
 }
 
-/** Load the wizard to obtain the double-submit CSRF cookie it issues. */
-async function openWizard(fixture: Fixture): Promise<{ body: string; csrf: string; csrfPair: string }> {
-  const page = await httpRequest({
-    port: fixture.port,
+/** 加载向导，以获取它签发的双提交 CSRF cookie。 */
+async function openWizard(fixture: Fixture) {
+  const page = await openCsrfPage(fixture, {
     path: SETUP_PATH_PREFIX,
-    headers: { host: fixture.loopbackHost, accept: 'text/html' },
+    host: fixture.loopbackHost,
+    csrfCookieName: 'dsh_csrf',
+    label: 'wizard',
   })
   expect(page.status, page.body).toBe(200)
-  const setCookie = setCookieArray(page.headers).find(header => header.includes('dsh_csrf='))
-  if (setCookie === undefined) throw new Error('the wizard did not issue a CSRF cookie')
-  const csrfPair = setCookie.split(';', 1)[0] ?? ''
-  const csrf = readCookie(csrfPair, 'dsh_csrf')
-  if (csrf === undefined) throw new Error('could not parse the CSRF cookie')
-  return { body: page.body, csrf, csrfPair }
+  return page
 }
 
 function submit(fixture: Fixture, options: {
@@ -82,22 +74,16 @@ function submit(fixture: Fixture, options: {
   cookie?: string
   fields: Record<string, string>
 }): Promise<HttpResult> {
-  const headers: Record<string, string> = {
+  return postForm(fixture, {
+    path: options.path,
     host: options.host ?? fixture.loopbackHost,
     origin: options.origin ?? fixture.loopbackOrigin,
-    'content-type': 'application/x-www-form-urlencoded',
-  }
-  if (options.cookie !== undefined) headers.cookie = options.cookie
-  return httpRequest({
-    port: fixture.port,
-    path: options.path,
-    method: 'POST',
-    headers,
-    body: new URLSearchParams(options.fields).toString(),
+    ...(options.cookie === undefined ? {} : { cookie: options.cookie }),
+    fields: options.fields,
   })
 }
 
-/** The enrollment secret is rendered in exactly one element, exactly once. */
+/** 注册 secret 只在一个元素中渲染一次。 */
 function secretFromPage(body: string): string {
   const matches = [...body.matchAll(/<p class="otp">([^<]+)<\/p>/g)]
   expect(matches).toHaveLength(1)
@@ -106,7 +92,7 @@ function secretFromPage(body: string): string {
   return grouped.replaceAll(' ', '')
 }
 
-/** Walk the wizard end to end; several cases need a finished relay. */
+/** 端到端走完向导；若干测试需要已完成设置的 relay。 */
 async function completeSetup(fixture: Fixture): Promise<{ secret: string }> {
   const { csrf, csrfPair } = await openWizard(fixture)
   const created = await submit(fixture, {
@@ -116,10 +102,10 @@ async function completeSetup(fixture: Fixture): Promise<{ secret: string }> {
   })
   expect(created.status, created.body).toBe(200)
   const secret = secretFromPage(created.body)
-  const nextCookie = setCookieArray(created.headers).find(header => header.includes('dsh_csrf='))
-  const nextPair = nextCookie?.split(';', 1)[0] ?? ''
-  const nextCsrf = readCookie(nextPair, 'dsh_csrf')
-  if (nextCsrf === undefined) throw new Error('the enrollment step issued no CSRF cookie')
+  const { csrf: nextCsrf, csrfPair: nextPair } = csrfTokensFromResponse(created, {
+    cookieName: 'dsh_csrf',
+    label: 'enrollment step',
+  })
   const confirmed = await submit(fixture, {
     path: SETUP_CONFIRM_PATH,
     cookie: nextPair,
@@ -131,10 +117,7 @@ async function completeSetup(fixture: Fixture): Promise<{ secret: string }> {
 }
 
 afterEach(async () => {
-  await Promise.all(fixtures.splice(0).map(async (fixture) => {
-    await fixture.relay.close()
-    fixture.store.close()
-  }))
+  await closeFixtures(fixtures)
 })
 
 describe('first-run setup wizard', () => {
@@ -144,10 +127,10 @@ describe('first-run setup wizard', () => {
     const { body } = await openWizard(fixture)
     expect(body).toContain('创建管理员账号')
     expect(body).toContain(`action="${SETUP_CREATE_PATH}"`)
-    // The account name is a real field, pre-filled: an operator who never reads
-    // the hint still sees which name the login form will ask for.
+    // 账号名是真实字段且已预填：即使操作员从不阅读
+    // 提示，也能看到登录表单将要求的名称。
     expect(body).toContain('name="username" value="admin"')
-    // No login form: there is no account that could satisfy one yet.
+    // 没有登录表单：目前还没有能通过登录的账号。
     expect(body).not.toContain('/_auth/login')
 
     const root = await httpRequest({
@@ -174,7 +157,7 @@ describe('first-run setup wizard', () => {
     expect(page.body).toContain(`http://127.0.0.1:${String(fixture.port)}${SETUP_PATH_PREFIX}`)
     expect(page.body).not.toContain(`action="${SETUP_CREATE_PATH}"`)
 
-    // Even carrying a CSRF pair minted on loopback, the LAN cannot claim it.
+    // 即使携带在 loopback 上签发的 CSRF 对，局域网也不能认领它。
     const forged = await submit(fixture, {
       path: SETUP_CREATE_PATH,
       host: fixture.lanHost,
@@ -262,7 +245,7 @@ describe('first-run setup wizard', () => {
     const created = await submit(fixture, {
       path: SETUP_CREATE_PATH,
       cookie: csrfPair,
-      // Surrounding whitespace is trimmed, the way the login form trims it too.
+      // 首尾空白会被去除，和登录表单的处理方式相同。
       fields: { csrf, username: '  Wei.Lu  ', password: PASSWORD, confirmPassword: PASSWORD },
     })
     expect(created.status, created.body).toBe(200)
@@ -280,7 +263,7 @@ describe('first-run setup wizard', () => {
       fields: { csrf, username: 'admin', password: PASSWORD, confirmPassword: PASSWORD },
     })
     expect(created.status, created.body).toBe(200)
-    // Inline SVG, so the page needs no img-src exception in the CSP.
+    // 使用内联 SVG，因此页面的 CSP 无需 img-src 例外。
     expect(created.headers['content-security-policy']).toContain("default-src 'none'")
     expect(created.body).toContain('<svg')
     expect(created.body).not.toContain('data:image')
@@ -290,8 +273,8 @@ describe('first-run setup wizard', () => {
     const staged = fixture.store.getUserByUsername('admin')
     expect(staged).toMatchObject({ totpSecret: secret, totpEnabled: false })
 
-    // Reloading the enrollment step must re-draw the same staged secret rather
-    // than mint a new one and invalidate the code just scanned.
+    // 重新加载注册步骤必须重绘同一个暂存 secret，而不是
+    // 签发新的 secret 并使刚扫描的动态码失效。
     const reloaded = await openWizard(fixture)
     expect(secretFromPage(reloaded.body)).toBe(secret)
 
@@ -339,7 +322,7 @@ describe('first-run setup wizard', () => {
     expect(create.status).toBeGreaterThanOrEqual(303)
     expect(fixture.store.countUsers()).toBe(1)
 
-    // A remote browser now gets the ordinary login flow, never the 503 page.
+    // 远程浏览器现在会进入普通登录流程，而不是 503 页面。
     const remote = await httpRequest({
       port: fixture.port,
       path: '/',

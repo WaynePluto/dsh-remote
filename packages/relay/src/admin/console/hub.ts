@@ -8,21 +8,21 @@ import {
   formatTime,
 } from './shell.js'
 
-/** Mirrors `membershipSchema`, so a typo is caught with a readable message. */
+/** 与 `membershipSchema` 对齐，使拼写错误能以可读消息被捕获。 */
 export const MIN_ENROLL_TOKEN_LENGTH = 16
 
 /**
- * This machine's remote entry, if it has one.
+ * 这台机器的远程入口（如果有）。
  *
- * D16 allows at most one: a machine is reachable through its own address plus
- * at most one other machine's address, never a chain of them.
+ * D16 最多允许一个：机器可以通过自己的地址以及最多一个其他机器的地址访问，
+ * 不能形成链。
  */
 export type MembershipView =
   | { readonly kind: 'none' }
   | { readonly kind: 'joined'; readonly hub: MembershipHub }
   | { readonly kind: 'unreadable'; readonly message: string }
 
-/** ws/wss only: the connector dials out, it never fetches over HTTP. */
+/** 仅支持 ws/wss：connector 向外拨号，从不通过 HTTP 获取。 */
 export function isHubRelayUrl(value: string): boolean {
   if (value === '') return false
   try {
@@ -34,9 +34,8 @@ export function isHubRelayUrl(value: string): boolean {
 }
 
 /**
- * dsh accepts `--trusted-host` only as a bare `host` or `host:port`; a scheme,
- * a path or a trailing colon makes dsh fail while loading its plugins rather
- * than at request time, which is a far harder failure to diagnose remotely.
+ * dsh 的 `--trusted-host` 只接受裸 `host` 或 `host:port`；scheme、路径或末尾冒号
+ * 会让 dsh 在加载插件时失败，而不是在请求时失败，远程诊断会困难得多。
  */
 export function isBrowserAuthority(value: string): boolean {
   if (value.includes('://') || /[\s/\\?#@]/u.test(value)) return false
@@ -60,8 +59,8 @@ function entryCard(view: MembershipView, machine: string): string {
   const authority = hub.browserAuthority === undefined
     ? '<br>入口机器的浏览器地址 命令里没带（远程访问暂时用不了，回入口机器重新签一个令牌并重粘整条命令）'
     : `<br>入口机器的浏览器地址 ${escapeHtml(hub.browserAuthority)}`
-  // The token itself is never rendered: it is a bearer secret and the page it
-  // would sit on gets reloaded, screenshotted and shoulder-surfed.
+  // 令牌本身从不渲染：它是 bearer secret，而承载它的页面
+  // 可能被刷新、截图或被旁人窥视。
   const token = hub.enrollToken === undefined
     ? `<br>注册令牌 无（入口机器已经认识 ${name} 的设备密钥时不需要）`
     : '<br>注册令牌 已保存，等待入口机器接受（出于安全不显示）'
@@ -73,12 +72,10 @@ function entryCard(view: MembershipView, machine: string): string {
 }
 
 /**
- * The remote entry page: which machine's address this one can also be opened
- * from, and the one field that sets it.
- * @param options The current remote entry, the CSRF token the form carries,
- * this machine's own name, the signed-in user, the appearance to render in and
- * an error from a rejected submit.
- * @returns A complete HTML document.
+ * 远程入口页面：这台机器还可以从哪台机器的地址打开，以及设置它的唯一字段。
+ * @param options 当前远程入口、表单携带的 CSRF token、这台机器自己的名称、
+ * 登录用户、要渲染的外观以及提交被拒绝时的错误。
+ * @returns 完整的 HTML 文档。
  */
 export function hubPage(options: {
   view: MembershipView

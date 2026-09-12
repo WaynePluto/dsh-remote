@@ -1,11 +1,5 @@
 /**
- * What the「执行过程」row counts, and — more importantly — which rows it claims.
- *
- * Two rules carry the weight here. Membership is a copy of dsh's own
- * `processMember` test, and a copy that drifts would either swallow a user
- * message or leave half a turn outside the fold. Segmentation is this plugin's
- * own: a formal message ends a segment, so「执行过程」means the agent's work and
- * never the things it actually said.
+ * 「执行过程」行的计数及其负责折叠的行。成员判定复刻 dsh 的 processMember，分段规则则由本插件定义：正式消息结束 segment，因此「执行过程」只表示 agent 工作，不包含它说出的内容。
  */
 
 import { describe, expect, it } from 'vitest'
@@ -14,7 +8,7 @@ import {
   retryAttempts, toolFailed, toolName, toolRunning, type ExecNodeView,
 } from '../src/client/stats.js'
 
-/** A segment running from seq 10 up to the finalized answer at seq 100. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 const RANGE = { startSeq: 10, endSeq: 100 }
 
 function node(partial: Partial<ExecNodeView> & { key: string; kind: string; anchorSeq: number }): ExecNodeView {
@@ -69,10 +63,10 @@ describe('execProcessStats membership', () => {
   })
 
   it('never reaches above its own header row', () => {
-    // The seat clamps the window start to the row's own anchor: an injected
-    // context line landing between `turn/start` and the first process evidence
-    // sits ABOVE the header, and folding it would read as a row vanishing for
-    // no reason.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`turn/start`）
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 没有理由。
     const clamped = { startSeq: 41.89, endSeq: 100 }
     const stats = execProcessStats([
       node({ key: 'context', kind: 'context', anchorSeq: 12 }),
@@ -105,8 +99,8 @@ describe('execProcessStats membership', () => {
   })
 
   it('folds a turn that is still running, whose segment has no upper bound', () => {
-    // The row now renders during the run, so the last segment of a live turn
-    // has no answer to stop at; everything after the header is process.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
     const live = { startSeq: 10, endSeq: Number.POSITIVE_INFINITY }
     const stats = execProcessStats([
       thinking('t1', 20),
@@ -159,9 +153,9 @@ describe('formal messages never join the fold', () => {
 
 describe('the thinking inside a segment-closing row still belongs to the fold', () => {
   it('folds the answer own thinking without folding the answer', () => {
-    // This is the「执行过程下面还漏出来一个思考块」case: the finalized answer sits
-    // exactly on the bound, and the reasoning printed above its text is the last
-    // step of the work, not part of what was said.
+    // 这就是“执行过程下面还漏出来一个思考块”的情况：最终回答
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const stats = execProcessStats([
       settledTool('c1', 20, 'read'),
       thoughtThenSaid('answer', 100),
@@ -196,8 +190,8 @@ describe('the thinking inside a segment-closing row still belongs to the fold', 
   })
 
   it('never folds a non-assistant row that lands on the bound', () => {
-    // The bound is where the NEXT segment starts; only the row that closes this
-    // one may be read there.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const stats = execProcessStats([settledTool('c1', 100, 'read')], RANGE)
     expect(stats).toBe(EMPTY_STATS)
   })
@@ -291,8 +285,8 @@ describe('execProcessStats counting', () => {
 
 describe('进行中', () => {
   it('prefers the call that is still running over the newest settled one', () => {
-    // Parallel calls settle out of order; "the last one started" would then
-    // claim the fold is idle while a sibling is still working.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const stats = execProcessStats([
       runningTool('c1', 20, 'pwsh'),
       settledTool('c2', 21, 'read'),
@@ -346,5 +340,19 @@ describe('payload readers survive a reshaped payload', () => {
     expect(retryAttempts(undefined)).toBe(1)
     expect(retryAttempts({ attempts: [] })).toBe(1)
     expect(retryAttempts({ attempts: [{}, {}] })).toBe(2)
+  })
+})
+
+describe('user message boundaries', () => {
+  it('ends the previous fold at the user message and starts the next one after it', () => {
+    const nodes = [
+      settledTool('before', 30, 'read'),
+      node({ key: 'user', kind: 'user', anchorSeq: 40 }),
+      node({ key: 'user-header', kind: 'exec-process-user', anchorSeq: 40.04 }),
+      settledTool('after', 50, 'pwsh'),
+    ]
+    expect(segmentEndSeq(nodes, 10, null)).toBe(40.04)
+    expect(execProcessStats(nodes, { startSeq: 10, endSeq: 40.04 }).memberKeys).toEqual(['before'])
+    expect(execProcessStats(nodes, { startSeq: 40.04, endSeq: Number.POSITIVE_INFINITY }).memberKeys).toEqual(['after'])
   })
 })

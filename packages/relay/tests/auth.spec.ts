@@ -17,7 +17,7 @@ import {
 } from '../src/index.js'
 
 const VALID_PASSWORD = 'Correct horse battery staple 1'
-/** A point centered in a 30-second period, avoiding boundary-sensitive tests. */
+/** 位于 30 秒周期中心的时间点，避免测试受边界影响。 */
 const NOW = 1_800_000_015_000
 
 describe('scrypt passwords', () => {
@@ -67,14 +67,14 @@ describe('scrypt passwords', () => {
   })
 
   it('requires three of the four character classes, however long the password is', async () => {
-    // Two classes only, at both the short and the long end.
+    // 只有两类字符，分别测试短密码和长密码。
     await expect(hashPassword('abcdef')).rejects.toBeInstanceOf(PasswordPolicyError)
     await expect(hashPassword('abcdef123')).rejects.toMatchObject({ reason: 'not-varied-enough' })
     await expect(hashPassword('a very long but single case passphrase'))
       .rejects.toMatchObject({ reason: 'not-varied-enough' })
 
-    // Three classes, exactly at the minimum length; the fourth combination
-    // proves "other" covers symbols and scripts without case alike.
+    // 三类字符，长度恰好达到下限；第四种组合
+    // 证明“other”同时覆盖符号和不区分大小写的文字。
     await expect(hashPassword('Ab1xyz')).resolves.toContain('$scrypt$')
     await expect(hashPassword('ab1-cd')).resolves.toContain('$scrypt$')
     await expect(hashPassword('AB1-CD')).resolves.toContain('$scrypt$')

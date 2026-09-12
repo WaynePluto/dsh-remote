@@ -1,9 +1,9 @@
-// Win32 bindings for the tray launcher.
+// 托盘启动器的 Win32 绑定。
 //
-// Everything is reached through syscall.NewLazyDLL rather than a helper module:
-// the green package must stay free of dependencies (铁律 3), and every pixel
-// this program shows is drawn by Windows itself — there is no drawing code
-// anywhere in this directory, only calls into user32 / shell32 / kernel32.
+// 所有调用都通过 syscall.NewLazyDLL 进入，而不是依赖辅助模块：
+// 绿色包必须不带依赖（铁律 3），本程序显示的每个像素
+// 都由 Windows 自己绘制；
+// 本目录没有绘图代码，只有对 user32 / shell32 / kernel32 的调用。
 package main
 
 import (
@@ -70,7 +70,7 @@ const (
 	wmRButtonUp     uint32 = 0x0205
 	wmContextMenu   uint32 = 0x007B
 
-	// Balloon click, delivered only when the icon asks for NOTIFYICON_VERSION.
+	// 仅当图标请求 NOTIFYICON_VERSION 时才会收到的气球通知点击。
 	ninBalloonUserClick uint32 = 0x0405
 
 	nimAdd        uint32 = 0x00000000
@@ -85,8 +85,8 @@ const (
 
 	niifInfo uint32 = 0x00000001
 
-	// Version 3 keeps the classic message packing (lParam is the mouse
-	// message) while enabling the balloon notifications version 0 lacks.
+	// 版本 3 保留经典的消息打包方式（lParam 是鼠标
+	// 消息），同时启用版本 0 不具备的气球通知。
 	notifyIconVersion uint32 = 3
 
 	mfString    uintptr = 0x00000000
@@ -111,8 +111,8 @@ const (
 	lrDefaultSize uintptr = 0x00000040
 	lrShared      uintptr = 0x00008000
 
-	// The icon group id written by packaging/make-icons.mjs. Passed to
-	// LoadImage as MAKEINTRESOURCE, which is just the integer itself.
+	// packaging/make-icons.mjs 写入的图标组 ID。它会传给
+	// LoadImage 作为 MAKEINTRESOURCE，而它本身就是这个整数。
 	appIconResourceID uintptr = 1
 
 	idiApplication uintptr = 32512
@@ -123,8 +123,8 @@ const (
 
 	errorAlreadyExists syscall.Errno = 183
 
-	// Console applications started by this GUI process get an invisible console
-	// of their own, which is what makes the graceful Ctrl+C shutdown in stack.go possible.
+	// 此 GUI 进程启动的控制台应用会获得一个不可见的控制台；
+	// 这正是 stack.go 中温和处理 Ctrl+C 关闭的基础。
 	createNoWindow uint32 = 0x08000000
 
 	ctrlCEvent uintptr = 0
@@ -218,9 +218,9 @@ type jobObjectExtendedLimitInformation struct {
 	peakJobMemoryUsed     uintptr
 }
 
-// utf16Ptr converts to the UTF-16 every W entry point expects. A string with an
-// embedded NUL is the only failure, and none of the literals here has one, so
-// the error collapses into an empty string rather than into every call site.
+// utf16Ptr 转换为所有 W 入口点要求的 UTF-16。包含
+// 内嵌 NUL 是唯一会失败的情况，而这里的字面量都没有它，因此
+// 错误会在此处折叠为空字符串，不会扩散到每个调用点。
 func utf16Ptr(text string) *uint16 {
 	pointer, err := syscall.UTF16PtrFromString(text)
 	if err != nil {
@@ -230,8 +230,8 @@ func utf16Ptr(text string) *uint16 {
 	return pointer
 }
 
-// setUTF16 fills one of the fixed-size fields of NOTIFYICONDATAW, truncating
-// rather than overflowing; the trailing NUL is what Windows reads to stop.
+// setUTF16 填充 NOTIFYICONDATAW 的固定大小字段，必要时截断
+// 而不是溢出；末尾的 NUL 告诉 Windows 在哪里停止读取。
 func setUTF16(destination []uint16, text string) {
 	units := utf16.Encode([]rune(text))
 	if len(units) > len(destination)-1 {
@@ -250,9 +250,9 @@ func messageBox(text string, caption string, flags uint32) {
 	)
 }
 
-// shellOpen hands a URL or a file to whatever the user configured for it.
-// Only ever called from a menu item: the launcher never opens a browser on its
-// own (D6).
+// shellOpen 将 URL 或文件交给用户为其配置的程序。
+// 它只会由菜单项调用：launcher 不会自行
+// 打开浏览器（D6）。
 func shellOpen(target string) error {
 	verb := utf16Ptr("open")
 	file := utf16Ptr(target)
@@ -264,16 +264,16 @@ func shellOpen(target string) error {
 		0,
 		swShowNormal,
 	)
-	// ShellExecuteW reports success as "greater than 32"; the values at or below
-	// that are its error codes, not handles.
+	// ShellExecuteW 以“大于 32”表示成功；小于或等于该值的
+	// 数字是错误码，不是句柄。
 	if result > 32 {
 		return nil
 	}
 	return fmt.Errorf("ShellExecuteW 返回 %d", result)
 }
 
-// shellOpenWith runs one specific program on a file, for when the file type has
-// no association at all and shellOpen would only offer the "open with" dialog.
+// shellOpenWith 在文件类型完全没有关联时，使用指定程序打开文件；
+// 否则 shellOpen 只会提供“打开方式”对话框。
 func shellOpenWith(program string, argument string) error {
 	verb := utf16Ptr("open")
 	file := utf16Ptr(program)
@@ -292,9 +292,9 @@ func shellOpenWith(program string, argument string) error {
 	return fmt.Errorf("ShellExecuteW 返回 %d", result)
 }
 
-// acquireSingleInstance returns the mutex handle plus whether somebody already
-// holds it. Two stacks would fight over the same ports, so the second copy has
-// to say so and leave.
+// acquireSingleInstance 返回互斥体句柄，并说明是否已有其他实例持有它。
+// 两个 stack 会争用相同端口，因此第二个副本必须提示用户
+// 后退出。
 func acquireSingleInstance(name string) (syscall.Handle, bool, error) {
 	handle, _, err := procCreateMutexW.Call(0, 0, uintptr(unsafe.Pointer(utf16Ptr(name))))
 	if handle == 0 {
@@ -303,11 +303,11 @@ func acquireSingleInstance(name string) (syscall.Handle, bool, error) {
 	return syscall.Handle(handle), err == errorAlreadyExists, nil
 }
 
-// createKillOnCloseJob makes the job every child of one run is assigned to.
-// JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE is the whole point: the tray process holds
-// the only handle, so if it is killed outright — no chance to run any cleanup —
-// Windows still takes dsh, the relay, the connector and every shell dsh spawned
-// down with it. taskkill can only ever be the polite path, never the guarantee.
+// createKillOnCloseJob 为一次运行创建作业对象，并把该运行的每个子进程归入其中。
+// JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE 的关键是：托盘进程持有
+// 唯一句柄，因此即使它被直接杀掉、来不及执行清理，
+// Windows 仍会连同 dsh、relay、connector 以及 dsh 派生的所有 shell 一起
+// 结束。taskkill 只能作为温和路径，不能作为最终保证。
 func createKillOnCloseJob() (syscall.Handle, error) {
 	handle, _, err := procCreateJobObjectW.Call(0, 0)
 	if handle == 0 {
@@ -345,16 +345,16 @@ func terminateJob(job syscall.Handle) {
 	procTerminateJobObject.Call(uintptr(job), 1)
 }
 
-// requestConsoleShutdown asks the launcher to shut down the way Ctrl+C in a
-// terminal does, which is the only shutdown it implements (SIGINT), and the one
-// that stops connector -> relay -> dsh in that order.
+// requestConsoleShutdown 要求 launcher 像终端里的 Ctrl+C 一样关闭；
+// 这是它唯一实现的关闭方式（SIGINT），也会
+// 按 connector -> relay -> dsh 的顺序停止。
 //
-// A -H windowsgui process has no console, so it cannot signal anyone; borrowing
-// the child's own (invisible, from CREATE_NO_WINDOW) console is what makes this
-// possible. The event goes to every process on that console, which is exactly
-// what pressing Ctrl+C in a terminal running the stack does too. The ignore flag
-// is set before attaching, because the event would otherwise come back to this
-// process and the Go runtime would exit on it.
+// -H windowsgui 进程没有控制台，无法向其他进程发信号；借用
+// 子进程自己的控制台（由 CREATE_NO_WINDOW 创建且不可见）才能做到。
+// 事件会发送给该控制台上的每个进程，和在终端
+// 运行 stack 时按 Ctrl+C 完全一样。必须在附加前设置忽略标志，
+// 否则事件会传回本进程，
+// Go runtime 会因此退出。
 func requestConsoleShutdown(pid int) bool {
 	procSetConsoleCtrlHandler.Call(0, 1)
 	defer procSetConsoleCtrlHandler.Call(0, 0)
@@ -368,15 +368,15 @@ func requestConsoleShutdown(pid int) bool {
 	return sent != 0
 }
 
-// registerTaskbarCreatedMessage returns the broadcast Explorer sends after it
-// restarts; every tray icon has to be added again when it arrives.
+// registerTaskbarCreatedMessage 返回 Explorer 重启后发送的广播消息；
+// 消息到达时必须重新添加每个托盘图标。
 func registerTaskbarCreatedMessage() uint32 {
 	message, _, _ := procRegisterWindowMessage.Call(uintptr(unsafe.Pointer(utf16Ptr("TaskbarCreated"))))
 	return uint32(message)
 }
 
-// moduleHandle is the HINSTANCE of this executable, which RegisterClassEx and
-// CreateWindowEx both want.
+// moduleHandle 返回本可执行文件的 HINSTANCE，这是 RegisterClassEx 和
+// CreateWindowEx 都需要的值。
 func moduleHandle() (syscall.Handle, error) {
 	handle, _, err := procGetModuleHandleW.Call(0)
 	if handle == 0 {

@@ -1,31 +1,18 @@
 /**
- * 「技能」视图：本会话有哪些技能、来自哪一层、agent 已经加载了哪些。
+ * 「技能」视图：展示本会话的技能目录、来源和加载历史。
  *
- * ## 设计取舍
- *
- * - **与「工具」tab 共用一套视觉语言**（13px、`●/○` 字形状态、分组细线、
- *   等宽名字列）。两个诊断 tab 应当互为姊妹，而不是两种风格。
- * - **「已加载」独立成第一组**，不做成一个状态列：用户切到这个 tab 想问的
- *   第一个问题就是它。按最近加载时间倒序，第一屏顶部直接给答案。
- * - **未加载的按来源分组**：「全局还是项目级」用分组标题回答，比每行挂 badge
- *   干净得多。组标题 =「中文人话 + 灰色真实路径」，一次讲完概念与磁盘位置。
- * - **加载方式用「模型 / 用户」两字标注，不用图标**：这是 dsh 事件里实打实的
- *   区分（`tool/call` vs `skill-invocation`），比任何图标都好懂。
- * - **状态靠字形不靠颜色**：`●` 已加载 / `○` 未加载。深色主题下颜色容易翻车
- *   （docs/02 §8.6），字形不会。
- * - **默认收起，点击整行才展开**，保证清爽。
- *
- * ## ⚠️「在本机打开」为什么是条件显示
- *
- * `session.openWorkspacePath` 打开的是**宿主机**的桌面 —— 对手机远程用户完全
- * 不可见（本项目的主场景就是远程）。所以先用 dsh 自己的
- * `session.canOpenWorkspacePath()` 探测，能开才显示按钮；任何情况下路径本身
- * 都以等宽小字显示且可选中复制。否则会做出一个在手机上点了没反应的按钮。
+ * 「已加载」单独置顶并按最近加载排序，未加载项按来源分组；`●/○` 表示加载状态。
+ * `session.openWorkspacePath` 打开宿主机桌面，远程用户不可见，因此先调用
+ * `session.canOpenWorkspacePath()`，只在可用时显示「在本机打开」。
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { CSSProperties, ReactElement } from 'react'
-
+import {
+  INSPECTOR_MONO, INSPECTOR_PRIMARY, INSPECTOR_SECONDARY, INSPECTOR_TERTIARY,
+  inspectorGroupHeadingStyle, inspectorStyles, useInspectorPolling,
+} from '@dsh-remote/plugin-ui'
+import { Button, Input, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
   filterEntries, groupBySource, sortLoaded,
   type SkillEntry, type SkillLocation, type SkillSource, type SkillsSnapshot,
@@ -53,112 +40,34 @@ export function sourceKeys(source: SkillSource): { title: SkillsKey; hint: Skill
     : { title: 'source.unknown', hint: 'source.unknown.hint' }
 }
 
-/**
- * ⚠️ 主题变量名严格照 dsh 的拼写。写错不会告警，只会静默用逗号后的兜底值 ——
- * `--dsw-alias-border-l1` 是字母 L 不是数字 1（docs/02 §8.6）。
- *
- * 等宽必须写**完整兜底栈**：`--dsw-font-mono` 是 dsh 引用了四处、定义了零处的名字，
- * 所有人一直在吃兜底，只写 `ui-monospace, monospace` 在 Windows 上会掉到浏览器
- * 默认 fixed 字体（docs/02 §8.6b）。
- */
-const BORDER = 'var(--dsw-alias-border-l1, rgba(128,128,128,0.3))'
-const PRIMARY = 'var(--dsw-alias-label-primary, inherit)'
-const SECONDARY = 'var(--dsw-alias-label-secondary, #6b7280)'
-const TERTIARY = 'var(--dsw-alias-label-tertiary, #6b7280)'
-const WARN = 'var(--dsw-alias-state-warning-primary, #b45309)'
+const {
+  root: rootStyle,
+  toolbar: barStyle,
+  summary: summaryStyle,
+  searchSlot: searchSlotStyle,
+  searchInput: searchInputStyle,
+  scroll: scrollStyle,
+  rule: ruleStyle,
+  row: rowStyle,
+  glyph: glyphStyle,
+  description: descStyle,
+  groupHint: groupHintStyle,
+  note: noteStyle,
+  state: stateStyle,
+} = inspectorStyles
+const groupHeadStyle = inspectorGroupHeadingStyle('baseline', 'normal')
+const PRIMARY = INSPECTOR_PRIMARY
+const SECONDARY = INSPECTOR_SECONDARY
+const TERTIARY = INSPECTOR_TERTIARY
+const MONO = INSPECTOR_MONO
+const WARN = 'var(--dsw-alias-state-warn-label, #b45309)'
 const ERROR = 'var(--dsw-alias-state-error-primary, #dc2626)'
-const MONO = 'var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)'
-
-const rootStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  height: '100%',
-  minHeight: 0,
-  fontSize: '13px',
-  lineHeight: 1.5,
-  color: PRIMARY,
-}
-
-const barStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '12px',
-  flex: 'none',
-  padding: '10px 16px',
-  borderBottom: `0.5px solid ${BORDER}`,
-}
-
-const summaryStyle: CSSProperties = { color: SECONDARY, whiteSpace: 'nowrap' }
-
-const searchStyle: CSSProperties = {
-  marginLeft: 'auto',
-  minWidth: 0,
-  width: '180px',
-  padding: '4px 8px',
-  borderRadius: '6px',
-  border: `0.5px solid ${BORDER}`,
-  background: 'transparent',
-  color: 'inherit',
-  font: 'inherit',
-  outline: 'none',
-}
-
-const scrollStyle: CSSProperties = { flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }
-
-const groupHeadStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'baseline',
-  gap: '8px',
-  padding: '10px 16px 4px',
-  color: TERTIARY,
-  fontSize: '12px',
-  fontWeight: 'normal',
-}
-
-/** 组标题右侧那条灰色路径：把「概念」落到「磁盘位置」。 */
-const groupHintStyle: CSSProperties = { fontFamily: MONO, fontSize: '11px', opacity: 0.8 }
-
-/** 分组标题右侧那条填满剩余宽度的细线，替代一个空洞的标题行。 */
-const ruleStyle: CSSProperties = { flex: '1 1 auto', height: '0.5px', background: BORDER }
-
-const rowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'baseline',
-  gap: '10px',
-  width: '100%',
-  padding: '5px 16px',
-  border: 'none',
-  background: 'transparent',
-  color: 'inherit',
-  font: 'inherit',
-  textAlign: 'left',
-  cursor: 'pointer',
-  boxSizing: 'border-box',
-  minWidth: 0,
-}
-
-const glyphStyle: CSSProperties = {
-  flex: 'none',
-  width: '10px',
-  color: TERTIARY,
-  fontSize: '11px',
-}
-
 const nameStyle: CSSProperties = {
   flex: 'none',
   fontFamily: MONO,
   // 等宽 + 固定宽度让名字成一列；超长名字自然溢出到描述前面，不截断
   // （技能名被截断就没法搜了，比描述被截断严重得多）。
   minWidth: '168px',
-}
-
-const descStyle: CSSProperties = {
-  flex: '1 1 auto',
-  minWidth: 0,
-  color: SECONDARY,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
 }
 
 /** 已加载行右侧的「模型 / 用户 ×2」微标，右对齐成一列。 */
@@ -171,15 +80,10 @@ const byStyle: CSSProperties = {
   whiteSpace: 'nowrap',
 }
 
-/** 「仅用户可调用」这类可见性微标。 */
-const badgeStyle: CSSProperties = {
+/** 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。*/
+const badgeSlotStyle: CSSProperties = {
+  display: 'inline-flex',
   flex: 'none',
-  color: TERTIARY,
-  fontSize: '11px',
-  border: `0.5px solid ${BORDER}`,
-  borderRadius: '4px',
-  padding: '0 4px',
-  whiteSpace: 'nowrap',
 }
 
 const detailStyle: CSSProperties = {
@@ -201,6 +105,14 @@ const detailRowStyle: CSSProperties = {
 
 const detailLabelStyle: CSSProperties = { flex: 'none', color: TERTIARY }
 
+const detailTextStyle: CSSProperties = {
+  flex: '1 1 auto',
+  minWidth: 0,
+  color: PRIMARY,
+  whiteSpace: 'pre-wrap',
+  overflowWrap: 'anywhere',
+}
+
 /** 路径本身：等宽、可选中复制 —— 远程用户唯一能用的那条信息。 */
 const pathStyle: CSSProperties = {
   fontFamily: MONO,
@@ -211,31 +123,12 @@ const pathStyle: CSSProperties = {
   minWidth: 0,
 }
 
-const openButtonStyle: CSSProperties = {
-  flex: 'none',
-  padding: '1px 8px',
-  borderRadius: '5px',
-  border: `0.5px solid ${BORDER}`,
-  background: 'transparent',
-  color: 'inherit',
-  font: 'inherit',
-  fontSize: '11px',
-  cursor: 'pointer',
-}
+/** 实现说明：此处记录相关接口、边界和生命周期约束。*/
+const openButtonStyle: CSSProperties = { flex: 'none' }
 
 const errorTextStyle: CSSProperties = { color: ERROR }
 
-const noteStyle: CSSProperties = {
-  flex: 'none',
-  padding: '10px 16px',
-  borderTop: `0.5px solid ${BORDER}`,
-  color: TERTIARY,
-  fontSize: '12px',
-}
-
 const warnStyle: CSSProperties = { color: WARN }
-
-const stateStyle: CSSProperties = { padding: '24px 16px', color: TERTIARY }
 
 /** 本视图从自己的注册里拿到的东西。 */
 export interface SkillsViewInjected {
@@ -263,7 +156,7 @@ interface LocationState {
 }
 
 /**
- * 渲染一行技能的展开区：何时使用、来源、本地文件路径。
+ * 渲染一行技能的展开区：完整描述、何时使用、来源、本地文件路径。
  * @param props - 条目、定位状态、打开能力与回调。
  * @returns 展开区元素。
  */
@@ -277,6 +170,10 @@ function SkillDetail({ entry, location, canOpen, onOpen, t }: {
   const keys = sourceKeys(entry.source)
   return (
     <div style={detailStyle}>
+      <div style={detailRowStyle}>
+        <span style={detailLabelStyle}>{t('descriptionLabel')}:</span>
+        <span style={detailTextStyle}>{entry.fullDescription || t('noDescription')}</span>
+      </div>
       {entry.whenToUse === undefined
         ? null
         : (
@@ -304,8 +201,9 @@ function SkillDetail({ entry, location, canOpen, onOpen, t }: {
                     <span style={pathStyle}>{location.location.path}</span>
                     {canOpen
                       ? (
-                          <button
-                            type="button"
+                          <Button
+                            variant="outline"
+                            size="sm"
                             style={openButtonStyle}
                             onClick={(event) => {
                               event.stopPropagation()
@@ -313,7 +211,7 @@ function SkillDetail({ entry, location, canOpen, onOpen, t }: {
                             }}
                           >
                             {t('openLocal')}
-                          </button>
+                          </Button>
                         )
                       : null}
                   </>
@@ -350,7 +248,7 @@ function SkillRow({ entry, expanded, onToggle, location, canOpen, onOpen, t }: {
         <span style={glyphStyle} aria-hidden="true">{loaded === undefined ? '○' : '●'}</span>
         <span style={nameStyle}>{entry.name}</span>
         <span style={descStyle}>{entry.description}</span>
-        {badge === undefined ? null : <span style={badgeStyle}>{badge}</span>}
+        {badge === undefined ? null : <span style={badgeSlotStyle}><Tag tone="outline">{badge}</Tag></span>}
         {loaded === undefined
           ? null
           : (
@@ -400,31 +298,7 @@ export function SkillsView({
     }
   }, [onSnapshot])
 
-  // 只在页面可见时轮询：切走的标签页不该继续打宿主。
-  useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | undefined
-    const start = (): void => {
-      if (timer !== undefined) return
-      void load()
-      timer = setInterval(() => { void load() }, POLL_MS)
-    }
-    const stop = (): void => {
-      if (timer === undefined) return
-      clearInterval(timer)
-      timer = undefined
-    }
-    const onVisibility = (): void => {
-      if (document.visibilityState === 'visible') start()
-      else stop()
-    }
-    if (document.visibilityState === 'visible') start()
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      stop()
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
-  }, [load])
-
+  useInspectorPolling(load, POLL_MS)
   // 「本机能否打开」问一次就够：它是部署形态决定的，不随会话变化。
   useEffect(() => {
     let alive = true
@@ -511,14 +385,16 @@ export function SkillsView({
         <span style={summaryStyle}>
           {t('summary', { total: snapshot.total, loaded: snapshot.loaded })}
         </span>
-        <input
-          style={searchStyle}
-          type="search"
-          value={query}
-          placeholder={t('search')}
-          aria-label={t('search')}
-          onChange={event => { setQuery(event.target.value) }}
-        />
+        <span style={searchSlotStyle}>
+          <Input
+            style={searchInputStyle}
+            type="search"
+            value={query}
+            placeholder={t('search')}
+            aria-label={t('search')}
+            onChange={event => { setQuery(event.target.value) }}
+          />
+        </span>
       </div>
 
       <div style={scrollStyle}>

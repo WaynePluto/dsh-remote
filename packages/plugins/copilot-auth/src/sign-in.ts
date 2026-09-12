@@ -1,85 +1,56 @@
-/**
- * The sign-in itself: one attempt at a time, driven by pi-ai's own GitHub
- * Copilot device-code flow.
- *
- * This plugin owns no OAuth code. pi-ai ships the flow dsh already depends on
- * (`@earendil-works/pi-ai`, the library behind dsh's `llm-pi-ai` adapter), and
- * running it through a credential store pointed at dsh's own record leaves the
- * result indistinguishable from a sign-in dsh performed itself. What this class
- * adds is the part a request/response surface needs and a CLI does not: the
- * attempt outlives the HTTP call that started it, so a page can poll for the
- * device code, and a second browser tab sees the same attempt.
- *
- * @module @dsh-remote/dsh-plugin-copilot-auth/sign-in
- */
+/** Copilot OAuth sign-in 的 Host orchestration；状态和 credential 只通过项目 service 持久化。 */
 
 import type { Context } from '@deepseek-ai/cordis'
 import { createModels } from '@earendil-works/pi-ai'
 import type { AuthEvent, AuthPrompt } from '@earendil-works/pi-ai'
 import { githubCopilotProvider } from '@earendil-works/pi-ai/providers/github-copilot'
 import { credentialStoreFor, describeGrant, RECORD_KEY } from './credential-store.js'
-import { ensureProviderRoute, isRouteConfigured } from './provider-route.js'
+import { ensureProviderRoute, isRouteConfigured, subscriptionAuthWarning } from './provider-route.js'
 import { PROVIDER_ID } from './shared.js'
 import type { CopilotAttemptView, CopilotStatusView } from './shared.js'
 
-/** One attempt in flight. */
+/** 一个正在进行的尝试。 */
 interface Attempt {
-  /** Withdraws the flow; also fires when the plugin's fiber is disposed. */
+  /** 撤销流程；插件 fiber dispose 时也会触发。 */
   readonly controller: AbortController
-  /** What a surface renders for this attempt; replaced, never mutated in place. */
+  /** 页面为本次尝试渲染的状态；整体替换，不原地修改。 */
   view: CopilotAttemptView
 }
 
-/** Human-readable text for a failure of any shape. */
+/** 任意形状失败的可读文本。 */
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-/**
- * The whole sign-in surface behind this plugin's RPC channel.
- *
- * Every method resolves to the same status view, so a caller never has to
- * follow a mutation with a second read to learn what happened.
- */
+/** sign-in controller；由 RPC 调用 status/start/configure/cancel/signOut。 */
 export class CopilotSignIn {
   private attempt: Attempt | undefined
-  /** Why the last attempt failed; kept until the next one starts. */
+  /** 上一次尝试失败原因；保留到下一次开始。 */
   private failure: string | undefined
-  /** Why the last successful sign-in did not reach the model picker. */
+  /** 最近一次成功登录未进入模型 picker 的原因。 */
   private routeFailure: string | undefined
 
-  /**
-   * @param ctx - the plugin context supplying `credentials` and `settings`.
-   */
+  /** 绑定 Host context；credentials/settings 由调用时读取。 */
   constructor(private readonly ctx: Context) {}
 
-  /**
-   * Read the current state without touching the network.
-   * @returns what is stored, what is configured, and what is in flight.
-   */
+  /** 读取 credential、route 和当前尝试状态，返回页面 snapshot。 */
   async status(): Promise<CopilotStatusView> {
     const credentials = this.ctx.get('credentials')
     const record = credentials === undefined ? undefined : await credentials.readRecord(RECORD_KEY)
     const grant = describeGrant(record)
+    const warning = [this.routeFailure, grant.signedIn ? subscriptionAuthWarning(this.ctx) : undefined]
+      .filter((message): message is string => message !== undefined).join('\n')
     return {
       signedIn: grant.signedIn,
       routeConfigured: isRouteConfigured(this.ctx),
       modelIds: grant.modelIds,
       ...this.attempt === undefined ? {} : { attempt: this.attempt.view },
       ...this.failure === undefined ? {} : { error: this.failure },
-      ...this.routeFailure === undefined ? {} : { warning: this.routeFailure },
+      ...warning === '' ? {} : { warning },
     }
   }
 
-  /**
-   * Start a sign-in, or report the one already running.
-   *
-   * Deliberately idempotent rather than refusing a second caller: the second
-   * caller is usually the same human on a second tab (or a page that reloaded
-   * mid-flow), and the device code they need is the one already on screen.
-   * @returns the status after the attempt was created; the device code arrives
-   *   in a later {@link status} poll, because GitHub has not issued it yet.
-   */
+  /** 启动一次非阻塞 device-code/OAuth 流程；HTTP 调用立即返回当前状态。 */
   async start(): Promise<CopilotStatusView> {
     if (this.attempt !== undefined) return await this.status()
     this.failure = undefined
@@ -87,21 +58,13 @@ export class CopilotSignIn {
     const controller = new AbortController()
     const attempt: Attempt = { controller, view: { phase: 'starting' } }
     this.attempt = attempt
-    // Deliberately not awaited: the flow runs for as long as the human takes to
-    // authorize a device code, and the caller is one HTTP request.
+    // 刻意不 await：流程会持续到用户完成
+    // device code 授权，而调用方只是一次 HTTP 请求。
     void this.run(attempt)
     return await this.status()
   }
 
-  /**
-   * Put the stored grant's models into the provider route, without signing in
-   * again.
-   *
-   * The repair for a sign-in whose settings write was refused: the credential
-   * is already there, so redoing a device-code flow would prove nothing. Also
-   * safe to call at any time — it recomputes the route from what is stored.
-   * @returns the status after the write.
-   */
+  /** 登录成功后写入/修复 provider route，并回读状态。 */
   async configure(): Promise<CopilotStatusView> {
     this.routeFailure = undefined
     const grant = describeGrant(await this.ctx.get('credentials')?.readRecord(RECORD_KEY))
@@ -110,22 +73,12 @@ export class CopilotSignIn {
     return await this.status()
   }
 
-  /**
-   * Withdraw the running attempt, if any. Cancelling is not a failure, so no
-   * error is recorded — the card simply goes back to its signed-out state.
-   */
+  /** 取消当前 device-code 尝试。 */
   cancel(): void {
     this.attempt?.controller.abort()
   }
 
-  /**
-   * Forget the stored grant.
-   *
-   * The provider route is left in place: it is settings the user can see and
-   * remove with the card's own control, and deleting configuration on their
-   * behalf here would also throw away any field they had tuned by hand.
-   * @returns the status after the record was removed.
-   */
+  /** 取消尝试并删除本插件 credential record。 */
   async signOut(): Promise<CopilotStatusView> {
     this.cancel()
     this.failure = undefined
@@ -134,22 +87,19 @@ export class CopilotSignIn {
     return await this.status()
   }
 
-  /** Abort whatever is running; called when the plugin's fiber goes away. */
+  /** 插件卸载时取消并清除当前尝试。 */
   dispose(): void {
     this.attempt?.controller.abort()
     this.attempt = undefined
   }
 
-  /**
-   * Run one attempt to completion and record how it ended.
-   * @param attempt - the attempt this run owns.
-   */
+  /** 执行 pi-ai login，观察 AuthEvent，并在成功后配置 route。 */
   private async run(attempt: Attempt): Promise<void> {
     try {
       const models = createModels({ credentials: credentialStoreFor(this.ctx) })
       models.setProvider(githubCopilotProvider())
-      // pi-ai persists the credential through the store above, which is what
-      // makes this write land on dsh's own record rather than a copy of it.
+      // pi-ai 通过上面的 store 持久化 credential，这正是
+      // 它写入 dsh 自己记录而非副本的原因。
       await models.login(PROVIDER_ID, 'oauth', {
         signal: attempt.controller.signal,
         notify: (event) => { this.observe(attempt, event) },
@@ -158,30 +108,21 @@ export class CopilotSignIn {
       const grant = describeGrant(await this.ctx.get('credentials')?.readRecord(RECORD_KEY))
       await this.writeRoute(grant.modelIds)
     } catch (error: unknown) {
-      // An aborted attempt is the human pressing Cancel (or the plugin
-      // unloading); reporting it as a failure would put a red line under a
-      // deliberate action.
+      // aborted 尝试表示用户按下 Cancel（或插件
+      // 卸载）；把它报告为失败会给
+      // 用户的主动操作标红。
       if (!attempt.controller.signal.aborted) {
         this.failure = messageOf(error)
         this.ctx.logger?.warn('copilot-auth: sign-in failed: %s', this.failure)
       }
     } finally {
-      // Only if this attempt is still the current one: a cancel followed by a
-      // fresh start must not have its successor cleared by the loser's exit.
+      // 只有本次尝试仍是当前尝试时：取消后
+      // 新启动不能被失败者退出时清掉。
       if (this.attempt === attempt) this.attempt = undefined
     }
   }
 
-  /**
-   * Write the provider route, keeping its failure out of the sign-in's.
-   *
-   * The settings write can be refused for reasons that have nothing to do with
-   * the credential — a read-only settings provider, or a model list dsh
-   * cannot serve — and the grant is already committed by then. Recording it
-   * separately is what keeps a usable sign-in from being reported as a failed
-   * one.
-   * @param modelIds - model ids the stored grant reported.
-   */
+  /** 将成功登录的 model ids 交给 route 规划器；失败保留给页面显示。 */
   private async writeRoute(modelIds: readonly string[]): Promise<void> {
     try {
       await ensureProviderRoute(this.ctx, modelIds)
@@ -191,11 +132,7 @@ export class CopilotSignIn {
     }
   }
 
-  /**
-   * Restate one pi-ai login event as the card's view of the attempt.
-   * @param attempt - the attempt the event belongs to.
-   * @param event - what pi-ai reported.
-   */
+  /** 将 device_code/auth_url/info/progress 映射为页面尝试状态。 */
   private observe(attempt: Attempt, event: AuthEvent): void {
     switch (event.type) {
       case 'device_code':
@@ -219,8 +156,8 @@ export class CopilotSignIn {
         attempt.view = { ...attempt.view, message: event.message }
         return
       default:
-        // `progress` and anything a later pi-ai adds: the code has served its
-        // purpose by now, so the attempt is finishing rather than waiting.
+        // `progress` 以及未来 pi-ai 新增的事件：code 已
+        // 完成使命，因此尝试进入 finishing 而非继续等待。
         attempt.view = {
           phase: attempt.view.phase === 'awaiting' ? 'finishing' : attempt.view.phase,
           ...'message' in event && typeof event.message === 'string' ? { message: event.message } : {},
@@ -228,18 +165,7 @@ export class CopilotSignIn {
     }
   }
 
-  /**
-   * Answer the one question this flow asks.
-   *
-   * GitHub Copilot's pi-ai login opens by asking for a GitHub Enterprise
-   * domain, blank meaning github.com — the only deployment this plugin
-   * supports, so it is answered without bothering anyone. Any other question is
-   * refused loudly instead of guessed at: a silent wrong answer would store a
-   * credential for an account nobody chose.
-   * @param prompt - what pi-ai asked.
-   * @returns the answer to give.
-   * @throws Error when the flow asks something this surface cannot answer.
-   */
+  /** device-code 流程只接受空 text prompt；其他 prompt 明确拒绝。 */
   private async answer(prompt: AuthPrompt): Promise<string> {
     if (prompt.type === 'text') return ''
     throw new Error(

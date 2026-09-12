@@ -1,30 +1,11 @@
-/**
- * Browser half: the retry banner entry in the conversation input dock.
- *
- * Nothing here imports another plugin's runtime: collaboration goes through
- * cordis services (`ctx.slots`, `ctx.locale`, `ctx.connection`) plus the one
- * projection key this package's Host half publishes. That is both dsh's rule
- * and what keeps this bundle loadable from the page's frozen module table.
- *
- * There is no client-side fold and no store: dsh's session-projection
- * subsystem is a push model in which the Host is the only computation site and
- * "a domain ships projection support with zero client code"
- * (`packages/api/session-controller/src/client/sessions/projection-store.ts:1-9`).
- * So the banner reads `useProjection('turnRetry')` and that is the whole
- * data path.
- *
- * @module @dsh-remote/dsh-plugin-turn-retry/client
- */
+/** browser half：在 conversation input dock 注册 retry banner，从 `useProjection('turnRetry')` 读取 Host projection，并通过 private RPC 发送 retry。 */
 
 import type { Context } from '@deepseek-ai/cordis'
-// Type-only: each pulls in the Context merge naming a service this plugin
-// reads. Value imports across plugins are forbidden (and unresolvable from the
-// page's frozen module table); services are the seam.
+// 仅类型：激活本插件使用的 renderer、locale、session 和 slot Context merge。
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
-// Type-only: pulls in the SlotMap merge that declares the seat we occupy, and
-// the session standard kit (`useProjection`, `sessionId`) it hands entries.
+// 仅类型：引入 `useProjection` 与 sessionId 的 slot merge。
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -41,39 +22,27 @@ export type { RetryKey } from './locales.js'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    /** This plugin's copy namespace; the same string as its package suffix. */
+    /** 本插件的文案 namespace。 */
     'dsh-plugin-turn-retry': RetryKey
   }
 }
 
-/** The copy namespace this plugin owns. */
+/** 本插件拥有的文案 namespace。 */
 const NS = SELF_NAMESPACE
 
-/**
- * Where the banner sits among the dock's entries.
- *
- * dsh's own entries are todo at 0 and the queue at 20
- * (`packages/client/ui-conversation/src/client/skeleton/TodoPanel.tsx:138`,
- * `.../queue/QueueDock.tsx:299`). Ascending order runs top-down, so a larger
- * number puts this banner closest to the composer — which is where a
- * one-click action belongs, and where a thumb already is.
- */
+/** dock order；位于 dsh todo 与 queue 之间的合适位置。 */
 const ORDER = 30
 
-/** Full props of the dock entry. */
+/** retry dock entry 的组合 props。 */
 export type RetryDockProps =
   PropsRuntime<'conversation.input.dock'>
   & Partial<RetryDockInjected>
   & PropsLocale<'dsh-plugin-turn-retry'>
 
-/** The failure this plugin reports when the Host answers with an error. */
+/** RPC channel 错误。 */
 export class RetryChannelError extends Error {}
 
-/**
- * Slot entry: read the Host-computed failure and hand it to the banner.
- * @param props - composed slot props.
- * @returns the banner, or nothing when the last turn did not fail.
- */
+/** 将 projection 和 session 状态传给 banner。 */
 export function RetryDock({ useProjection, session, onRetry, t }: RetryDockProps) {
   return (
     <RetryBanner
@@ -85,29 +54,16 @@ export function RetryDock({ useProjection, session, onRetry, t }: RetryDockProps
   )
 }
 
-/**
- * Required services. `connection` carries the channel, `slots` is the seat,
- * `locale` supplies the banner's copy.
- */
+/** 所需 service：connection、slots 和 locale。 */
 export const inject = ['slots', 'locale', 'connection']
 
-/**
- * Register the banner.
- * @param ctx - client root context.
- */
+/** 注册文案和 retry dock slot。 */
 export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'turn-retry: copy dictionaries')
 
-  /**
-   * Ask the Host to re-drive one session.
-   * @param sessionId - the session the banner belongs to.
-   * @returns whether a retry turn was started.
-   * @throws RetryChannelError when the Host reported a failure.
-   */
+  /** 调用 private retry endpoint。 */
   const retry = async (sessionId: string): Promise<RetryResult> => {
-    // Read per call, and typed at the read: the browser half of the connection
-    // package provides this service without declaring it on Context, and
-    // `inject` above is what guarantees it is there.
+    // 每次调用时读取并定型 connection；`inject` 保证该 service 已存在。
     const connection = ctx.get('connection') as ConnectionHandle | undefined
     if (connection === undefined) throw new RetryChannelError('no active connection')
     const result = await connection.rpc.call(CHANNEL, 'retry', { sessionId })

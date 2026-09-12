@@ -1,15 +1,8 @@
 import { once } from 'node:events'
-import pino from 'pino'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  BrowserCookiePolicy,
   ENROLL_TOKEN_SHOWN_ONCE_NOTICE,
-  createAuthenticationService,
-  createRelayServer,
   hashOpaqueToken,
-  openRelayStore,
-  readCookie,
-  type RelayServer,
   type RelayStore,
 } from '../src/index.js'
 import {
@@ -18,13 +11,15 @@ import {
   ADMIN_TOKEN_CREATE_PATH,
 } from '../src/admin/console-app.js'
 import {
-  MockConnector,
-  cookieHeader,
-  createDeviceIdentity,
+  closeFixtures,
   httpRequest,
-  issueEnrollToken,
   registerTestDevice,
+  openAuthenticatedPage,
+  openCsrfPage,
+  postCsrfForm,
   setCookieArray,
+  startAuthenticatedRelayFixture,
+  type AuthenticatedRelayTestFixture,
   type HttpResult,
 } from './helpers.js'
 
@@ -33,86 +28,49 @@ const HOST = 'pc1.dsh.test'
 const ORIGIN = 'https://pc1.dsh.test'
 const MACHINE_ID = 'machine-console-01'
 const MACHINE_SLUG = 'pc1'
-/** No console test opens a tunnel stream, so the connector never dials this. */
+/** 控制台测试不会打开隧道流，因此 connector 从不拨号到这里。 */
 const UNUSED_UPSTREAM_PORT = 1
 
-interface Fixture {
-  relay: RelayServer
-  port: number
-  store: RelayStore
-  connector: MockConnector | undefined
-  userId: string
-  sessionCookie: string
-}
+type Fixture = AuthenticatedRelayTestFixture
 
 const fixtures: Fixture[] = []
 
 async function startFixture(options: { online: boolean }): Promise<Fixture> {
-  const store = openRelayStore({ path: ':memory:' })
-  const user = store.createUser({
-    id: 'console-test-user',
-    username: 'admin',
-    passwordHash: 'test-password-hash',
-    totpSecret: 'test-totp-secret',
-    totpEnabled: true,
+  const fixture = await startAuthenticatedRelayFixture({
+    jwtSecret: JWT_SECRET,
+    account: {
+      kind: 'existing-user',
+      input: {
+        id: 'console-test-user',
+        username: 'admin',
+        passwordHash: 'test-password-hash',
+        totpSecret: 'test-totp-secret',
+        totpEnabled: true,
+      },
+    },
+    relay: { streamConnectTimeoutMs: 2_000 },
+    device: options.online
+      ? {
+          mode: 'online',
+          machineId: MACHINE_ID,
+          slug: MACHINE_SLUG,
+          upstreamPort: UNUSED_UPSTREAM_PORT,
+        }
+      : { mode: 'offline', machineId: MACHINE_ID, slug: MACHINE_SLUG },
   })
-  const authentication = await createAuthenticationService({ store, jwtSecret: JWT_SECRET })
-  const tokens = await authentication.sessions.issue({ user, sourceIp: '127.0.0.1' })
-  const sessionCookie = cookieHeader(
-    new BrowserCookiePolicy({ mode: 'domain-https', domain: 'dsh.test' }).sessionHeaders(tokens),
-  )
-
-  const relay = createRelayServer({
-    host: '127.0.0.1',
-    port: 0,
-    publicDomain: 'dsh.test',
-    publicScheme: 'https',
-    streamConnectTimeoutMs: 2_000,
-    browserAuth: { cookieMode: 'domain-https' },
-  }, { authentication, logger: pino({ level: process.env.RELAY_TEST_LOG ?? 'silent' }), store })
-  const address = await relay.listen()
-
-  let connector: MockConnector | undefined
-  if (options.online) {
-    connector = new MockConnector({
-      relayPort: address.port,
-      upstreamPort: UNUSED_UPSTREAM_PORT,
-      identity: createDeviceIdentity(),
-      enrollToken: issueEnrollToken(store, MACHINE_SLUG),
-      machineId: MACHINE_ID,
-      slug: MACHINE_SLUG,
-    })
-    await connector.ready()
-  } else {
-    registerTestDevice(store, { machineId: MACHINE_ID, slug: MACHINE_SLUG })
-  }
-
-  const fixture: Fixture = {
-    relay,
-    port: address.port,
-    store,
-    connector,
-    userId: user.id,
-    sessionCookie,
-  }
   fixtures.push(fixture)
   return fixture
 }
 
-/** Load the console once to obtain the double-submit CSRF cookie it issues. */
-async function openConsole(fixture: Fixture): Promise<{ body: string; csrf: string; csrfPair: string }> {
-  const page = await httpRequest({
-    port: fixture.port,
+/** 加载一次控制台，以获取它签发的双提交 CSRF cookie。 */
+async function openConsole(fixture: Fixture) {
+  const page = await openCsrfPage(fixture, {
     path: ADMIN_PATH_PREFIX,
-    headers: { host: HOST, accept: 'text/html', cookie: fixture.sessionCookie },
+    host: HOST,
+    label: 'console',
   })
   expect(page.status, page.body).toBe(200)
-  const setCookie = setCookieArray(page.headers).find(header => header.includes('dsh_csrf='))
-  if (setCookie === undefined) throw new Error('console did not issue a CSRF cookie')
-  const csrfPair = setCookie.split(';', 1)[0] ?? ''
-  const csrf = readCookie(csrfPair, '__Secure-dsh_csrf')
-  if (csrf === undefined) throw new Error('could not parse the CSRF cookie')
-  return { body: page.body, csrf, csrfPair }
+  return page
 }
 
 function revoke(fixture: Fixture, options: {
@@ -120,17 +78,13 @@ function revoke(fixture: Fixture, options: {
   csrfPair: string
   machineId: string
 }): Promise<HttpResult> {
-  return httpRequest({
-    port: fixture.port,
+  return postCsrfForm(fixture, {
     path: ADMIN_REVOKE_PATH,
-    method: 'POST',
-    headers: {
-      host: HOST,
-      origin: ORIGIN,
-      cookie: `${fixture.sessionCookie}; ${options.csrfPair}`,
-      'content-type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({ csrf: options.csrf, machineId: options.machineId }).toString(),
+    host: HOST,
+    origin: ORIGIN,
+    sessionCookie: fixture.sessionCookie,
+    csrfPair: options.csrfPair,
+    fields: { csrf: options.csrf, machineId: options.machineId },
   })
 }
 
@@ -140,25 +94,17 @@ function createToken(fixture: Fixture, options: {
   slug: string
   name?: string
 }): Promise<HttpResult> {
-  return httpRequest({
-    port: fixture.port,
+  return postCsrfForm(fixture, {
     path: ADMIN_TOKEN_CREATE_PATH,
-    method: 'POST',
-    headers: {
-      host: HOST,
-      origin: ORIGIN,
-      cookie: `${fixture.sessionCookie}; ${options.csrfPair}`,
-      'content-type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      csrf: options.csrf,
-      slug: options.slug,
-      name: options.name ?? '',
-    }).toString(),
+    host: HOST,
+    origin: ORIGIN,
+    sessionCookie: fixture.sessionCookie,
+    csrfPair: options.csrfPair,
+    fields: { csrf: options.csrf, slug: options.slug, name: options.name ?? '' },
   })
 }
 
-/** The console renders the plaintext in exactly one element, exactly once. */
+/** 控制台只在一个元素中渲染一次明文。 */
 function tokenFromPage(body: string): string {
   const matches = [...body.matchAll(/<p class="secret">([^<]+)<\/p>/g)]
   expect(matches).toHaveLength(1)
@@ -174,11 +120,9 @@ function lastIssuedTokenId(store: RelayStore): string | undefined {
 }
 
 afterEach(async () => {
-  await Promise.all(fixtures.splice(0).map(async (fixture) => {
-    fixture.connector?.close()
-    await fixture.relay.close()
-    fixture.store.close()
-  }))
+  await closeFixtures(fixtures, {
+    beforeRelayClose: fixture => fixture.connector?.close(),
+  })
 })
 
 describe('M2.5 admin console', () => {
@@ -215,7 +159,7 @@ describe('M2.5 admin console', () => {
     expect(body).toContain('<span class="badge on">在线</span>')
     expect(body).toContain('href="https://pc1.dsh.test/"')
     expect(body).toContain('<span class="badge off">离线</span>')
-    // An offline machine has no reachable entry point to link to.
+    // 离线机器没有可链接的访问入口。
     expect(body).not.toContain('href="https://srv.dsh.test/"')
   })
 
@@ -257,26 +201,26 @@ describe('M2.5 admin console', () => {
   it('guards a revoke behind a confirmation page that changes nothing by itself', async () => {
     const fixture = await startFixture({ online: true })
     const { body, csrfPair } = await openConsole(fixture)
-    // The list offers the confirmation page, never a one-click revoke.
+    // 列表提供确认页面，绝不提供一键吊销。
     expect(body).toContain(`${ADMIN_REVOKE_PATH}?machineId=${encodeURIComponent(MACHINE_ID)}`)
     expect(body).not.toContain('<button class="danger" type="submit">停止并移除</button>')
 
-    const confirm = await httpRequest({
-      port: fixture.port,
+    const confirm = await openAuthenticatedPage(fixture, {
       path: `${ADMIN_REVOKE_PATH}?machineId=${encodeURIComponent(MACHINE_ID)}`,
-      headers: { host: HOST, accept: 'text/html', cookie: `${fixture.sessionCookie}; ${csrfPair}` },
+      host: HOST,
+      cookie: `${fixture.sessionCookie}; ${csrfPair}`,
     })
     expect(confirm.status, confirm.body).toBe(200)
     expect(confirm.body).toContain(`停止 ${MACHINE_SLUG} 上的 dsh-remote`)
     expect(confirm.body).toContain('dsh 进程会被一起停掉')
     expect(confirm.body).toContain(`<a href="${ADMIN_PATH_PREFIX}">`)
-    // Rendering the page must not touch the device or its control channel.
+    // 渲染页面不能触碰设备或其控制信道。
     expect(fixture.store.getDeviceByMachineId(MACHINE_ID)?.revokedAt).toBeNull()
     expect(fixture.relay.tunnel.registry.machines()).toHaveLength(1)
-    // The console tab behind this page keeps its CSRF token.
+    // 此页面背后的控制台标签会保留其 CSRF token。
     expect(setCookieArray(confirm.headers).some(header => header.includes('dsh_csrf='))).toBe(false)
 
-    // An unknown or already revoked machine has nothing to confirm.
+    // 未知或已吊销机器没有需要确认的内容。
     const unknown = await httpRequest({
       port: fixture.port,
       path: `${ADMIN_REVOKE_PATH}?machineId=machine-does-not-exist`,
@@ -313,9 +257,9 @@ describe('M2.5 admin console', () => {
     expect(issued.body).toContain(ENROLL_TOKEN_SHOWN_ONCE_NOTICE)
     const token = tokenFromPage(issued.body)
     expect(token.length).toBeGreaterThanOrEqual(32)
-    // The command must carry everything the other machine needs, in one go:
-    // the token, and the authority its dsh has to trust (mode A forwards the
-    // browser Host untouched, and with a public domain that is its subdomain).
+    // 命令必须一次携带另一台机器所需的一切：
+    // 令牌，以及 dsh 必须信任的 authority（模式 A 原样转发
+    // 浏览器 Host；使用公网域名时它就是该机器的子域名）。
     expect(issued.body)
       .toContain(`dsh-remote-connector --relay wss://${HOST} --slug pc9 --enroll-token ${token} --hub-authority pc9.dsh.test`)
 
@@ -330,15 +274,15 @@ describe('M2.5 admin console', () => {
     expect(record?.tokenHash).toBe(hashOpaqueToken(token))
     expect(record?.tokenHash).not.toBe(token)
 
-    // It is a real single-use token, not just a rendered string — and spending
-    // it leaves no row behind.
+    // 这是实际的一次性令牌，不只是渲染出来的字符串——使用
+    // 后不会留下记录。
     expect(fixture.store.consumeEnrollToken({
       tokenHash: hashOpaqueToken(token),
       device: { machineId: 'machine-console-09', slug: 'pc9', publicKey: 'key-nine' },
     })).toMatchObject({ machineId: 'machine-console-09' })
     expect(fixture.store.getEnrollTokenById(tokenId)).toBeUndefined()
 
-    // Reloading the console must not bring the plaintext back.
+    // 重新加载控制台不能再次带回明文。
     const reloaded = await openConsole(fixture)
     expect(reloaded.body).not.toContain(token)
     expect(reloaded.body).not.toContain('class="secret"')

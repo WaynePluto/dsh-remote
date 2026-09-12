@@ -1,20 +1,13 @@
 /**
- * Local hand-off contract between the relay and the connector on ONE machine.
- *
- * Joining a hub is decided in the relay's admin console but acted on by the
- * connector, and the two are separate processes. Rather than invent an IPC
- * channel, the console writes this file and the connector reads it; the file
- * also happens to be the persistence the connector needs across restarts.
- *
- * This is not part of the tunnel wire protocol. It lives here because both
- * packages must agree on it byte for byte, and duplicating the schema in two
- * packages is how the two sides silently drift apart.
+ * 同一台机器上 relay 与 connector 之间的本地交接契约。
+ * 加入 hub 由 relay 管理控制台决定、由独立进程 connector 执行；控制台写入此文件，connector 读取它，文件也作为跨重启持久化载体。
+ * 这不是隧道线路协议的一部分；两个包必须逐字节共享此契约，重复 schema 才会让两侧悄然产生偏差。
  */
 
 import { z } from 'zod'
 import { machineSlugSchema } from './frames.js'
 
-/** Only `ws:`/`wss:` are accepted: the connector dials the relay, never fetches it. */
+/** 只接受 `ws:`/`wss:`：connector 拨号连接 relay，从不 fetch relay。 */
 const relayUrlSchema = z.url().refine(
   value => value.startsWith('ws://') || value.startsWith('wss://'),
   'relay URL must use ws:// or wss://',
@@ -22,23 +15,23 @@ const relayUrlSchema = z.url().refine(
 
 export const membershipSchema = z.strictObject({
   version: z.literal(1),
-  /** The hub this machine has joined. One machine joins at most one hub (D16). */
+  /** 这台机器加入的 hub。一台机器最多加入一个 hub（D16）。 */
   hub: z.strictObject({
     relayUrl: relayUrlSchema,
-    /** The slug this machine claims on that hub. */
+    /** 这台机器在该 hub 上声明的 slug。 */
     slug: machineSlugSchema,
     /**
-     * Single-use enrollment token, present only until the hub accepts it.
-     * The connector clears it after a successful enrollment so a spent secret
-     * does not sit on disk forever.
+     * 一次性注册令牌，仅在 hub 接受之前存在。
+     * connector 在注册成功后清除它，使已使用的密钥
+     * 不会永远留在磁盘上。
      */
     enrollToken: z.string().min(16).max(4096).optional(),
     /**
-     * Browser-facing authority of the hub, e.g. `10.1.2.87:30810`.
+     * hub 面向浏览器的 authority，例如 `10.1.2.87:30810`。
      *
-     * Mode A forwards the browser's original Host, so this machine's dsh must
-     * trust the hub's authority. Recording it here lets the launcher pass
-     * `--trusted-host` without asking the user to retype it.
+     * Mode A 原样转发浏览器的 Host，因此这台机器上的 dsh 必须
+     * 信任 hub 的 authority。记录在这里后 launcher 就能传入
+     * `--trusted-host`，无需用户重新输入。
      */
     browserAuthority: z.string().min(1).max(255).optional(),
     joinedAt: z.number().int().nonnegative(),
@@ -48,14 +41,14 @@ export const membershipSchema = z.strictObject({
 export type Membership = z.infer<typeof membershipSchema>
 export type MembershipHub = NonNullable<Membership['hub']>
 
-/** File name used under the dsh-remote home directory. */
+/** dsh-remote home 目录下使用的文件名。 */
 export const MEMBERSHIP_FILE_NAME = 'membership.json'
 
 /**
- * Parse membership file contents.
- * @param raw - the file text, or undefined when the file does not exist.
- * @returns The parsed membership, or undefined when this machine has not joined
- * a hub. A malformed file throws rather than silently resetting membership.
+ * 解析 membership 文件内容。
+ * @param raw - 文件文本；文件不存在时为 undefined。
+ * @returns 解析后的 membership；这台机器尚未加入
+ * hub 时为 undefined。文件格式错误时抛出异常，而不是静默重置 membership。
  */
 export function parseMembership(raw: string | undefined): Membership | undefined {
   if (raw === undefined || raw.trim() === '') return undefined
@@ -63,8 +56,8 @@ export function parseMembership(raw: string | undefined): Membership | undefined
 }
 
 /**
- * @param membership - the membership to persist.
- * @returns File contents with a trailing newline.
+ * @param membership - 要持久化的 membership。
+ * @returns 末尾带换行符的文件内容。
  */
 export function serializeMembership(membership: Membership): string {
   return `${JSON.stringify(membership, undefined, 2)}\n`

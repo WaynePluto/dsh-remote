@@ -8,7 +8,7 @@ export type ProtocolDecodeErrorCode =
   | 'INVALID_FRAME'
   | 'UNSUPPORTED_PROTOCOL'
 
-/** Expected wire failure suitable for a clear log line and protocol error frame. */
+/** 适合写入清晰日志行和协议错误帧的预期线路失败。 */
 export class ProtocolDecodeError extends Error {
   readonly code: ProtocolDecodeErrorCode
   readonly details?: string
@@ -42,7 +42,7 @@ function frameVersion(value: unknown): unknown {
   return (value as { version?: unknown }).version
 }
 
-/** Decode and validate one JSON control frame, separating version mismatch from malformed input. */
+/** 解码并校验一个 JSON 控制帧，将版本不匹配与格式错误区分开。 */
 export function decodeControlFrame(
   input: string | Buffer | ArrayBuffer | ArrayBufferView,
 ): ControlFrame {
@@ -84,7 +84,7 @@ export function decodeControlFrame(
   return parsed.data
 }
 
-/** Validate and encode one locally-created frame. */
+/** 校验并编码一个本地创建的帧。 */
 export function encodeControlFrame(frame: ControlFrame): string {
   return JSON.stringify(controlFrameSchema.parse(frame))
 }

@@ -1,6 +1,6 @@
 # dsh-remote 的 dsh 插件叠加层，由 launcher 用 `dsh --patch <这个文件>` 传给 dsh。
 #
-# `id` 让更后面的 `--patch` 能按 id 覆盖这一行的 config（补丁层顺序见 docs/02 §9）。
+# `id` 让更后面的 `--patch` 能按 id 覆盖这一行的 config（补丁层顺序见 docs/dsh/plugins.md）。
 # 不过这个插件**没有 config**：代理是用户运行时在「设置 → 代理」里配的，
 # 存在设置命名空间 `proxy` 里，不走 composition，也不读环境变量。
 #

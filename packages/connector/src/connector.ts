@@ -20,7 +20,7 @@ import {
   watchMembershipFile,
 } from './membership.js'
 
-/** Retrying cannot fix this (rejected or revoked device key, incompatible protocol version). */
+/** 重试无法修复此问题（设备密钥被拒绝或吊销，或协议版本不兼容）。 */
 export class ConnectorFatalError extends Error {
   constructor(message: string) {
     super(message)
@@ -31,26 +31,26 @@ export class ConnectorFatalError extends Error {
 export interface Connector {
   readonly config: ConnectorConfig
   readonly logger: Logger
-  /** This machine's Ed25519 public key, base64url; what the relay registers. */
+  /** 这台机器的 Ed25519 公钥，使用 base64url；relay 注册的就是它。 */
   readonly devicePublicKey: string
-  /** True while an authenticated control channel is up. */
+  /** 控制信道完成认证并保持连接时为 true。 */
   readonly online: boolean
-  /** The hub currently being dialled, or undefined while idle (not joined). */
+  /** 当前正在拨号连接的 hub；空闲（尚未加入）时为 undefined。 */
   readonly hub: HubTarget | undefined
   /**
-   * Browser-facing authority of the hub, when membership recorded one.
-   * Mode A forwards the browser's original Host, so dsh on this machine has to
-   * trust this authority (`--trusted-host`). Acting on it is the launcher's job.
+   * membership 记录的 hub 面向浏览器的 authority。
+   * Mode A 原样转发浏览器的 Host，因此这台机器上的 dsh 必须
+   * 信任此 authority（`--trusted-host`）。如何使用它由 launcher 负责。
    */
   readonly browserAuthority: string | undefined
-  /** Run until `stop()`, or reject with ConnectorFatalError. */
+  /** 一直运行到 `stop()`，或以 ConnectorFatalError 拒绝。 */
   run(): Promise<void>
-  /** Resolves the first time the control channel authenticates. */
+  /** 在控制信道首次完成认证时 resolve。 */
   ready(): Promise<void>
   stop(): Promise<void>
 }
 
-/** Identity that decides whether a running control channel still serves membership. */
+/** 决定运行中的控制信道是否仍服务于该 membership 的身份。 */
 function hubKey(hub: HubTarget | undefined): string | undefined {
   return hub === undefined ? undefined : `${hub.relayUrl}|${hub.slug}`
 }
@@ -61,15 +61,15 @@ export function createConnector(
 ): Connector {
   const config = resolveConnectorConfig(input)
   const logger = options.logger ?? pino({ level: process.env.LOG_LEVEL ?? 'info' })
-  // Load eagerly: an unusable key file must fail at startup, not on every retry.
+  // 提前加载：不可用的密钥文件必须在启动时失败，而不是每次重试时失败。
   const deviceKey = loadOrCreateDeviceKey({ path: config.deviceKeyPath, logger })
   const membershipPath = membershipFilePath(config.home)
 
   /**
-   * Precedence: an explicit `--relay` WINS over membership.json, and the file is
-   * then not consulted at all. That keeps the dev stack (and any scripted
-   * deployment) working exactly as before, with no hidden file able to redirect
-   * a connector whose target was spelled out on the command line.
+   * 优先级：显式指定的 `--relay` 优先于 membership.json，且完全
+   * 不读取该文件。这样可以让开发栈（以及任何脚本化的
+   * 部署）保持原有行为；不会有隐藏文件重定向
+   * 命令行已明确指定目标的 connector。
    */
   const cliHub: HubTarget | undefined = config.relayUrl === undefined || config.slug === undefined
     ? undefined
@@ -83,16 +83,16 @@ export function createConnector(
   const controller = new AbortController()
   let online = false
   let attempt = 0
-  /** Hub key the device is already enrolled with; an enroll token is single-use. */
+  /** 设备已经注册的 hub key；enroll token 是一次性的。 */
   let registeredWith: string | undefined
-  /** Last membership this connector accepted; the file may already differ. */
+  /** Connector 最近接受的 membership；文件可能已经不同。 */
   let membership: Membership | undefined
-  /** Hub derived from membership, kept as the fallback for an unreadable file. */
+  /** 从 membership 得到的 hub；文件不可读时作为回退保留。 */
   let lastHub: HubTarget | undefined
-  /** Hub of the session in flight or in backoff; undefined only while idle. */
+  /** 正在进行或处于退避中的会话对应的 hub；仅空闲时为 undefined。 */
   let dialing: HubTarget | undefined
   let sessionAbort: AbortController | undefined
-  /** Set when membership retargets the connector, so backoff does not apply. */
+  /** membership 重定向 connector 时设置，使退避不生效。 */
   let switching = false
   let idleLogged = false
   let browserAuthority: string | undefined
@@ -107,8 +107,8 @@ export function createConnector(
     resolveReady = resolve
     rejectReady = reject
   })
-  // `ready()` is optional; keep a fatal pre-ready failure from becoming an
-  // unhandled rejection for callers that only observe `run()`.
+  // `ready()` 是可选的；避免 ready 前的致命失败变成
+  // 只观察 `run()` 的调用方看不到的未处理 rejection。
   void readyPromise.catch(() => undefined)
 
   const wakeUp = (): void => {
@@ -139,9 +139,9 @@ export function createConnector(
     }
   }
 
-  // Read eagerly for the same reason as the device key: a malformed membership
-  // file — or a hub URL this connector cannot dial — must fail loudly at
-  // startup instead of quietly looking like "not joined".
+  // 出于与设备密钥相同的原因提前读取：格式错误的 membership
+  // 文件——或 connector 无法拨号的 hub URL——必须在
+  // 启动时明确失败，而不是静默表现为“尚未加入”。
   if (cliHub === undefined) {
     membership = readMembershipFile(membershipPath)
     lastHub = toHub(membership)
@@ -158,9 +158,9 @@ export function createConnector(
   }
 
   /**
-   * Re-read membership on every attempt. `fs.watch` can miss events on some
-   * platforms and this costs one small file read per connection attempt, which
-   * is far cheaper (and more correct) than a polling timer.
+   * 每次尝试都重新读取 membership。`fs.watch` 在某些
+   * 平台上可能漏掉事件，而每次连接尝试读取一个小文件，
+   * 比轮询计时器便宜得多（也更正确）。
    */
   const currentHub = (): HubTarget | undefined => {
     if (cliHub !== undefined) {
@@ -173,15 +173,15 @@ export function createConnector(
       membership = next
       lastHub = hub
     } catch (error) {
-      // Keep the last known membership: staying on the hub with stale data beats
-      // silently going offline because the file was momentarily unreadable.
+      // 保留最近已知的 membership：使用过期数据留在 hub 上也好过
+      // 因文件短暂不可读而静默离线。
       logger.error({ err: error }, 'membership file is unusable; keeping the last known membership')
     }
     noteAuthority(lastHub)
     return lastHub
   }
 
-  /** Forget the spent single-use token so it does not stay on disk. */
+  /** 忘记已使用的一次性 token，避免它留在磁盘上。 */
   const clearEnrollToken = (joined: MembershipHub): void => {
     try {
       if (!clearSpentEnrollToken(membershipPath, joined)) return
@@ -242,8 +242,8 @@ export function createConnector(
     membership = next
     lastHub = hub
     noteAuthority(hub)
-    // Only the dialled identity matters: rewriting the file with the same hub
-    // (a cleared token, a refreshed timestamp) must never drop a live channel.
+    // 只有拨号目标的身份重要：用同一个 hub 重写文件
+    //（清除 token、刷新时间戳）绝不能导致活动信道断开。
     if (dialing !== undefined && hubKey(dialing) !== hubKey(hub)) {
       switching = true
       logger.info(
@@ -274,7 +274,7 @@ export function createConnector(
           switching = false
           attempt = 0
         }
-        // Arm the wake-up before reading, so a change during the read is not lost.
+        // 在读取前设置唤醒，以免读取期间发生的变更丢失。
         const changed = new Promise<void>((resolve) => { wake = resolve })
         const hub = currentHub()
         if (hub === undefined) {
@@ -286,15 +286,15 @@ export function createConnector(
               'not joined to a hub yet; idling until membership appears (join this machine from a hub admin console)',
             )
           }
-          // No timer, no spinning: only a membership change or stop() resumes here.
-          // eslint-disable-next-line no-await-in-loop -- the idle wait must pause the loop
+          // 没有计时器，也不会空转：只有 membership 变更或 stop() 才会在此恢复。
+          // eslint-disable-next-line no-await-in-loop -- 空闲等待必须暂停循环
           await changed
           continue
         }
 
         idleLogged = false
         dialing = hub
-        // eslint-disable-next-line no-await-in-loop -- reconnects are sequential by design
+        // eslint-disable-next-line no-await-in-loop -- 重连按设计顺序执行
         const outcome = await dial(hub)
         online = false
         if (controller.signal.aborted) break
@@ -313,8 +313,8 @@ export function createConnector(
           { reason: outcome.message, retryInMs: delayMs, attempt },
           'control channel is down; reconnecting after backoff',
         )
-        // A membership change cuts the backoff short: the new hub should not wait.
-        // eslint-disable-next-line no-await-in-loop -- backoff must pause the loop
+        // membership 变更会缩短退避：新 hub 不应等待。
+        // eslint-disable-next-line no-await-in-loop -- 退避必须暂停循环
         await Promise.race([
           delay(delayMs, undefined, { signal: controller.signal }).catch(() => undefined),
           changed,

@@ -1,16 +1,6 @@
-import pino from 'pino'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  BrowserCookiePolicy,
-  createAuthenticationService,
-  createRelayServer,
-  generateTotp,
-  initializeAdmin,
-  openRelayStore,
-  readCookie,
   verifyPassword,
-  type RelayServer,
-  type RelayStore,
 } from '../src/index.js'
 import {
   ADMIN_ACCOUNT_PATH,
@@ -18,7 +8,15 @@ import {
   ADMIN_PATH_PREFIX,
   ADMIN_TOTP_RESET_PATH,
 } from '../src/admin/console-app.js'
-import { cookieHeader, httpRequest, setCookieArray, type HttpResult } from './helpers.js'
+import {
+  closeFixtures,
+  httpRequest,
+  openCsrfPage,
+  postCsrfForm,
+  startAuthenticatedRelayFixture,
+  type AuthenticatedRelayTestFixture,
+  type HttpResult,
+} from './helpers.js'
 
 const JWT_SECRET = new Uint8Array(32).fill(0x2b)
 const HOST = 'pc1.dsh.test'
@@ -26,85 +24,40 @@ const ORIGIN = 'https://pc1.dsh.test'
 const PASSWORD = 'Correct horse battery staple 1'
 const NEXT_PASSWORD = 'Another sufficiently long password 2'
 
-interface Fixture {
-  relay: RelayServer
-  port: number
-  store: RelayStore
-  userId: string
-  totpSecret: string
-  sessionCookie: string
-}
+type Fixture = AuthenticatedRelayTestFixture
 
 const fixtures: Fixture[] = []
 
 async function startFixture(): Promise<Fixture> {
-  const store = openRelayStore({ path: ':memory:' })
-  const initialized = await initializeAdmin({ store, username: 'admin', password: PASSWORD })
-  const authentication = await createAuthenticationService({ store, jwtSecret: JWT_SECRET })
-  // A real login: it also flips the staged authenticator to enabled.
-  const tokens = await authentication.login({
-    username: 'admin',
-    password: PASSWORD,
-    totpToken: await generateTotp(initialized.enrollment.secret),
-    sourceIp: '127.0.0.1',
+  const fixture = await startAuthenticatedRelayFixture({
+    jwtSecret: JWT_SECRET,
+    account: { kind: 'initialize-admin', username: 'admin', password: PASSWORD },
+    relay: { streamConnectTimeoutMs: 2_000 },
   })
-  const sessionCookie = cookieHeader(
-    new BrowserCookiePolicy({ mode: 'domain-https', domain: 'dsh.test' }).sessionHeaders(tokens),
-  )
-
-  const relay = createRelayServer({
-    host: '127.0.0.1',
-    port: 0,
-    publicDomain: 'dsh.test',
-    publicScheme: 'https',
-    streamConnectTimeoutMs: 2_000,
-    browserAuth: { cookieMode: 'domain-https' },
-  }, { authentication, logger: pino({ level: process.env.RELAY_TEST_LOG ?? 'silent' }), store })
-  const address = await relay.listen()
-
-  const fixture: Fixture = {
-    relay,
-    port: address.port,
-    store,
-    userId: initialized.user.id,
-    totpSecret: initialized.enrollment.secret,
-    sessionCookie,
-  }
   fixtures.push(fixture)
   return fixture
 }
 
-async function openConsole(fixture: Fixture): Promise<{ body: string; csrf: string; csrfPair: string }> {
-  const page = await httpRequest({
-    port: fixture.port,
+async function openConsole(fixture: Fixture) {
+  const page = await openCsrfPage(fixture, {
     path: ADMIN_ACCOUNT_PATH,
-    headers: { host: HOST, accept: 'text/html', cookie: fixture.sessionCookie },
+    host: HOST,
+    label: 'console',
   })
   expect(page.status, page.body).toBe(200)
-  const setCookie = setCookieArray(page.headers).find(header => header.includes('dsh_csrf='))
-  if (setCookie === undefined) throw new Error('console did not issue a CSRF cookie')
-  const csrfPair = setCookie.split(';', 1)[0] ?? ''
-  const csrf = readCookie(csrfPair, '__Secure-dsh_csrf')
-  if (csrf === undefined) throw new Error('could not parse the CSRF cookie')
-  return { body: page.body, csrf, csrfPair }
+  return page
 }
 
 function submit(fixture: Fixture, options: {
   path: string
   csrfPair: string
-  fields: Record<string, string>
+  fields: Record<string, string> & { csrf: string }
 }): Promise<HttpResult> {
-  return httpRequest({
-    port: fixture.port,
-    path: options.path,
-    method: 'POST',
-    headers: {
-      host: HOST,
-      origin: ORIGIN,
-      cookie: `${fixture.sessionCookie}; ${options.csrfPair}`,
-      'content-type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams(options.fields).toString(),
+  return postCsrfForm(fixture, {
+    ...options,
+    host: HOST,
+    origin: ORIGIN,
+    sessionCookie: fixture.sessionCookie,
   })
 }
 
@@ -115,10 +68,7 @@ function storedAdmin(fixture: Fixture) {
 }
 
 afterEach(async () => {
-  await Promise.all(fixtures.splice(0).map(async (fixture) => {
-    await fixture.relay.close()
-    fixture.store.close()
-  }))
+  await closeFixtures(fixtures)
 })
 
 describe('console account management', () => {
@@ -201,13 +151,13 @@ describe('console account management', () => {
     expect(changed.status, changed.body).toBe(200)
     expect(changed.body).toContain('密码已修改')
     expect(changed.body).toContain('重新登录')
-    // The page must never echo either password back.
+    // 页面绝不能回显任一密码。
     expect(changed.body).not.toContain(NEXT_PASSWORD)
 
     const stored = storedAdmin(fixture)
     await expect(verifyPassword(stored.passwordHash, NEXT_PASSWORD)).resolves.toBe(true)
     await expect(verifyPassword(stored.passwordHash, PASSWORD)).resolves.toBe(false)
-    // The authenticator binding survives a password change.
+    // 修改密码不会影响验证器绑定。
     expect(stored).toMatchObject({ totpEnabled: true, totpSecret: fixture.totpSecret })
 
     const afterwards = await httpRequest({
@@ -269,8 +219,8 @@ describe('console account management', () => {
     expect(stored.totpEnabled).toBe(false)
     await expect(verifyPassword(stored.passwordHash, PASSWORD)).resolves.toBe(true)
 
-    // The reset revoked every session, so the next request has to log in again
-    // and can never bring the secret back on an ordinary page load.
+    // 重置吊销了所有会话，因此下一次请求必须重新登录
+    // 普通页面加载绝不能再次带回 secret。
     const afterwards = await httpRequest({
       port: fixture.port,
       path: ADMIN_PATH_PREFIX,

@@ -1,47 +1,7 @@
 /**
- * dsh-remote plugin: long-running services (dev server, backend, watcher) that
- * outlive the turn, the session, and dsh itself — plus a collapsible panel
- * above the composer that shows them.
- *
- * WHY THIS PLUGIN EXISTS, given that dsh already has background jobs. dsh's
- * `bash`/`pwsh` tools take `run_in_background` and register the run with
- * `ctx.jobs`, and `job_list`/`job_output`/`job_kill` control it. That runtime is
- * deliberately scoped to the conversation: `JobStart.owner` is documented as
- * "agent disposal cancels and awaits the job"
- * (`packages/jobs/jobs/src/types.ts`), and a shell executor's background
- * process is stopped when its composition tears down
- * (`docs/subsystems/shell.md:242`). That is exactly right for `pnpm build` and
- * exactly wrong for `pnpm dev`: switch sessions, or restart dsh, and the dev
- * server you were using is gone. Nothing in dsh survives that boundary, and
- * nothing in dsh names a long-running process so you can find it again.
- *
- * So this plugin keeps a named registry on disk and spawns every service
- * DETACHED — the same choice, for the same reasons, as the pi coding-agent
- * `services` extension this is modelled on. The whole engine lives in
- * `./core.ts` and `./manager.ts`, which import nothing from dsh; this module is
- * the thin dsh-facing layer: five tools, one RPC channel, one safety gate.
- *
- * THE SAFETY GATE IS THE ONE NON-OBVIOUS PART. dsh's web profile mounts a
- * CONFINING shell executor (`@deepseek-ai/dsh-pwsh-sandbox` on Windows, which
- * resolves to the ACL restricted-token runner), and the permission presets sell
- * `read-only` and `workspace-write` as real confinement. A plugin that spawns
- * with `node:child_process` bypasses all of it. Leaving that unguarded would
- * mean a user who selected a confined preset still had one tool that escapes
- * it — and would never be told.
- *
- * So `service_start` and `service_restart` read the CALLING SESSION's resolved
- * sandbox mode through `ctx.sandboxPolicy` and, when it is anything but
- * `danger-full-access`, ask for explicit human approval through `ctx.approval`
- * before spawning. Under `danger-full-access` no approval is requested, because
- * `bash` already grants exactly this capability and a second prompt would be
- * ceremony rather than protection. This is proportionate rather than absolute:
- * see the README for what it does and does not claim.
- *
- * TWO HALVES, ONE PACKAGE. This module is the Host half, loaded through the
- * `--patch` overlay next to it; the browser half (`./client`) is served by
- * dsh's client module system. They meet on the RPC channel in `./shared.ts`,
- * which dsh gates with the same Host/Origin fence and browser authentication as
- * `/api` (and, remotely, behind the relay's own login).
+ * dsh-remote services 插件：管理可活过 turn、session 和 dsh 的 dev server、backend、watcher，并在 composer 上方提供可折叠 panel。
+ * Host 半使用磁盘 registry、OS liveness/identity probe 和显式 sandbox approval；browser 半通过 shared RPC channel 读取和操作。
+ * 服务 spawn 位于本模块的安全 gate 之后；所有入口最终复用 `manager` 的实现。
  *
  * @module @dsh-remote/dsh-plugin-services
  */
@@ -49,8 +9,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import zs from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-// Type-only: each activates the Context merge naming a service this plugin
-// reads. Value imports across plugins are forbidden; services are the seam.
+import type { ParameterPropertySpec } from '@deepseek-ai/dsh-tools'
+// 仅类型：激活本插件读取的 Context service merge。插件之间禁止 value import，service 是协作接缝。
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from '@deepseek-ai/dsh-user-approval'
@@ -71,77 +31,49 @@ export {
 } from './manager.js'
 export type { ServiceRecord } from './core.js'
 
-/** Cordis plugin name, as it appears in dsh's plugin tree and its diagnostics. */
+/** Cordis 插件名，出现在 dsh 插件树和诊断信息中。 */
 export const name = 'dsh-remote-services'
 
 /**
- * Required services.
- *
- * `tools` carries the five tools, `connection` serves the panel's channel, and
- * `agents` resolves a session id to the live agent whose header names the
- * project directory.
- *
- * `sandboxPolicy` and `approval` are read optionally at call time: a
- * composition without a sandbox has nothing to escape, so requiring them would
- * make this plugin refuse to load in exactly the deployments where its gate is
- * moot.
+ * 所需 service。`tools` 注册五个工具，`connection` 提供 panel channel，`agents` 按 session id 找到带项目 cwd 的 live agent；sandbox/approval 按调用时可选读取，以兼容没有该 gate 的 composition。
  */
 export const inject = ['tools', 'connection', 'agents']
 
-/** This plugin's configuration. */
+/** 本插件的配置。 */
 export interface Config {
   /**
-   * Whether a confined session must obtain human approval before starting a
-   * service.
-   *
-   * Turning this off is a deliberate decision to let services escape the
-   * sandbox silently; it exists for unattended deployments that have already
-   * accepted that risk, and it never weakens `danger-full-access` (which asks
-   * for nothing either way).
-   */
+ * 受限 session 启动服务前是否必须取得人工批准。关闭是有意承担风险的 unattended 部署选项，不会改变 `danger-full-access` 无需批准的行为。
+ */
   approvalInConfinedSandbox: boolean
 }
 
-/** Runtime schema of {@link Config}. */
+/** {@link Config} 的 runtime schema。 */
 export const Config: zs<Config> = zs.object({
   approvalInConfinedSandbox: zs.boolean().default(true),
 })
 
 /**
- * The project directory a session's services belong to.
- *
- * `session.header.cwd` and NOT `meta`: the working directory is storage
- * metadata beside the log, which is the same fact the `notify` plugin in this
- * repository relies on.
- *
- * A session with no live agent yields `undefined`. That is a real state — a
- * session can exist cold in storage — and the honest answer is an empty panel
- * rather than resuming an agent from a poll, which would turn a passive display
- * into something that starts work.
- * @param ctx - Host plugin context.
- * @param sessionId - the session to resolve.
- * @returns the project directory, or undefined.
+ * 解析 session 服务所属的项目目录。读取 `session.header.cwd` 而不是 `meta`；没有 live agent 时返回 undefined，冷 session 应显示空 panel 而不是通过轮询恢复 agent。
+ * @param ctx - Host plugin context。
+ * @param sessionId - 要解析的 session。
+ * @returns 项目目录；没有时返回 undefined。
  */
 export function cwdOf(ctx: Context, sessionId: string): string | undefined {
   return ctx.agents.get(sessionId as SessionId)?.session.header.cwd
 }
 
-/** The snapshot reported when no project directory could be resolved. */
+/** 无法解析项目目录时返回的 snapshot。 */
 export function emptySnapshot(now: number = Date.now()): ServicesSnapshot {
   return { cwd: null, services: [], stoppedLogs: [], now }
 }
 
 /**
- * Decide whether this agent may spawn an unsandboxed, session-outliving process.
- *
- * Returns an explanatory sentence when it may NOT, and `undefined` when it may.
- * The refusal is returned rather than thrown so both a tool result and an RPC
- * reply can state it in the caller's own vocabulary.
- * @param ctx - Host plugin context.
- * @param agent - the agent on whose behalf the service would start.
- * @param what - short description of the action, for the approval prompt.
- * @param config - resolved plugin configuration.
- * @returns a refusal sentence, or undefined when the action may proceed.
+ * 判断 agent 是否可以 spawn 一个绕过 sandbox、且活过 session 的进程。受限模式需要通过 `ctx.approval` 请求人工批准；拒绝以句子返回而非抛错，便于 tool 和 RPC 使用调用方自己的文案。
+ * @param ctx - Host plugin context。
+ * @param agent - 代表服务启动方的 agent。
+ * @param what - approval prompt 的动作描述。
+ * @param config - 解析后的插件配置。
+ * @returns 拒绝句子；允许时为 undefined。
  */
 export async function gateSpawn(
   ctx: Context,
@@ -151,14 +83,12 @@ export async function gateSpawn(
 ): Promise<string | undefined> {
   if (!config.approvalInConfinedSandbox) return undefined
   const sandboxPolicy = ctx.get('sandboxPolicy')
-  // No sandbox in the composition means nothing is being escaped.
+  // composition 没有 sandbox，表示没有可被绕过的限制。
   if (sandboxPolicy === undefined) return undefined
   const mode = sandboxPolicy.resolve(agent === undefined ? {} : { session: agent.session }).mode
   if (mode === 'danger-full-access') return undefined
 
-  // Confined, so the spawn is an escape and needs a human. Without an agent
-  // there is no session to ask on behalf of, and without the approval service
-  // there is nobody to ask — both fail closed.
+  // 处于受限模式，spawn 会越过 sandbox，必须人工批准。没有 agent 就没有可代表请求的 session；没有 approval service 就无人可问，两者都 fail closed。
   if (agent === undefined) {
     return `当前沙箱模式是 ${mode}，启动常驻服务会绕过沙箱，需要人工批准；但这次调用没有归属会话，无法征求批准。`
   }
@@ -172,8 +102,7 @@ export async function gateSpawn(
     reason: `${what}。常驻服务在沙箱之外直接启动，并且会活过这一轮、这个会话，以及 dsh 本身`
       + `（当前沙箱模式：${mode}）。`,
   })
-  // `allowed-once` is the only grant; `unavailable` is the documented
-  // fail-closed value and `rejected` is what the `never` policy returns.
+  // 只有 `allowed-once` 是授权；`unavailable` 是文档规定的 fail-closed 值，`rejected` 是 `never` policy 返回的结果。
   if (outcome === 'allowed-once') return undefined
   return outcome === 'rejected'
     ? `启动被拒绝：当前沙箱模式是 ${mode}，常驻服务会绕过沙箱，需要人工批准。`
@@ -181,31 +110,41 @@ export async function gateSpawn(
 }
 
 /**
- * Resolve the project directory a tool call operates on.
- * @param exec - the tool execution.
- * @returns the directory, or undefined for a caller with no session.
+ * 解析 tool call 操作所用的项目目录。
+ * @param exec - tool execution。
+ * @returns 项目目录；没有 session 时返回 undefined。
  */
 function toolCwd(exec: { agent?: Agent }): string | undefined {
   return exec.agent?.session.header.cwd
 }
 
-/** The sentence returned when a tool call has no project directory to work in. */
+/** tool call 没有项目目录可操作时返回的句子。 */
 const NO_CWD = '这次调用没有归属会话的项目目录，无法管理常驻服务。'
 
+type ReportOutput = { report: string }
+
+const renderReport = (_args: unknown, value: ReportOutput) => [
+  { type: 'text' as const, text: value.report },
+]
+
+function reportOutput<const P extends Record<string, ParameterPropertySpec>>(properties: P) {
+  return {
+    schema: {
+      type: 'object' as const,
+      additionalProperties: false as const,
+      properties: {
+        ...properties,
+        report: { type: 'string' as const, required: true as const },
+      },
+    },
+    render: renderReport,
+  }
+}
+
 /**
- * Register the five tools.
- *
- * All five are registered unconditionally. The pi extension this is modelled on
- * loads three of them lazily through `setActiveTools`, but dsh has no such
- * seam — `ctx.tools.register` is the whole registration surface — so the
- * schemas are simply always present. They are small, and the alternative would
- * be inventing a mechanism dsh does not have.
- *
- * Every tool flows through dsh's ordinary `tools/pre-execute` waterfall exactly
- * like `bash` does, so hooks and policy plugins gate them without knowing this
- * plugin exists.
- * @param ctx - Host plugin context.
- * @param config - resolved plugin configuration.
+ * 注册五个工具。全部无条件注册，因为 dsh 没有 pi 的 `setActiveTools` seam；每个调用仍经过 dsh 的 `tools/pre-execute` waterfall，与 `bash` 一样接受 hooks 和 policy gate。
+ * @param ctx - Host plugin context。
+ * @param config - 解析后的插件配置。
  */
 function registerTools(ctx: Context, config: Config): void {
   ctx.tools.register(defineTool({
@@ -230,17 +169,9 @@ function registerTools(ctx: Context, config: Config): void {
           + 'use one syntax everywhere. Override only when this specific command needs a different shell.',
       },
     },
-    output: {
-      schema: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          ok: { type: 'boolean', required: true },
-          report: { type: 'string', required: true },
-        },
-      },
-      render: (_args, value) => [{ type: 'text', text: value.report }],
-    },
+    output: reportOutput({
+      ok: { type: 'boolean', required: true },
+    }),
     async execute(args, exec) {
       const cwd = toolCwd(exec)
       if (cwd === undefined) return { ok: false, report: NO_CWD }
@@ -249,11 +180,7 @@ function registerTools(ctx: Context, config: Config): void {
       const result = await startService({
         name: args.name,
         command: args.command,
-        // The registry and the log always live in the SESSION's project
-        // directory, even when the command runs somewhere else. Collapsing the
-        // two is not a style choice: `service_list` and the panel only know the
-        // session's directory, so a registry that followed `args.cwd` produces
-        // a service that is demonstrably running and reported as absent.
+        // registry 和日志始终位于 SESSION 项目目录，即使命令在别处运行；`service_list` 与 panel 只知道 session 目录，跟随 `args.cwd` 会让存活服务被报告为不存在。
         root: cwd,
         cwd: args.cwd ?? cwd,
         ...args.port === undefined ? {} : { port: args.port },
@@ -273,17 +200,9 @@ function registerTools(ctx: Context, config: Config): void {
       + 'truth for whether a service exists: it reconciles the registry against the operating system '
       + 'on every call, so a service that died on its own is reported as stopped.',
     parameters: {},
-    output: {
-      schema: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          running: { type: 'integer', required: true },
-          report: { type: 'string', required: true },
-        },
-      },
-      render: (_args, value) => [{ type: 'text', text: value.report }],
-    },
+    output: reportOutput({
+      running: { type: 'integer', required: true },
+    }),
     execute(_args, exec) {
       const cwd = toolCwd(exec)
       if (cwd === undefined) return Promise.resolve({ running: 0, report: NO_CWD })
@@ -301,18 +220,10 @@ function registerTools(ctx: Context, config: Config): void {
       name: { type: 'string', required: true, description: 'Service name.' },
       lines: { type: 'integer', description: `Number of trailing lines (default ${String(DEFAULT_LOG_LINES)}, max ${String(MAX_LOG_LINES)}).` },
     },
-    output: {
-      schema: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          file: { type: 'string', required: true },
-          running: { type: 'boolean', required: true },
-          report: { type: 'string', required: true },
-        },
-      },
-      render: (_args, value) => [{ type: 'text', text: value.report }],
-    },
+    output: reportOutput({
+      file: { type: 'string', required: true },
+      running: { type: 'boolean', required: true },
+    }),
     execute(args, exec) {
       const cwd = toolCwd(exec)
       if (cwd === undefined) return Promise.resolve({ file: '', running: false, report: NO_CWD })
@@ -335,17 +246,9 @@ function registerTools(ctx: Context, config: Config): void {
     parameters: {
       name: { type: 'string', required: true, description: 'Service name.' },
     },
-    output: {
-      schema: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          ok: { type: 'boolean', required: true },
-          report: { type: 'string', required: true },
-        },
-      },
-      render: (_args, value) => [{ type: 'text', text: value.report }],
-    },
+    output: reportOutput({
+      ok: { type: 'boolean', required: true },
+    }),
     execute(args, exec) {
       const cwd = toolCwd(exec)
       if (cwd === undefined) return Promise.resolve({ ok: false, report: NO_CWD })
@@ -364,17 +267,9 @@ function registerTools(ctx: Context, config: Config): void {
       name: { type: 'string', required: true, description: 'Service name.' },
       readyTimeoutMs: { type: 'integer', description: 'Readiness probe timeout in ms (default 8000, max 120000).' },
     },
-    output: {
-      schema: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          ok: { type: 'boolean', required: true },
-          report: { type: 'string', required: true },
-        },
-      },
-      render: (_args, value) => [{ type: 'text', text: value.report }],
-    },
+    output: reportOutput({
+      ok: { type: 'boolean', required: true },
+    }),
     async execute(args, exec) {
       const cwd = toolCwd(exec)
       if (cwd === undefined) return { ok: false, report: NO_CWD }
@@ -387,20 +282,12 @@ function registerTools(ctx: Context, config: Config): void {
 }
 
 /**
- * Dispatch one decoded RPC call from the panel.
- *
- * Exported for tests, which drive the endpoints without an HTTP carrier.
- *
- * NOTE the panel deliberately cannot START a service: creating one takes a
- * command, and a text field on a page that runs arbitrary commands outside the
- * sandbox is a materially different thing from a button that stops something
- * the user can already see. Starting stays with the model-facing tool, where the
- * approval gate and the transcript both apply.
- * @param ctx - Host plugin context.
- * @param endpoint - channel-relative endpoint name.
- * @param payload - the browser's payload.
- * @param config - resolved plugin configuration.
- * @returns the result, or a coded failure.
+ * 分发 panel 解码后的 RPC call。panel 刻意不能 START 服务：页面任意命令输入框会形成不同的安全边界；启动只留给带 approval gate 和转录记录的 model-facing tool。
+ * @param ctx - Host plugin context。
+ * @param endpoint - 相对 channel 的 endpoint 名称。
+ * @param payload - browser payload。
+ * @param config - 解析后的插件配置。
+ * @returns 结果或带错误码的失败。
  */
 export async function dispatch(
   ctx: Context,
@@ -430,7 +317,7 @@ export async function dispatch(
     if (cwd === undefined) {
       return { ok: true, value: { ok: false, message: NO_CWD } }
     }
-    // The name is present for every non-list endpoint; `isNamedRequest` proved it.
+    // `isNamedRequest` 已证明所有非 list endpoint 都带有 name。
     const serviceName = request.name as string
     if (endpoint === 'logs') {
       return { ok: true, value: logsOf(cwd, serviceName, request.lines ?? DEFAULT_LOG_LINES) }
@@ -438,8 +325,7 @@ export async function dispatch(
     if (endpoint === 'stop') {
       return { ok: true, value: stopService(cwd, serviceName) }
     }
-    // restart: the same spawn gate the tool uses, because pressing a button is
-    // not a reason to skip a sandbox decision.
+    // restart 也使用与 tool 相同的 spawn gate；按按钮不是跳过 sandbox 决策的理由。
     const agent = ctx.agents.get(request.sessionId as SessionId)
     const refusal = await gateSpawn(ctx, agent, `重启常驻服务 ${serviceName}`, config)
     if (refusal !== undefined) return { ok: true, value: { ok: false, message: refusal } }
@@ -457,9 +343,9 @@ export async function dispatch(
 }
 
 /**
- * Mount the tools and the panel's channel.
- * @param ctx - Host plugin context.
- * @param config - resolved plugin configuration.
+ * 挂载 tools 和 panel channel。
+ * @param ctx - Host plugin context。
+ * @param config - 解析后的插件配置。
  */
 export function apply(ctx: Context, config: Config): void {
   registerTools(ctx, config)

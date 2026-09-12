@@ -19,7 +19,7 @@ function dshHost(value: string): '127.0.0.1' {
   return value
 }
 
-/** Fall back to a stable, DNS-label-shaped id derived from the host name. */
+/** 回退到根据主机名生成的稳定、符合 DNS label 形状的 id。 */
 function defaultMachineId(slug: string | undefined): string {
   const host = hostname().toLowerCase().replaceAll(/[^a-z0-9-]+/gu, '-').replace(/^-+|-+$/gu, '')
   if (host === '') return slug ?? 'dsh-remote-machine'
@@ -54,8 +54,8 @@ const options = program.opts<{
   dshToken?: string
 }>()
 
-// dsh mints a fresh token on every start, so the environment variable is the
-// normal path: whoever spawned dsh read it off that process's first output line.
+// dsh 每次启动都会生成新 token，因此环境变量是通常的
+// 路径：启动 dsh 的进程从它的第一行输出中读出 token。
 const dshToken = options.dshToken ?? process.env.DSH_REMOTE_DSH_TOKEN
 
 const enrollToken = options.enrollToken ?? process.env.DSH_REMOTE_ENROLL_TOKEN
@@ -63,21 +63,21 @@ if (enrollToken !== undefined && enrollToken.length < 16) {
   program.error('--enroll-token (or DSH_REMOTE_ENROLL_TOKEN) must be at least 16 characters; copy it verbatim from the relay')
   throw new Error('unreachable')
 }
-// The CLI token only applies to a CLI-selected relay; a hub joined from an
-// admin console carries its own token inside membership.json.
+// CLI token 只适用于通过 CLI 选择的 relay；从管理控制台加入的
+// hub 会在 membership.json 中携带自己的 token。
 if (options.enrollToken !== undefined && options.relay === undefined) {
   program.error('--enroll-token (or DSH_REMOTE_ENROLL_TOKEN) needs --relay; a hub joined from an admin console carries its own token in membership.json')
   throw new Error('unreachable')
 }
 
-// A CLI-selected relay carries no membership file to learn the slug from.
+// 通过 CLI 选择的 relay 没有可用于读取 slug 的 membership 文件。
 if (options.relay !== undefined && options.slug === undefined) {
   program.error('--relay needs --slug; only a hub joined from an admin console supplies its own slug')
   throw new Error('unreachable')
 }
 
-// Same rule as the token: it describes the hub, and the hub joined from an
-// admin console records its own authority in membership.json.
+// 规则与 token 相同：它描述 hub，而从管理控制台加入的
+// hub 会在 membership.json 中记录自己的 authority。
 if (options.hubAuthority !== undefined && options.relay === undefined) {
   program.error('--hub-authority needs --relay; a hub joined from an admin console carries its own authority in membership.json')
   throw new Error('unreachable')

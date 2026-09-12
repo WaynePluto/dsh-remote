@@ -9,36 +9,36 @@ import (
 )
 
 const (
-	// Read the same way packages/launcher/src/config.ts reads it: from the
-	// package root, unless --config points somewhere else.
+	// 与 packages/launcher/src/config.ts 一样读取：默认从
+	// 软件包根目录读取，除非 --config 指向其他位置。
 	configFileName = "dsh-remote.config.json"
 
-	// Defaults copied from packages/launcher/src/config.ts. A freshly unzipped
-	// package has no config file at all, and the two menu items that open a
-	// browser still have to point at the right ports.
+	// 默认值复制自 packages/launcher/src/config.ts。刚解压的
+	// 软件包可能完全没有配置文件，而两个打开
+	// 浏览器的菜单项仍必须指向正确的端口。
 	defaultDshPort   = 3080
 	defaultRelayPort = 30809
 	homeDirName      = ".dsh-remote"
 
-	// Both URLs are loopback only: the console is reachable from the LAN too,
-	// but this menu runs on the machine itself, and 铁律 11 makes 127.0.0.1 the
-	// one authority that does not need a login.
+	// 两个 URL 都只使用 loopback：控制台也能从局域网访问，
+	// 但菜单运行在本机；按铁律 11，127.0.0.1 是唯一
+	// 不需要登录的访问入口。
 	loopbackHost = "127.0.0.1"
 )
 
-// settings is the slice of the launcher's configuration the tray needs: two
-// ports for the two URLs, and the home directory the log file lives in.
+// settings 是 tray 需要的 launcher 配置子集：两个
+// URL 的端口，以及日志文件所在的 home 目录。
 type settings struct {
 	dshPort   int
 	relayPort int
 	home      string
-	// The config file that was read; empty when built-in defaults are in use.
+	// 已读取的配置文件；使用内置默认值时为空。
 	path string
 }
 
-// rawConfig deliberately describes only those fields. The launcher validates
-// the whole document with zod and refuses to start on anything it dislikes, so
-// a second, stricter reader here could only ever disagree with it.
+// rawConfig 刻意只描述这些字段。launcher 会校验
+// 整个文档并拒绝任何不合规内容，因此
+// 这里再实现一个更严格的读取器只会与它产生分歧。
 type rawConfig struct {
 	Dsh *struct {
 		Port *int `json:"port"`
@@ -61,12 +61,12 @@ func (s settings) logPath() string {
 	return filepath.Join(s.home, logFileName)
 }
 
-// loadSettings reads the config file, falling back to the documented defaults.
+// loadSettings 读取配置文件，失败时回退到文档规定的默认值。
 //
-// A missing or broken file is never reported here: the launcher reads the very
-// same file moments later and says precisely what is wrong with it, in the log.
-// Refusing to show a tray icon over it would leave the user with no way to read
-// that message.
+// 文件缺失或损坏时这里不会报告：launcher 稍后会重新读取同一个
+// 文件，并在日志中准确说明问题。
+// 如果因此拒绝显示托盘图标，用户就没有办法读取
+// 这条消息。
 func loadSettings(root string, arguments []string) settings {
 	resolved := settings{dshPort: defaultDshPort, relayPort: defaultRelayPort, home: defaultHome(root)}
 	path := configPath(root, arguments)
@@ -95,8 +95,8 @@ func validPort(port int) bool {
 	return port >= 1 && port <= 65535
 }
 
-// configPath honours a --config passed through to the launcher, so the log and
-// the two URLs describe the stack that is actually running.
+// configPath 遵守传给 launcher 的 --config，因此日志和
+// 两个 URL 描述的确实是当前运行的 stack。
 func configPath(root string, arguments []string) string {
 	for index, argument := range arguments {
 		if value, found := strings.CutPrefix(argument, "--config="); found {
@@ -112,16 +112,16 @@ func configPath(root string, arguments []string) string {
 func defaultHome(root string) string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		// Without a home directory there is still a log to write; the package
-		// root is the one directory this program is sure about.
+		// 即使没有 home 目录也仍要写日志；软件包
+		// 根目录是本程序唯一能确定的目录。
 		return filepath.Join(root, homeDirName)
 	}
 	return filepath.Join(home, homeDirName)
 }
 
-// expandHome mirrors the launcher's own path handling: a leading ~ is the user
-// home, and a relative path is relative to the package root, because that is
-// the working directory the launcher child is given.
+// expandHome 与 launcher 自己的路径处理一致：开头的 ~ 表示用户
+// home；相对路径相对于软件包根目录，因为这就是
+// 传给 launcher 子进程的工作目录。
 func expandHome(path string, root string) string {
 	if path == "~" {
 		if home, err := os.UserHomeDir(); err == nil {

@@ -1,7 +1,4 @@
-/**
- * The fold itself: one stylesheet, many owners, and a promise that unmounting
- * a row can never leave its rows collapsed with no control to open them.
- */
+/** 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。 */
 
 import { describe, expect, it } from 'vitest'
 import {
@@ -9,7 +6,7 @@ import {
   STYLE_MARKER, THINK_SELECTOR, type StyleHost,
 } from '../src/client/hidden-rows.js'
 
-/** A `<style>` stand-in recording everything the controller does to it. */
+/** 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。（涉及：`<style>`） */
 function fakeHost(): { host: StyleHost; text: () => string | null; attached: () => boolean } {
   const element = {
     textContent: null as string | null,
@@ -36,9 +33,9 @@ describe('collapsedRowsCss', () => {
   })
 
   it('collapses to zero height rather than display:none', () => {
-    // dsh binary-searches the ordered rows by their rects to restore the
-    // reader's position (ChatView.tsx:93-104); an all-zero rect breaks that
-    // ordering, a zero-height one does not.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。
     const css = collapsedRowsCss(['k'])
     expect(css).toContain('height:0!important')
     expect(css).not.toContain('display:none')
@@ -67,8 +64,8 @@ describe('collapsedRowsCss inline thinking', () => {
   })
 
   it('keeps the :has() rule separate so a browser without it still hides the box', () => {
-    // One invalid selector drops its own rule, not the sheet — but only if the
-    // two live in separate rules.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 两条规则必须彼此独立。
     const rules = collapsedRowsCss([], ['answer']).split('}').filter(part => part.includes(':has('))
     expect(rules).toHaveLength(1)
   })

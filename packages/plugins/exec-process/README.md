@@ -9,7 +9,7 @@
 ```
 
 点它展开，再点收起。中文计数摘要固定为 `思考{n}次·工具{m}次·失败{o}`，没有失败时
-整段 `·失败{o}` 不出现；`工具调用` 缩为 `工具`，失败计数与其余摘要同色。段或 turn 已结束时
+整段 `·失败{o}` 不出现；失败计数与其余摘要同色。段或 turn 已结束时
 不再显示任何「最近动作」区域；只有仍可继续的 segment 才显示 `最近{动作}`。运行中仍显示
 `{工具}进行中` / `思考中`，呼吸圆点位于最右侧 chevron 的左边，动作文字是唯一可截断区域。
 
@@ -20,8 +20,8 @@
 
 三条贯穿全篇的规则：
 
-- **一段 = 到下一条正式消息为止。** agent 说出来的话不进折叠；正式消息之后，
-  再开一条新的「执行过程」。所以一个 turn 有几条正式消息，就有几段。
+- **一段 = 到下一条用户消息或正式消息为止。** 用户消息和 agent 说出来的话都不进折叠；
+  两者之后都再开一条新的「执行过程」。所以一个 turn 会按用户消息与正式消息共同切成多段。
 - **正在跑的轮次也折。** 折叠就是阅读体验本身，等轮次结束才出现等于没有。
   行上的计数实时更新，本身就是进度指示。
 - **段尾那条正式消息里的「已思考」也归这一段。** 消息留着，思考跟着折走。
@@ -36,21 +36,22 @@ dsh 本来就有这个想法：`ui-chat` 为每个 turn 投影一个 `turn-proce
    而转录窗口只加载**最近 50 条 surface 消息**
    （`packages/api/session-controller/src/client/sessions/session.ts:47,601`）。
    所以会话一超过约五十条消息，`hasMore` 恒为真，**整个视图的折叠被关掉**，
-   而且没有任何设置能打开。事实链见 [docs/02-dsh-facts.md](../../../docs/02-dsh-facts.md) §11.2。
+  而且没有任何设置能打开。事实链见 [会话与消息](../../../docs/dsh/conversation.md)。
 2. 它的摘要只数工具调用、助手消息和子 agent，**不数思考次数、不数失败，也从不说最近一次动作**。
 
 ## 怎么做的
 
-四处注册，每一处都是能办成这件事的最小接缝：
+五处注册，每一处都是能办成这件事的最小接缝：
 
 | # | 注册 | 说明 |
 |---|---|---|
 | A | `ConversationNodeDefinition`（kind `exec-process`） | 每个 turn 的**第一段**。只提供位置：窗口与边界直接读 dsh 自己发布的 `turn-process` Turn 数据——那份投影**不受** `historyIncomplete` 影响，被关掉的只是它的呈现 |
 | B | `ConversationNodeDefinition`（kind `exec-process-step`） | **正式消息之后的每一段**。一个 agent step 恰好一条助手消息，所以按 `turn:step` 建 Context；节点位于消息 `+0.04`，早于 dsh 的 max-tokens `+0.05` 与 turn-tail `+0.1`，保证 turn-tail 仍是最后节点、分叉按钮不会被误禁用；没说过正式话的 step 出 `visibility: 'hidden'` 而不是撤回节点 |
-| C | `conversation.chat.node` key `exec-process` / `exec-process-step` | 标题条本身：展开背景复用 TodoPanel 的 `--dsw-specific-tip`，颜色与字号取自 dsh 令牌 |
-| D | `conversation.chat.node` key `turn-process`，`priority: -1` | **影子覆盖** dsh 自己的控件 |
+| C | `ConversationNodeDefinition`（kind `exec-process-user`） | 中途用户消息之后的新段；仅接收 append + `source.kind === 'user'`，用 inbox claim 判定 steering，turn 从 Context location 取，anchor 为用户行后 `+0.04`，首条 turn-opening user hidden |
+| D | `conversation.chat.node` key `exec-process` / `exec-process-step` / `exec-process-user` | 标题条本身：展开背景复用 TodoPanel 的 `--dsw-specific-tip`，颜色与字号取自 dsh 令牌 |
+| E | `conversation.chat.node` key `turn-process`，`priority: -1` | **影子覆盖** dsh 自己的控件 |
 
-D 做两件事：短会话里 dsh 的折叠本来能用，覆盖掉它就不会出现两条控件；同时它把 dsh 的
+E 做两件事：短会话里 dsh 的折叠本来能用，覆盖掉它就不会出现两条控件；同时它把 dsh 的
 disclosure **强制常开**，于是 dsh 不再隐藏任何行（包括本插件那一行，它就落在同一个 seq 窗口里），
 转录里只剩**一套**折叠机制——本插件的。keyed 槽的 priority 影子覆盖是框架公开支持的能力
 （`packages/client/ui-slots/src/index.ts:749-755`，**priority 小的渲染**，同 priority 才抛错），
@@ -109,7 +110,7 @@ flex 列里；CSS 的 `overflow` 只裁剪后代，要把它们套进一个容�
 - **折叠范围不越过自己那一行。** dsh 的窗口从 `turn/start` 开始，比这一行更早；轮次开头的注入
   上下文行落在那段空隙里，跟着折走就成了「一行凭空消失」。所以起点被夹到本行自己的 anchor：
   「收起」严格等于「这条线以下的东西」。
-- **不折正式消息。** 一条带可见文字的助手消息就是「说给人看的话」，哪怕它同时还派了工具。
+- **不折用户消息和正式消息。** 用户消息，以及一条带可见文字的助手消息，都是「说给人看的话」，哪怕助手消息同时派了工具；它们各自结束当前段并在后面开新段。
   「执行过程」只意味着过程。
 - **没有宿主行为。** `src/index.ts` 是空插件，它存在只因为 dsh 的客户端模块系统靠 overlay 指向的
   宿主模块往上找到 `package.json` 才会下发浏览器半。**缺 `dist/client.js` 会让 dsh 的 web UI 整个起不来。**
@@ -122,7 +123,7 @@ flex 列里；CSS 的 `overflow` 只裁剪后代，要把它们套进一个容�
 - **展开内容统一使用不透明的 `--dsw-specific-tip` 背景，并回退到 `--dsw-alias-bg-base`**；
   member rows 形成的连续 frame 与 inline reasoning 父 wrapper 都必须覆盖，sticky/滚动时不能透底。
 - **展开内容外框使用 `--dsw-alias-border-l2`（带中性 fallback）**，比 `border-l1` 更清楚但仍克制；
-  `border-l1` 不再用于 frame。不能把 token 里的字母 `l` 写成数字 `1`。
+  不能把 token 里的字母 `l` 写成数字 `1`。
 - **字号走 `--dsh-content-font-size-secondary` 而不是写死 13px**：那是 dsh
   「比正文小一档」的次级轴（`gradient-shadow-text.css:56`），每条流式行的标题与摘要都在这条轴上，
   读者在设置里改字号时这一行才会跟着变。

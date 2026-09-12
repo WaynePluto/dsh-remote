@@ -10,7 +10,7 @@ export interface SegmentFrameEntry {
   readonly reasoning: readonly string[]
 }
 
-/** Build frame CSS for one expanded segment without moving dsh-owned nodes. */
+/** 根据 dsh 行 key 生成 segment frame 的 CSS。 */
 export function segmentFrameCss(entry: SegmentFrameEntry): string {
   const rules: string[] = []
   const rows = entry.rows.map(flowKeySelector)
@@ -47,8 +47,8 @@ export function segmentFrameCss(entry: SegmentFrameEntry): string {
 }`)
   }
 
-  // The thinking box itself is fixed at 24px in dsh. Padding or a border on it
-  // compresses/overflows that content, so frame its auto-sized parent instead.
+  // 为每个展开 segment 的 reasoning frame 增加边框、背景和圆角。
+  // frame 只覆盖 segment 内容，不改变 dsh node 的结构。
   const reasoning = entry.reasoning.map(key => `${flowKeySelector(key)} div:has(> ${THINK_SELECTOR})`)
   if (reasoning.length > 0) {
     rules.push(`${reasoning.join(",\n")} {
@@ -86,7 +86,7 @@ function sameEntry(left: SegmentFrameEntry | undefined, right: SegmentFrameEntry
     && left.reasoning.every((key, index) => key === right.reasoning[index])
 }
 
-/** Create one lifecycle-safe stylesheet for all currently expanded segments. */
+/** 创建共享的 segment frame controller。 */
 export function createSegmentFrameController(host: SegmentFrameHost | undefined): SegmentFrameController {
   if (host === undefined) return { set: () => {}, clear: () => {}, css: () => "", dispose: () => {} }
 

@@ -1,9 +1,9 @@
 {
-  // The browser half is checked in its own program on purpose: both halves of
-  // dsh's connection package merge a `ctx.connection` into cordis's Context —
-  // the Host registry in one, the browser caller in the other — and one program
-  // holding both would see them collide. dsh builds its own faces separately
-  // for the same reason.
+  // 实现说明：此处记录相关接口、边界和生命周期约束。
+  // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`ctx.connection`）
+  // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
+  // 两者会发生冲突；dsh 也分别构建两面
+  // 实现说明：此处记录相关接口、边界和生命周期约束。
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",

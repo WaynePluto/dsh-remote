@@ -1,23 +1,8 @@
 /**
- * 调用计数：**回放会话日志**，把每个工具的 { calls, failures } 数出来。
- *
- * ## ⚠️ 这里曾经错过一次，值得记住
- *
- * 第一版监听 `tools/result` 事件在内存里累加，并对用户声称「只能统计本次运行」。
- * **那是错的。** 真实情况是：
- *
- * - `tool/call` 是 dsh 的**持久化会话事件**，在构建期常量 `KNOWN_SESSION_EVENT_TYPES`
- *   里（dsh `packages/core/session/src/known-event-types.ts:66`），
- *   并且**自带 `name` 字段**（`types.ts:306`）——工具名就在日志里躺着。
- * - `session.snapshotEvents()`（`session/src/index.ts:600`）返回整个日志的不可变快照。
- *
- * 混淆点在 docs/02 §13.2：那条说的是「插件不能 **append** 自己的**新事件类型**」，
- * 与「能不能**读** dsh 自己的事件」是两码事。**读是完全可以的**，而且这才是正确的源 ——
- * 会话重开、dsh 重启，历史都还在。
- *
- * 所以计数覆盖**整个会话的全部历史**，不再是「本次运行以来」。
- *
- * 纯函数，不碰 ctx，便于测试。
+ * 回放会话日志，统计每个工具的 calls/failures。
+ * `tool/call` 是持久化事件且带 `name`；`session.snapshotEvents()` 提供完整历史，
+ * 因此 dsh 重启或重开会话后仍准确。
+ * 本模块只读已有事件，不 append 自定义事件；纯函数，不访问 ctx，便于测试。
  */
 
 /** 一个工具的累计计数。 */
@@ -48,14 +33,8 @@ export interface ReplayResult {
 }
 
 /**
- * 回放一段会话日志，数出每个工具被调用/失败了多少次。
- *
- * 做法是两趟合一：`tool/call` 提供**工具名**与 callId，`tool/result` 只带 callId
- * 和可选的 `error`，两者靠 callId 配对（dsh `session/src/types.ts:306,318`）。
- * 所以失败必须先在 call 里认领名字，再由 result 回填。
- *
- * 未配对的 `tool/result`（日志被截断、或 fork 继承的前缀里只剩一半）被安全忽略：
- * 数不出名字的失败宁可不算，也不要归到错误的工具头上。
+ * 回放会话日志，统计每个工具的调用与失败次数。
+ * `tool/call` 计总数，失败须用 callId 与 `tool/result` 配对；无法配对的失败忽略。
  * @param events - 会话日志事件，顺序即日志顺序。
  * @returns 按工具名索引的计数与总调用次数。
  */

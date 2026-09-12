@@ -1,0 +1,234 @@
+import { join } from 'node:path'
+
+/** 打包脚本的清单、路径和平台常量；仓库根目录由入口显式传入。 */
+export const STAGING_RELATIVE = 'release/.staging'
+export const WIN_EXECUTABLE = 'dsh-remote.exe'
+export const WIN_ICON_RESOURCE = 'rsrc_windows_amd64.syso'
+export const PREBUILD_DIRECTORIES = ['node_modules/node-pty/prebuilds']
+export const WIN_EXECUTABLE_MIN_BYTES = 1024 * 1024
+export const WIN_SUBSYSTEM_GUI = 2
+
+export const COMMON_PACKAGING_FILES = [
+  { name: 'README.txt', mode: 0o644 },
+  { name: 'dsh-remote.config.example.json', mode: 0o644 },
+]
+
+export const WINDOWS_PACKAGING_FILES = [
+  { name: 'start.ps1', mode: 0o644 },
+]
+
+export const POSIX_PACKAGING_FILES = [
+  { name: 'start.sh', mode: 0o755 },
+]
+
+export const ALL_PACKAGING_FILES = [
+  ...COMMON_PACKAGING_FILES,
+  ...WINDOWS_PACKAGING_FILES,
+  ...POSIX_PACKAGING_FILES,
+]
+
+/** sentinel 是按目标安装的 sharp 包，用于提前确认依赖树确实含有目标二进制。 */
+export const TARGETS = {
+  'win32-x64': {
+    platform: 'win32',
+    arch: 'x64',
+    label: 'Windows x64',
+    files: [...COMMON_PACKAGING_FILES, ...WINDOWS_PACKAGING_FILES],
+    sentinel: '@img/sharp-win32-x64',
+  },
+  'linux-x64': {
+    platform: 'linux',
+    arch: 'x64',
+    label: 'Linux x64',
+    files: [...COMMON_PACKAGING_FILES, ...POSIX_PACKAGING_FILES],
+    sentinel: '@img/sharp-linux-x64',
+  },
+  'darwin-arm64': {
+    platform: 'darwin',
+    arch: 'arm64',
+    label: 'macOS Apple Silicon',
+    files: [...COMMON_PACKAGING_FILES, ...POSIX_PACKAGING_FILES],
+    sentinel: '@img/sharp-darwin-arm64',
+  },
+}
+
+export const KEEP_AT_PACKAGE_ROOT = new Set(['dist', 'node_modules'])
+export const PNPM_BOOKKEEPING = [/(^|\/)\.modules\.yaml$/, /(^|\/)\.pnpm\/lock\.yaml$/]
+export const BIN_SCRIPT = /(^|\/)\.bin\//
+
+export const BUILD_ARTIFACTS = [
+  'packages/launcher/dist/index.js',
+  'packages/relay/dist/cli.js',
+  'packages/connector/dist/cli.js',
+  'packages/plugins/remote-privileged/dist/index.js',
+  'packages/plugins/directory-picker-browse/dist/index.js',
+  'packages/plugins/copilot-auth/dist/index.js',
+  'packages/plugins/models-catalog/dist/index.js',
+  'packages/plugins/model-capabilities/dist/index.js',
+  'packages/plugins/favorite-models/dist/index.js',
+  'packages/plugins/proxy/dist/index.js',
+  'packages/plugins/turn-retry/dist/index.js',
+  'packages/plugins/exec-process/dist/index.js',
+  'packages/plugins/chat-scroll/dist/index.js',
+  'packages/plugins/user-message-fork/dist/index.js',
+  'packages/plugins/files/dist/index.js',
+  'packages/plugins/agents-md/dist/index.js',
+  'packages/plugins/concise-mode/dist/index.js',
+  'packages/plugins/notify/dist/index.js',
+  'packages/plugins/services/dist/index.js',
+  'packages/plugins/terminal/dist/index.js',
+  'packages/plugins/tools-inspector/dist/index.js',
+  'packages/plugins/skills-inspector/dist/index.js',
+  'packages/plugins/subagent-depth/dist/index.js',
+  'packages/plugins/yolo-mode/dist/index.js',
+  // 浏览器侧构建产物缺失会让 dsh 的网页模块扫描整体失败。
+  'packages/plugins/copilot-auth/dist/client.js',
+  'packages/plugins/models-catalog/dist/client.js',
+  'packages/plugins/model-capabilities/dist/client.js',
+  'packages/plugins/favorite-models/dist/client.js',
+  'packages/plugins/proxy/dist/client.js',
+  'packages/plugins/turn-retry/dist/client.js',
+  'packages/plugins/exec-process/dist/client.js',
+  'packages/plugins/chat-scroll/dist/client.js',
+  'packages/plugins/user-message-fork/dist/client.js',
+  'packages/plugins/files/dist/client.js',
+  'packages/plugins/agents-md/dist/client.js',
+  'packages/plugins/notify/dist/client.js',
+  'packages/plugins/services/dist/client.js',
+  'packages/plugins/terminal/dist/client.js',
+  'packages/plugins/tools-inspector/dist/client.js',
+  'packages/plugins/skills-inspector/dist/client.js',
+  'packages/plugins/subagent-depth/dist/client.js',
+]
+
+export const DSH_PLUGIN_FILES = [
+  'node_modules/@dsh-remote/dsh-plugin-remote-privileged/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-remote-privileged/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-directory-picker-browse/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-directory-picker-browse/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-copilot-auth/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-copilot-auth/dist/index.js',
+  // 客户端模块通过 package.json 的 exports 找到网页 bundle，缺失会阻止 dsh 启动。
+  'node_modules/@dsh-remote/dsh-plugin-copilot-auth/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-models-catalog/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-models-catalog/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-models-catalog/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-model-capabilities/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-model-capabilities/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-model-capabilities/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-favorite-models/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-favorite-models/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-favorite-models/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-proxy/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-proxy/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-proxy/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-turn-retry/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-turn-retry/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-turn-retry/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-exec-process/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-exec-process/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-exec-process/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-chat-scroll/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-chat-scroll/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-chat-scroll/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-user-message-fork/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-user-message-fork/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-user-message-fork/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-files/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-files/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-files/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-agents-md/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-agents-md/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-agents-md/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-notify/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-notify/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-notify/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-services/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-services/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-services/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-skills-inspector/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-skills-inspector/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-skills-inspector/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-terminal/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-terminal/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-terminal/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-tools-inspector/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-tools-inspector/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-tools-inspector/dist/client.js',
+  'node_modules/@dsh-remote/dsh-plugin-subagent-depth/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-subagent-depth/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-subagent-depth/dist/client.js',
+  // YOLO 只在宿主端运行，权限 UI 关闭，因此有意不带 client.js。
+  'node_modules/@dsh-remote/dsh-plugin-yolo-mode/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-yolo-mode/dist/index.js',
+]
+
+export const CONCISE_PROFILE_BUNDLE_FILES = [
+  'node_modules/@dsh-remote/dsh-plugin-concise-mode/package.json',
+  'node_modules/@dsh-remote/dsh-plugin-concise-mode/cordis.patch.yml',
+  'node_modules/@dsh-remote/dsh-plugin-concise-mode/dist/index.js',
+  'node_modules/@dsh-remote/dsh-plugin-concise-mode/presets/concise/agent.cordis.yml',
+  'node_modules/@dsh-remote/dsh-plugin-concise-mode/presets/concise/preset.yml',
+  'node_modules/@dsh-remote/dsh-plugin-concise-mode/presets/concise-ptc/agent.cordis.yml',
+  'node_modules/@dsh-remote/dsh-plugin-concise-mode/presets/concise-ptc/preset.yml',
+]
+
+export const STUB_ENTRIES = [
+  { name: 'relay.js', target: '../node_modules/@dsh-remote/relay/dist/cli.js' },
+  { name: 'connector.js', target: '../node_modules/@dsh-remote/connector/dist/cli.js' },
+]
+
+export const RUNTIME_ENTRIES = [
+  { label: 'launcher', path: 'dist/index.js', check: ['--version'] },
+  { label: 'relay', path: 'node_modules/@dsh-remote/relay/dist/cli.js', check: ['--help'] },
+  { label: 'connector', path: 'node_modules/@dsh-remote/connector/dist/cli.js', check: ['--help'] },
+  { label: 'relay 跳转入口', path: 'dist/relay.js', check: ['--help'] },
+  { label: 'connector 跳转入口', path: 'dist/connector.js', check: ['--help'] },
+]
+
+export const UNLOCK_CROSS_BUILD_HINT =
+  '这个目标的平台没有被根 package.json 的 pnpm 配置装进来（`supportedArchitectures` 现在声明的是\n' +
+  '       os: win32/linux/darwin，cpu: x64/arm64，libc: glibc，再由 `ignoredOptionalDependencies`\n' +
+  '       减掉 win32-arm64 / linux-arm64 / darwin-x64 / musl）。把它的 os/cpu 加进前者、\n' +
+  '       并从后者的模式列表里去掉，再 pnpm install 把该平台的预编译二进制拉下来；\n' +
+  '       代价是开发机 node_modules 变大。已经配过了还报这个错，先 pnpm install 一次。'
+
+/** 根据显式仓库根目录生成所有运行时路径，避免子模块自行推导根目录。 */
+export function createManifest(root, { platform = process.platform, arch = process.arch } = {}) {
+  const packaging = join(root, 'packaging')
+  const stagingRootSegment = STAGING_RELATIVE.split('/')[0]
+  const staging = join(root, ...STAGING_RELATIVE.split('/'))
+  return {
+    root,
+    packaging,
+    release: join(root, 'release'),
+    stagingRelative: STAGING_RELATIVE,
+    stagingRootSegment,
+    staging,
+    packageDir: join(staging, 'package'),
+    allPackagingFiles: ALL_PACKAGING_FILES,
+    winLauncherDir: join(packaging, 'win-launcher'),
+    winExecutable: WIN_EXECUTABLE,
+    winIconResource: WIN_ICON_RESOURCE,
+    targets: TARGETS,
+    hostTarget: `${platform}-${arch}`,
+    platform,
+    arch,
+    prebuildDirectories: PREBUILD_DIRECTORIES,
+    winExecutableMinBytes: WIN_EXECUTABLE_MIN_BYTES,
+    winSubsystemGui: WIN_SUBSYSTEM_GUI,
+    keepAtPackageRoot: KEEP_AT_PACKAGE_ROOT,
+    pnpmBookkeeping: PNPM_BOOKKEEPING,
+    binScript: BIN_SCRIPT,
+    buildArtifacts: BUILD_ARTIFACTS,
+    dshPluginFiles: DSH_PLUGIN_FILES,
+    conciseProfileBundleFiles: CONCISE_PROFILE_BUNDLE_FILES,
+    stubEntries: STUB_ENTRIES,
+    runtimeEntries: RUNTIME_ENTRIES,
+  }
+}
+
+/** 将包根下的正斜杠路径转换为当前系统的路径。 */
+export function inPackage(context, relative) {
+  return join(context.packageDir, ...relative.split('/'))
+}

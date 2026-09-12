@@ -14,7 +14,7 @@ export const SELF_NAMESPACE = 'dsh-plugin-tools-inspector'
  *
  * ⚠️ 端点是**路径段**：浏览器 `rpc.call(CHANNEL, 'snapshot', …)` 实际 POST 到
  * `/tools-inspector/snapshot`，宿主的 handler 收到的是 `'snapshot'` 这个段。
- * 只打 `/tools-inspector` 一律 404（docs/02 §10.8）。
+ * 只打 `/tools-inspector` 一律 404（docs/dsh/transport.md）。
  */
 export const CHANNEL = '/tools-inspector'
 
@@ -37,7 +37,7 @@ export const INTERNAL_CODE = 'tools-inspector/internal'
  * 一个工具在本视图里的状态。
  *
  * 刻意**只有两档**：dsh 没有 deferred / dynamic tool loading，注册即对模型可见
- * （docs/02 §15.2 有完整证据链）。所以「已注册」与「已激活」在 dsh 里是同一件事，
+ * （docs/dsh/runtime.md 有完整证据链）。所以「已注册」与「已激活」在 dsh 里是同一件事，
  * 唯一有意义的区分是「用过没用过」。
  *
  * ⚠️ 将来 dsh 若真的加了 active-set API，这里加第三档 `'inactive'`，
@@ -49,8 +49,10 @@ export type ToolStatus = 'used' | 'unused'
 export interface ToolEntry {
   /** 工具名，如 `read`。 */
   readonly name: string
-  /** 模型看到的描述；已截断到 {@link MAX_DESCRIPTION}。 */
+  /** 模型看到的描述；已截断到 {@link MAX_DESCRIPTION}，用于列表单行展示。 */
   readonly description: string
+  /** 模型看到的完整原始描述；展开行展示，不做截断。 */
+  readonly fullDescription: string
   /** 用过还是没用过。 */
   readonly status: ToolStatus
   /** 这个会话全部历史里的调用次数（回放日志里的 `tool/call` 数出来的）。 */

@@ -59,12 +59,12 @@ export interface DeviceRecord {
   readonly machineId: string
   readonly slug: string
   readonly displayName: string | null
-  /** Base64url-encoded Ed25519 public key (raw 32 bytes). */
+  /** Base64url 编码的 Ed25519 公钥（原始 32 字节）。 */
   readonly publicKey: string
   /**
-   * Dedicated browser-facing TCP port (D16 routing key 2), or null when this
-   * machine is reached another way: the hub's own machine answers on the main
-   * port, and a subdomain deployment needs no port at all.
+   * 面向浏览器的专用 TCP 端口（D16 路由键 2）；如果这台
+   * 机器通过其他方式访问则为 null：hub 自身机器在主
+   * 端口响应，子域名部署完全不需要端口。
    */
   readonly browserPort: number | null
   readonly revokedAt: number | null
@@ -101,13 +101,13 @@ export interface CreateEnrollTokenInput {
 }
 
 export interface ListAuditOptions {
-  /** Page size, 1 to 1000; defaults to 100. */
+  /** 页面大小，1 到 1000；默认 100。 */
   readonly limit?: number
-  /** Exclusive upper `id` bound, for paging further back. */
+  /** 排他上界 `id`，用于向更早记录分页。 */
   readonly beforeId?: number
-  /** Exact event name, e.g. `login.failed`. */
+  /** 精确事件名，例如 `login.failed`。 */
   readonly event?: string
-  /** Oldest `occurredAt` (unix ms) to include. */
+  /** 要包含的最早 `occurredAt`（unix ms）。 */
   readonly since?: number
 }
 

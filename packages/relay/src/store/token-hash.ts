@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto'
 import { Buffer } from 'node:buffer'
 
-/** Branded so storage APIs cannot accidentally receive a raw bearer token. */
+/** 使用 brand，避免存储 API 意外接收原始 bearer token。 */
 export type OpaqueTokenHash = string & { readonly __opaqueTokenHash: unique symbol }
 
 /**
- * Refresh and enrollment tokens are random high-entropy secrets. A one-way
- * SHA-256 digest lets the relay verify them without retaining bearer secrets.
+ * refresh 和注册令牌是随机高熵 secret。单向
+ * SHA-256 摘要让 relay 可以验证它们，而无需保留 bearer secret。
  */
 export function hashOpaqueToken(token: string | Uint8Array): OpaqueTokenHash {
   const bytes = typeof token === 'string' ? Buffer.from(token, 'utf8') : token

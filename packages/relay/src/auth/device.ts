@@ -9,7 +9,7 @@ import { hashOpaqueToken } from '../store/token-hash.js'
 import type { RelayStore } from '../store/store.js'
 import type { DeviceRecord } from '../store/types.js'
 
-/** The only protocol codes device authentication may answer with. */
+/** 设备认证只能返回的协议错误码。 */
 export type DeviceAuthFailureCode = Extract<
   ProtocolErrorCode,
   'AUTH_FAILED' | 'DEVICE_REVOKED' | 'ENROLL_TOKEN_INVALID'
@@ -21,15 +21,15 @@ export type DeviceAuthResult =
 
 export interface DeviceAuthRequest {
   readonly machineId: string
-  /** Slug from the hello frame; it is part of the signed message. */
+  /** hello frame 中的 slug；它属于签名消息的一部分。 */
   readonly slug: string
-  /** Nonce the relay issued for this handshake. */
+  /** relay 为此次握手签发的 nonce。 */
   readonly nonce: string
   readonly credential: AuthCredential
   readonly now?: number
 }
 
-/** Injection seam for the tunnel, which must not depend on the store directly. */
+/** 隧道使用的注入接口，不得直接依赖 store。 */
 export interface DeviceVerifier {
   authenticate(request: DeviceAuthRequest): DeviceAuthResult
 }
@@ -38,9 +38,9 @@ type RegisteredCredential = Extract<AuthCredential, { method: 'ed25519' }>
 type EnrollCredential = Extract<AuthCredential, { method: 'ed25519-enroll' }>
 
 /**
- * One message for every rejection except revocation: telling an unknown machine
- * apart from a bad signature would turn the control channel into a
- * device-existence oracle.
+ * 除吊销外，所有拒绝都使用同一条消息：区分未知机器
+ * 和错误签名会把控制信道变成
+ * 设备是否存在的 oracle。
  */
 const REJECTED = 'device credential rejected'
 
@@ -58,7 +58,7 @@ function equalPublicKey(actual: string, expected: string): boolean {
   return a.byteLength === b.byteLength && timingSafeEqual(a, b)
 }
 
-/** Verifies control-channel credentials against the registered-device table. */
+/** 根据已注册设备表验证控制信道凭据。 */
 export class DeviceAuthenticator implements DeviceVerifier {
   readonly #store: RelayStore
   readonly #audit: AuditRecorder
@@ -67,7 +67,7 @@ export class DeviceAuthenticator implements DeviceVerifier {
   constructor(options: {
     store: RelayStore
     logger: Logger
-    /** Fired after a machine registers, so the relay can open its browser port. */
+    /** 机器注册后触发，以便 relay 打开其浏览器端口。 */
     onEnrolled?: (device: DeviceRecord) => void
   }) {
     this.#store = options.store
@@ -76,10 +76,10 @@ export class DeviceAuthenticator implements DeviceVerifier {
   }
 
   /**
-   * Decide one control-channel handshake. Ordinary rejections are returned, not
-   * thrown, so the caller can map them onto protocol error codes.
-   * @param request The presented identity, the relay nonce, and the credential.
-   * @returns The registered device on success, or the protocol code to report.
+   * 判断一次控制信道握手。普通拒绝会被返回，而不是
+   * 抛出，以便调用方将其映射为协议错误码。
+   * @param request 提交的身份、relay nonce 和凭据。
+   * @returns 成功时返回已注册设备，否则返回要报告的协议码。
    */
   authenticate(request: DeviceAuthRequest): DeviceAuthResult {
     const credential = request.credential
@@ -99,8 +99,8 @@ export class DeviceAuthenticator implements DeviceVerifier {
       return { ok: false, code: 'AUTH_FAILED', message: REJECTED }
     }
     const device = this.#store.getDeviceByMachineId(request.machineId)
-    // Revocation is reported only after the stored key matched, so the more
-    // specific code cannot be probed by a caller holding an unrelated key.
+    // 只有存储的密钥匹配后才报告吊销，这样更具体的
+    // 错误码不会被持有无关密钥的调用方探测出来。
     if (
       device === undefined
       || device.slug !== request.slug
@@ -115,8 +115,8 @@ export class DeviceAuthenticator implements DeviceVerifier {
   }
 
   #enroll(request: DeviceAuthRequest, credential: EnrollCredential): DeviceAuthResult {
-    // The signature is checked before the token is spent: possession of the key
-    // must be proven first, otherwise a stolen token alone burns an enrollment.
+    // 先检查签名再消耗令牌：必须先证明持有密钥，
+    // 否则仅凭被盗令牌就能烧掉一次注册机会。
     if (!this.#verifySignature(request, credential)) {
       return { ok: false, code: 'AUTH_FAILED', message: REJECTED }
     }
@@ -158,11 +158,11 @@ export class DeviceAuthenticator implements DeviceVerifier {
     const event = result.ok
       ? result.enrolled ? 'device.enrolled' : 'device.authenticated'
       : 'device.auth-failed'
-    // audit_log.machine_id is a foreign key into devices, so a handshake from an
-    // unregistered machine can only carry its id in the metadata column.
+    // audit_log.machine_id 是指向 devices 的外键，因此来自
+    // 未注册机器的握手只能把其 id 放在 metadata 列中。
     const registered = result.ok || this.#store.getDeviceByMachineId(request.machineId) !== undefined
-    // The recorder emits the matching log line, so this handshake is not logged
-    // a second time here: one event, one row, one line.
+    // recorder 会输出匹配的日志行，因此此次握手不会在这里
+    // 再记录一次：一个事件、一行数据库记录、一行日志。
     this.#audit.record({
       ...request.now === undefined ? {} : { occurredAt: request.now },
       event,

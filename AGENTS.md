@@ -1,108 +1,91 @@
 # AGENTS.md
 
-本文件给在 `d:\Documents\ai-dev\dsh-chat` 目录下工作的 AI 编码助手看。（目录名沿用旧名，仓库 / 包 / 产物已改名为 dsh-remote；若你把目录改名为 dsh-remote，请同步更新这一行。）
+适用于本仓库中的 AI 编码助手。项目给官方 DeepSeek Harness 添加带认证的反向隧道与插件，
+让浏览器远程操作目标机器上的 dsh。
 
-## 项目是什么
+## 开始前
 
-给 **DeepSeek Harness (dsh)** 加一层「带认证的反向隧道」，让手机 / 异地电脑能通过浏览器远程指挥跑在开发机上的 dsh。
-
-## 开始工作前必须做的三件事
-
-1. 读 [docs/05-roadmap.md](docs/05-roadmap.md)，确认当前进度和下一项任务
-2. 读 [docs/01-decisions.md](docs/01-decisions.md) §3「已废弃的方案」，**不要重新提出已排除的方案**
-3. 涉及 dsh 行为时，读 [docs/02-dsh-facts.md](docs/02-dsh-facts.md)，那里的每条结论都标了源码路径；需要翻 dsh 源码时先加载 skill `dsh-source`（`.agents/skills/dsh-source/SKILL.md`），本地路径只记在那里
+1. 读 [当前进度](docs/05-roadmap.md)，确认本次任务与待验收项。
+2. 读 [决策](docs/01-decisions.md)，遵守现行产品边界与术语。
+3. 涉及 dsh 行为先读 [源码依据索引](docs/02-dsh-facts.md) 对应主题；查上游源码前加载 dsh-source skill。
+   dsh 本地路径只记在 [.agents/skills/dsh-source/SKILL.md](.agents/skills/dsh-source/SKILL.md)。
 
 ## 铁律
 
-| # | 规则 |
-|---|---|
-| 1 | **不改 dsh 源码，不 fork dsh。** dsh 是 0.1.2-alpha，任何源码耦合都会持续返工 |
-| 2 | **中转服务器不解析 dsh 的业务协议。** 它只搬运 HTTP/WebSocket 字节（唯一例外：把 dsh 对首页的 401 换成一次 `?token=` 重定向） |
-| 3 | **connector / launcher 侧零原生模块。** 用 `node:sqlite`，不用 `better-sqlite3`；绿色包必须解压即用 |
-| 4 | **dsh 永远只 bind 127.0.0.1。** dsh 自带的浏览器认证不是我们的防线，relay 才是 |
-| 6 | 一台被控机 = 一个子域名，**不要试图挂子路径**（dsh 把 `/api` 写死成绝对路径） |
-| 7 | **只有模式 A：原样转发 Host，dsh 侧用 `--trusted-host` 声明。** relay 永不重写 Host/Origin（模式 B / `unlockPrivileged` 已删除） |
-| 8 | 优先用成熟第三方依赖，不重复造轮子（用户明确要求） |
-| 9 | 每完成一个 roadmap 条目立刻改 `- [x]`，不要攒着批量勾 |
-| 10 | **与官方 dsh 共用标准 `DSH_HOME`，但只在 `dsh-remote-web` profile 中加载项目内置插件。** 不写 home 级 patch、不修改官方 `web` profile；launcher 不重复实现 dsh 的插件管理 |
-| 10b | **扩展 dsh 只能写插件，插件全部放在 `packages/plugins/<名字>/`**（包名 `@dsh-remote/dsh-plugin-<名字>`）。每个插件包根携带 `dsh-overlay.yml`，launcher 用 `--patch` 传给 dsh；overlay 里只写相对路径 `./dist/index.js`，**永远不写绝对路径**（见 D17）。插件带浏览器半时声明 `dsh.client` + `exports["./client"]`，**缺 `dist/client.js` 不是降级，而是让 dsh 的 web UI 整个起不来**，laucher / dev-stack / pack 三处产物检查都要覆盖它 |
-| 11 | **所有非本机浏览器访问必须认证。** 只有 loopback socket + loopback Host 同时成立才免登录；IP 与域名复用同一认证中间件，不提供 `allowInsecureLan` |
-| 12 | **中文用户可见文案只用 [docs/01-decisions.md](docs/01-decisions.md) §2.05 的词表。** 「集线器 / 成员 / 加入 / 接入」已全部废弃；页面里不写「本机」，写机器真名。代码标识符（`hub`、`membership.json`）保持英文原名，不跟着改 |
+- 不修改或 fork dsh 源码，扩展只能写插件。
+- relay 只搬运 HTTP/WebSocket 字节，不解析 dsh 业务协议；首页 401 的一次 token 重定向是唯一例外。
+- dsh 始终 bind 127.0.0.1。relay 原样转发 Host/Origin，通过 --trusted-host 声明信任。
+- 所有非 loopback 浏览器访问必须认证；仅 loopback socket + loopback Host 同时成立才免登录。
+- 一台机器独立 origin，公网用子域名，局域网可用每机器端口，不能挂子路径。
+- launcher、connector、relay 不引入原生模块，持久化用 node:sqlite，密码哈希用 node:crypto scrypt。
+- 优先成熟依赖，所有直接依赖固定版本，不使用范围、dist-tag 或隐式升级。
+- 与官方 dsh 共用标准 DSH_HOME，仅在 dsh-remote-web profile 加载项目内置扩展。
+  不写 home 级 patch、不修改官方 web profile，不实现第二套插件管理器。
+- 普通插件位于 packages/plugins/<名字>，包名 @dsh-remote/dsh-plugin-<名字>，
+  包根 overlay 用 ./dist/index.js；launcher、dev-stack、pack 都要检查宿主和浏览器产物。
+- concise-mode 是专属 Profile Bundle，位于 dsh-web-app 后；locator 以 import.meta.url 定位 preset root。
+  launcher 对已有 profile 只非破坏性补入缺少的 Bundle，保留其他配置。
+- 中文文案使用决策中的词表，页面使用机器真名；hub、membership、slug 等代码标识符不随文案改名。
+- 完成 roadmap 条目立即勾选，未做实机验收不能按自动测试结果勾选。
 
-## 环境
+## 环境与检查
 
-| 项 | 值 |
-|---|---|
-| OS | Windows，Shell 是 **PowerShell 7**（不要写 bash / CMD 语法） |
-| Node | v22.19.0 |
-| pnpm | 10.17.0 |
-| dsh 源码 | 位置见 skill `dsh-source`（`.agents/skills/dsh-source/SKILL.md`）——**不要在其他文件里写死本地路径** |
+Windows，PowerShell 7；使用 PowerShell 语法。Node 最低 22.19.0，本地 pnpm 使用已安装版本，CI 固定 10.17.0。
+TypeScript + ESM + pnpm workspace，构建 tsdown，开发 tsx，测试 Vitest。
+技术选型见 [架构](docs/03-architecture.md)，不要随意替换。
+项目模块架构见 [ARCHITECTURE.md](ARCHITECTURE.md)；修改模块结构后请更新该文件。
 
-## 技术栈
+常用检查：pnpm check:dependencies、pnpm lint、pnpm typecheck、pnpm build、pnpm test。
+依赖更新加载 update-dependencies skill；提交前钩子检查固定版本并清理 lockfile 内部镜像 tarball 地址。
 
-TypeScript + ESM + pnpm workspace，构建 `tsdown`，开发 `tsx`。
-依赖选型见 [docs/03-architecture.md](docs/03-architecture.md) §6，不要随意替换。
+## 按任务阅读
 
-## 依赖版本与提交前检查
+| 改动 | 必须阅读 | 关键约束 |
+|---|---|---|
+| 转发、登录、目录选择 | [传输](docs/dsh/transport.md)、[安全](docs/04-security.md) | 认证 → 原始安全检查 → 隧道；HTTP 用 node:http；upgrade 单独处理 |
+| 插件装载、设置、界面 | [插件机制](docs/dsh/plugins.md) | mutate 后回读，失败保留草稿；同 cell 同 priority 冲突；primitives external |
+| 模型与代理 | [模型](docs/dsh/models.md) | 保留用户条目、只清理插件溯源；混合协议先恢复同一 pi-ai map；代理唯一配置源 |
+| 重试、过程、分叉、通知 | [会话](docs/dsh/conversation.md) | 保护 nextTurn 队列；不移动 React DOM；保持 turn-tail 最后；idle 去抖 |
+| 权限、服务、PTY、工具统计 | [运行时](docs/dsh/runtime.md) | 不 append 自定义事件；统计回放历史；进程身份复核；交互终端仅用于人类输入 |
+| 技能、提示词、文件浏览 | [工作区](docs/dsh/workspace.md) | scope/cwd 来自 live Agent；有界读取；只读视图不改变模型能力 |
 
-- **所有 package.json 的直接依赖必须写固定版本号**，不允许 `^` / `~` / 范围 / dist-tag。
-  `.npmrc` 已设 `save-exact=true`，新增依赖用 `pnpm add <pkg>` 即为精确版本。
-- 体检命令：`pnpm check:dependencies`（脚本 `scripts/check-dependency-versions.mjs`，覆盖根与 `packages/**`）。
-- `.husky/pre-commit` 在每次提交前跑两件事：① 上面的固定版本号检查；② 从 `pnpm-lock.yaml` 剥离
-  内网镜像 tarball 地址，保证 lockfile 可移植。克隆仓库后 `pnpm install` 会自动装好钩子（`prepare: husky`）。
-- 升级依赖（尤其是 `@deepseek-ai/dsh`）走 skill `update-dependencies`（`.agents/skills/update-dependencies/SKILL.md`）。
+插件功能与入口见 [插件索引](docs/plugins.md)，具体实现前读对应包 README。
+升级与冒烟脚本入口统一在源码依据索引，各包 test/typecheck/build 仍需按改动范围运行。
 
-## 查安全活动记录
+## 高风险约束
 
-登录 / 机器 / 账号类安全事件同时写 `relay.db` 的 `audit_log` 表和 pino 日志（带 `audit: true`），
-**管理页里没有展示页面，也不要再加**。要查或要判断有无风险，加载 skill `relay-audit`
-（`.agents/skills/relay-audit/SKILL.md`）。
+- SettingsScope.mutate 在宿主拒绝时正常 resolve；两半共享校验，保存后回读确认，失败保留草稿并就地报错。
+- 插件不能 append 自定义 Session 事件，否则持久化加载会拒绝会话；projection 只折叠已知事件，
+  无关事件返回同一引用。工具/技能历史使用 snapshotEvents，查询 scope 必须传 live Agent。
+- yolo-mode 固定 danger-full-access + ask，合法 approval 自动 allowed-once，用户提问不自动回答。
+  schema 与执行/展示参数都过滤提权字段；升级运行 yolo-mode-check，任何契约变化必须响亮失败。
+- services 在沙箱外 spawn，受限模式 start/restart 必须批准；终端沿用 dsh PTY 沙箱。
+  interactive_terminal 只用于预期用户直接输入，普通 Git、构建、测试和长任务用 pwsh/bash。
+- Windows 杀进程树用 taskkill /T /F；常驻服务用两级启动器并记录 L2 pid，不以 detached:true 保证存活。
+- 全局提示词只保存 DSH_HOME/AGENTS.md，UTF-8 字节上限 1 MiB、原子写入，冒烟由 dsh 加载器反向认领。
+- files 插件的 Git 根只取 live session.header.cwd，Git 采集无 shell且有界；文件树、读取与预览跟随 dsh 原生 workspaceFiles/UI，目录右键只复制绝对/相对路径；
+  不增写入接口、不递归预扫、不挂 watcher、不引第二套预览编辑器。
 
-## 查证 dsh 行为
+## 界面约束
 
-加载 skill `dsh-source`（`.agents/skills/dsh-source/SKILL.md`），它给出 dsh 源码根路径和常用文件位置对照表。
+编写或调整 dsh UI/CSS/主题样式前，必须加载 [dsh-theme skill](.agents/skills/dsh-theme/SKILL.md)。
+任务收尾时自动将本次已验证、可复用的新样式经验合并回该技能（无需用户再次提醒）；
+有新上游契约同步更新 docs/dsh/plugins.md，不记录未经验证的猜测或重复流水账。
 
-本仓库其他文档 / 代码注释引用 dsh 文件时，一律写**相对于 dsh 仓库根**的路径（如 `packages/client/connection/src/api-request-trust.ts`），不写绝对路径。
+任何图标文字对齐先加载 flex-centering skill。dock 必须沿用 dsh todo 风格：specific-tip 背景、
+0.5px border-l1、12px 圆角、13px 标题、原生 outline 图标、整行 button 与 aria-expanded、共享宽度轴。
+表头嵌套 flex，图标必要时 translateY(0.115em)，摘要省略号在内层 span。
+箭头收起用 IconChevronUpOutline14，展开用 IconChevronDownOutline14，不用文本箭头。
+services 与 terminal 共用 IconApiOutline14。
 
-## 写代码时的注意事项
+深浅主题都验收；border-l1 的 l 是字母，浅色 bg-layer-1/2/3 都为白，font-mono 要完整 fallback 栈。
+消息整行隐藏保留零高度有序 rect，行内思考块用 display:none；sticky 在 wrapper 上按段尾自行推出。
 
-- **HTTP 转发不要用框架**。`hono` 只用于 relay 的管理页（登录、机器列表）。隧道转发直接用 `node:http`，因为需要注入 `createConnection`
-- **WebSocket 升级必须单独处理**。dsh 0.1.2 的下行通道是单条 `/api/remote.mux`，走 `upgrade` 事件
-- **顺序不能错**：认证 → relay 侧安全检查（原始 Origin/Host）→ 入隧道（头原样转发）
-- **dsh 自己也要认证**（0.1.2 起）：launcher 从 dsh 输出截获 token → connector 上报 → relay 在首页 401 时回一次 `?token=` 重定向
-- **`--trusted-host` 写错会让 dsh 插件加载直接报错**（不是运行时 403）。必须是裸的 `host` 或 `host:port`，不能带 scheme / 路径 / 尾部冒号
-- **远程页面的设置能力靠插件拿回来**：dsh 0.1.2 在浏览器里按 `location.hostname` 判定，非 loopback 页面的 settings 被降级成只读内存。`packages/plugins/remote-privileged` 注入 `__DSH_TRANSPORT__.ownsHost` 解除它；**升级 dsh 后必须重新核实这个逃生门还在不在**（docs/02 §4.7）
-- **GitHub Copilot 订阅登录在 `packages/plugins/copilot-auth`**：dsh 本来就内置了 Copilot（它的 `llm-pi-ai` 就是 pi-ai），插件只补了「能跑登录的界面」——模型页官方扩展槽 `settings.models.provider-card` + 自己的 `/copilot-auth` RPC 通道。事实链见 docs/02 §7；升级 dsh 后跑 `node scripts/copilot-auth-check.mjs`
-- **出网代理在 `packages/plugins/proxy`**：**Node 的全局 `fetch` 不读 `HTTP(S)_PROXY`**，而 dsh 与 pi-ai 全程用全局 `fetch`、从不传 dispatcher —— 所以对话、登录、web fetch/search 默认**都不走代理**。插件的做法是换掉 undici 的**全局 dispatcher**（设置 → 代理页面配置，存设置命名空间 `dsh-plugin-proxy`），一次覆盖整个进程。**代理只有这一个事实源**：launcher 的临时环境变量 bootstrap 已删除，全链路不读任何代理环境变量，**也不预置任何默认代理地址**。别再给单个插件加各自的代理配置项
-- **插件自己的设置 / 文案命名空间一律用包名 `dsh-plugin-<名字>`**（`dsh-plugin-proxy`、`dsh-plugin-models-catalog`、`dsh-plugin-copilot-auth`）：共享的 `settings.yaml` 里一眼看得出这段归谁，也不会和 dsh 上游将来新增的命名空间撞车
-- **跟随 models.dev 更新模型列表在 `packages/plugins/models-catalog`**：改模型列表是 dsh 本来就有的能力（配置层 `providers.*.models` 热更新），插件补的是「发现上游新模型」。三条不能破的规则：**dsh 一旦自带就交还并删掉本插件写的那份**、**只碰自己写过的列表**（溯源在自己的设置命名空间 `dsh-plugin-models-catalog`）、**跨协议路由（openai / github-copilot）一律报「不能添加」**（写进去会让 dsh 整体拒绝这次设置写入）。事实链见 docs/02 §8
-- ⚠️⚠️ **`SettingsScope.mutate` 在宿主拒绝写入时是 resolve 不是 reject**（docs/02 §8.8）：`catch` 是死代码，被拒的写入表现成「提示已保存 → 字段全部弹回 → 没有任何报错」，还会连带丢掉用户刚输入的内容。写设置页必须做三件事：① 写之前用**和宿主校验器同一套纯函数**在本地判一次（放两半共享模块，别各写一份）；② 写之后读 `scope.getSnapshot().value` 核对是否真的落地，没落地就报错并**保留草稿**；③ 报错贴着出错的那个字段显示，别堆在页面最底部
-- ⚠️ **主题变量名写错不会报错，只会静默用兜底色**：正确的是 `--dsw-alias-border-l1`（字母 l，不是数字 1）、`--dsw-alias-bg-layer-2`、`--dsw-font-mono`。写完客户端样式**必须在深色下看一眼**（docs/02 §8.6）。⚠️ **浅色主题里 `bg-layer-1/2/3` 是同一个白**（`bg-layer-4` 压根没定义），拿层级 token 去衬一个内嵌小容器，在浅色下等于什么都没画 —— 用 `--dsw-alias-border-l1` 描边或自己写中性半透明灰（docs/02 §8.6a）。⚠️ **「名字写对」不等于「值解析得出」**：`--dsw-font-mono` 名字是对的，但 dsh **引用了四处、定义了零处**，所有人（连 dsh 自己）一直在吃兜底 —— 所以等宽兜底必须是一整条完整栈 `ui-monospace, SFMono-Regular, Menlo, monospace`，只写 `ui-monospace, monospace` 在 Windows 上直接落到浏览器默认 fixed 字体。这类问题**只有在真页面里问一句 `getComputedStyle(el).getPropertyValue(name)`** 才查得出来（docs/02 §8.6b）
-- ⚠️ **`settings.models.provider-card` 是 keyed 槽，`llm-pi-ai` 这个 key 已被 copilot-auth 占用**：第二个插件用**默认 priority** 往同一张卡里加东西会直接抛错，要**并列添加**请用 list 槽 `settings.models.footer`。但**「接管」是可以的**：keyed / single / list 都支持按 `priority` 影子覆盖（**priority 小的渲染**，只有同 cell + 同 priority 才抛错），与注册先后无关（docs/02 §8.5）
-- ⚠️ **设置页左侧导航的图标是 dsh 写死的，`settings.section` 没有图标位**：未知 id 一律落到齿轮。代理页那个地球、通知页那个铃铛都靠各自的 `src/client/nav-glyph.ts` 从外面画（只往自己那一行写一个 `data-` 属性 + 一张样式表，不改 React 渲染出来的节点）；**升级 dsh 后要复核局部类名还在不在**，改了只是退回齿轮（docs/02 §8.7）。⚠️ **自己画图标要对齐 dsh 自带图标的跨度**（`IconAlarmClockOutline16` 是 x 1.75–14.25、y 2.5–13.75）：画小了单看没毛病，一进导航列挨着邻居就明显缩一圈 —— 这种问题**只有放进真实的行里**才看得出来，别拿单独预览定稿
-- **失败重试在 `packages/plugins/turn-retry`**：dsh 自带 `llm-retry` 负责自动退避；插件不再挂 `agent/request-error`，也不弹 `userQuestions`。它只把失败/停止的 `turn/end` 折成 `turnRetry`，在 `conversation.input.dock` 显示唯一的 `[重试/继续]`（没有“不再提示”）。事后重试会追加 plugin notice；若 `nextTurn` 已有排队消息，宿主返回 `pending-input`，绝不调用 `followup`、不改队列。错误投影截到 2000 字，模型通知截到 300 字；投影形状变化才 bump `stateVersion`。事实链见 docs/02 §10；升级后跑 `node scripts/turn-retry-check.mjs`。
-- ⚠️ **dsh 没有「不追加 user message 就重新推理」的入口**：`send`/`followup`/`steer`/`inject` 四个都要 `UserMessage`，空消息会让这一轮不发模型请求就结束（docs/02 §10.5）。所以**事后**重试必然在日志里多一条消息；把它写成 plugin 溯源 + `form:'notice'`，会话里就是一行折叠的 context 行而不是伪造的用户气泡
-- ⚠️ **`ctx.connection.rpc.handle('/x', …)` 的端点在 URL 路径里**：浏览器必须 POST 到 `/x/<endpoint>`，只打 `/x` 一律 404，且信封里的 `method` 必须和路径段一致（docs/02 §10.8）
-- ⚠️ **session projection 的 `apply` 在事件与自己无关时必须返回同一个引用**：框架用 `Object.is` 决定要不要给每个连着的浏览器发帧，每次重建状态不报错、只会安静地刷屏（docs/02 §10.6）
-- **转录里的「执行过程」折叠在 `packages/plugins/exec-process`**：dsh 本来就有这个折叠（`ui-chat` 的 `turn-process`），但 `ChatNodeSeat` 把它挂在 `!historyIncomplete` 上，而转录窗口只加载**最近 50 条 surface 消息**（`PAGE_MESSAGES = 50`）——**会话一超过约五十条消息，整个视图的折叠就被全局关掉，没有任何设置能打开**。插件的做法：两个自己的 `ConversationNodeDefinition` 只提供位置（窗口与边界直接读 dsh 发布的 `turn-process` Turn 数据，**那份投影不受该门影响**），`exec-process` 是一个 turn 的第一段、`exec-process-step` 是每条正式消息之后的新一段；再用 `priority: -1` 影子覆盖 dsh 的 `turn-process` 渲染器、**把 dsh 的 disclosure 强制常开**，于是转录里只剩一套折叠机制。三条产品规则：**正式消息不进折叠**、**运行中也折**、**段尾那条正式消息里的「已思考」跟着这一段折**。事实链见 docs/02 §11；升级 dsh 后跑 `node scripts/exec-process-check.mjs`
-- ⚠️ **要折叠转录里的行，用「按 `data-chat-flow-key` 命中的注入样式表」，不要往 dsh 的节点上写属性**：`useSearchableHidden` 会 set/remove 同一批 wrapper 的 `hidden`，外部写属性等于和它抢同一个元素。而且**整行隐藏要用零高度 + `content-visibility:hidden`，不能用 `display:none`**——dsh 靠行 rect 的有序性二分查找阅读位置，全零 rect 会让翻页后落回错误位置；列间距规则特异度 0-7-0，必须 `margin:0!important` 抵消（docs/02 §11.4）。**反过来，藏行「内部」的元素（例如 `data-variant="think"` 那个已思考盒子）必须用 `display:none`**：它不参与那份 rect 顺序，而且只有 `display:none` 才连助手正文那 16px flex 间距一起去掉（docs/02 §11.8）
-- ⚠️ **想让插件的一行「吸顶」，`position: sticky` 得写在 dsh 的 `.flowItem` wrapper 上，而且要自己把它推出去**：sticky 出不了自己的 containing block，写在按钮上实测滚 900px 后 `top` 是 −900；但 wrapper 的 containing block 是**整条消息列**，浏览器那套「滚过内容就把 sticky 顶走」在这里永远不会发生，不补就一路吸到会话结束。补法是每帧发布 `push = clamp(滚动容器顶 + 行高 − 本段最后一行的底, 0, 行高)`、令 `top: -push`——内容还在时为 0，内容一完就与滚动等速滑出，不需要过渡也不会跳。**公式里绝不能读表头自己的位置**（会每帧震荡），**每行一个自定义属性**（两段同屏时值不同，共用会把第二段顶没）；值写在 `<html>` 上，由自己样式表里按 `data-chat-flow-key` 命中 wrapper 的规则读取，仍然不往 dsh 的节点写属性。滚动容器要现找（`.scroll` 在 `[data-conversation-scroll]` 下会把 overflow 交还给祖先）。消息流里**做不出内部滚动条**——要折的行是 dsh 自己的兄弟节点，套容器就得搬动 React 拥有的节点（docs/02 §11.7）
-- ⚠️ **想在 turn 运行中就改消息流里的东西，Definition 必须跟随 chunk 事件**：引擎只对匹配到事件的 Context 调 `buildViewNode`，不跟 chunk 的话你的行要等到第一个 durable 事件才出现；chunk 用 `publication: 'animation-frame'` 压成一帧一次（docs/02 §11.9）
-- ⚠️ **会话消息流里没有通用的插件槽**：`conversation.chat.node` 是 keyed 槽且 `turn-error` / `model-retry` 已被 dsh 自己占用（同 priority 重复注册抛错，但**换 priority 是影子覆盖**，见上面 §8.5 那条）；想**并列添加**用 list 槽 `conversation.input.dock`（输入框正上方），想加**自己的一行**就注册自己的 `ConversationNodeDefinition` + 新 key（docs/02 §10.7、§11）
-- ⚠️ **`conversation.input.dock` 的条目必须自己声明宽度**：那个栈只是竖排 flex，宽度上限在每张卡自己身上，不写就铺满整个会话列（比输入框宽 32px、比转录正文宽更多，且与文本长短无关）。照抄 dsh 自己 dock 条目那一段：`margin:0 auto` + `width: calc(100% - 侧留白×2 - dock内缩×4)` + `max-width: calc(var(--dsh-composer-card-max-width) - dock内缩×4)`（docs/02 §10.7）
-- ⚠️⚠️ **dock 卡片的长相也是抄的，不是设计的（本项目对 input dock 插件的统一约定）**：任何插件往 `conversation.input.dock` 画东西（重试、常驻服务、可交互终端，以及以后新增的），**必须和 dsh 自带的 todo 条目长得一样**，否则并排放着一眼就是外来户。逐条照抄 `TodoPanel.module.css` / `TodoPanel.tsx`：**背景 `var(--dsw-specific-tip)`**（抬升面；⚠️ 不是 `--dsw-alias-bg-base`，浅色下就是纯白、卡片直接融进页面，也不是 `--dsw-alias-bg-layer-*`，见 §8.6a）、**描边 `0.5px solid var(--dsw-alias-border-l1)`**、**圆角 12px**、头部整行是 `<button>` + `aria-expanded`（`gap:10px; padding:8px 12px`）、**标题左侧必须有一个 dsh 自带的 outline 图标**（放在自己的 flex 格子里）、⚠️ **表头对齐用 flex，不写死尺寸**：表头 `align-items:stretch` 把「图标 / 标题 / 副标题 / 箭头」拉成同一高度（由内容决定），每个块再自己 `display:flex; align-items:center` 居中 —— dsh 自己是 14/24/20/14 各写各的行高、只靠 `align-items:center` 对齐**盒子中心**，实机看上去就是「竖直方向没对齐」。⚠️ 副标题要省略号，`text-overflow:ellipsis` 必须落在**内层 span** 上（flex 容器自己做不了）。⚠️⚠️ **flex 全做对之后图标仍会高约 1.5px —— 那是字体不是布局**：汉字字面在行盒里天然偏下、svg 却按几何中心摆（实测 13px 表头：文字墨迹中心 y=48.0、图标 y=46.5），所以图标格与箭头格要再补 `transform: translateY(0.115em)`（写 em 才跟字号走、用 transform 才不参与布局；dsh 自己没做这一步）。截图量法与整套居中判定顺序见 skill `flex-centering`（`.agents/skills/flex-centering/SKILL.md`）——**以后做任何 UI 居中都先加载它**。标题 `13px/500` 用 `--dsw-alias-label-primary`、右侧摘要 `13px` 用 `--dsw-alias-label-tertiary`、**折叠箭头用 todo 同款 `IconChevronUpOutline14`（收起）/ `IconChevronDownOutline14`（展开）**，⚠️ 方向就是这个方向、**不准用文本 `▾ / ▴`**（另一套字形字重，挨着 dsh 的卡片一眼看得出）；卡里有内部滚动区就再写 `--dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2)` / `--dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2)`。图标直接从 **`@deepseek-ai/dsh-client-ui-primitives`** import（它在页面冻结模块表 `PLATFORM_MODULES` 里），并在插件 `tsdown.config.ts` 的 `MODULE_TABLE` 里列上这个 specifier 保持 external —— 拿页面已加载的那一份，不打第二份进 bundle；⚠️ 该包带 CSS，`environment:'node'` 的单测不能 import 含它的模块。可用图标名见 dsh 的 `ui-primitives/src/icons/index.tsx`（现有占用：todo `IconChecklistOutline14`、queue `IconQueueOutline14`、**services 与 terminal 共用 `IconApiOutline14`**（用户拍板：终端就用常驻服务那枚终端提示符图标，两张卡标题不同、也很少同屏，不必各占一枚）、turn-retry `IconRefreshOutline14`）。完整数值表见 docs/02 §10.7a
-- **全局提示词编辑器在 `packages/plugins/agents-md`**：设置页新增「全局提示词」一页，编辑 `$DSH_HOME/AGENTS.md`。dsh 本来就把这个文件读进每一个会话（`agent-instructions` 把 `<dshHome>/AGENTS.md` 排在所有项目级 `AGENTS.md` **之前**），但**没给它任何界面** —— 唯一的编辑方式是「你得先知道它存在」，手机远程更是完全做不到。插件**只补编辑器**：不改 dsh 的读取行为、不注册自己的 `agent-instructions` 行、**不把正文存进设置命名空间**（存进去就是 dsh 加载器不读的第二份，所以本插件**没有设置命名空间**）。⚠️⚠️ **`USER_GLOBAL_FILE` 定义在 dsh 内部的 `render.ts`、不在公开入口上**，插件只能抄一份常量，抄错或 dsh 改名都**不报错**，只会安静地编辑一个没人读的文件 —— 所以冒烟脚本**反过来**调 dsh 自己的 `discoverBaselineInstructionFiles()` 确认它认领了这个文件，这是单元测试锁不住的唯一护栏。⚠️ **超过 `maxSourceBytes`（默认 1 MiB）的提示词文件被 dsh 静默丢弃**，不拦就是「页面说已保存、模型永远收不到」，所以两半用 `shared.ts` 里**同一个** `documentFault()`，按 UTF-8 **字节**判（不是字符：60 万汉字字符数没超、字节数远超）。⚠️ 保存走「临时文件 + rename」：半个提示词文件会被当成用户写的原样喂给模型。⚠️ 失败时**保留草稿**（docs/02 §8.8 的老坑）。**刻意只有全局唯一一份，不按预设区分** —— `dshHome` 确实是每个预设各自的配置（接缝已查清，记在 docs/02 §17.2），但官方预设是 `trust: 'system'` 改不了，按预设区分等于逼用户复制每个预设，用户据此拍板不做。事实链见 docs/02 §17；升级 dsh 后跑 `node scripts/agents-md-check.mjs`
-- **任务完成通知在 `packages/plugins/notify`**：dsh 一点桌面通知能力都没有（`packages/**` 里的 `Notification` 全是 JSON-RPC / ACP / MCP 的通知帧；唯一沾边的是侧边栏那个「未选中的会话跑完了」小圆点，纯页面内）。插件在 Windows 上弹常驻 toast，两个时刻：① **`agent/status → idle`**（**不是 `turn/end`** —— 一轮结束时 inbox 还有消息就立刻再开一轮，用 `turn/end` 会响好几次），必须**去抖 700ms**，因为 `agent.ts:229` 就在设完 idle 的下一行同步地再唤醒 driver；② `approval/request` / `user-questions/request` 两个**瀑布**，⚠️ **观察者必须 `prepend: true`**（认领请求的应答者不调 `next()`，排它后面根本不会被调用），且**不能靠事件判断「屏幕上真有卡片」**（权限预设不在这个瀑布上，而 `approval/asked` 无论如何都会写），只能**看它悬了多久**（3 秒）。⚠️ **未注册 AUMID 的 toast 会被 API 接受却什么都不显示**，宿主侧观察不到 —— 所以设置页那个「发一条测试通知」按钮是唯一诚实的验证方式，别删。通知文案**走环境变量**传进 PowerShell，让脚本保持常量、没有转义函数可写错。事实链见 docs/02 §12；升级 dsh 后跑 `node scripts/notify-check.mjs`
-- **常驻服务在 `packages/plugins/services`**：dsh **有**后台任务运行时（`run_in_background` + `ctx.jobs` + `job_*`），但它的生命周期**刻意**绑在会话上（`JobStart.owner`：「agent disposal cancels and awaits the job」），换会话或重启 dsh 就没了，也没有给长期进程起名字的机制 —— 所以插件走 detached + 落盘具名注册表（`<会话项目目录>/.agents/services.json`、日志 `.agents/logs/<name>.log`），五个 `service_*` 工具 + 输入框上方一个可折叠面板。⚠️⚠️ **插件绝不能 append 自己的会话事件类型**：`Session.append()` 没有 `ignorable` 参数，而类型不在构建期常量 `KNOWN_SESSION_EVENT_TYPES` 里、又没有该标记的事件，会让持久化层**永久拒绝加载这个会话** —— 所以插件做 projection 只能折叠 dsh 已有的事件类型，本插件的面板改走轮询（顺带查实：**Host→Client 只有 session projection 一条推送通道**，`rpc` 的流式 `open` 在浏览器传输里不提供）。⚠️ **自己 spawn 就绕过了沙箱**，而 web profile 的 `pwsh-sandbox` 在 Windows 上是真的 ACL 受限令牌、权限预设又**只写两个旋钮、不做逐工具拦截** —— 所以 `service_start`/`service_restart` 读会话解析出的沙箱模式：`danger-full-access` 不问（`bash` 本来就给了同样能力），受限模式走 `ctx.approval` 且**只有 `allowed-once` 放行**，拿不到批准一律 fail closed；**面板刻意没有「启动」按钮**。⚠️ **spawn pwsh 必须照抄 dsh 的 argv**（`-NoLogo -NoProfile -NonInteractive -Command` + UTF-8 前缀 + `NO_COLOR`）：少了 `-NoProfile`，用户的 PowerShell profile 会先把报错写进服务日志，就绪正则会匹配错，慢/会提问的 profile 直接让服务起不来。事实链见 docs/02 §13；升级 dsh 后跑 `node scripts/services-check.mjs`
-- **可交互终端在 `packages/plugins/terminal`**：上游仍叫 `terminal_open/send/read/signal/close/list`；本插件用 **fail-closed wrapper** 包住上游 `apply()`，只接受预期六次注册，并且只向模型暴露 `interactive_terminal_open/send/read/signal/close/list`。缺少、重复或未知注册时整组失败，绝不泄漏裸 `terminal_*`。**严格用途：只有需要交互式 stdin，或同一个终端状态必须跨调用保留时才用 `interactive_terminal_*`；普通一次性命令（包括 Git、构建、测试、脚本）一律用 `pwsh` / `bash`，运行时间长本身不是理由，需要时用 `run_in_background`。** dsh 已有 `ctx.terminals`、`terminal-bash`、node-pty 与六个上游工具；插件负责挂载三包并在 `conversation.input.dock` 提供人类输入面板。裸包名不能写 overlay，须作为本包依赖由宿主半 `ctx.plugin()` 挂载。Windows 必须移除 PSReadLine，并保留逐次启动超时与重试。`ctx.terminals` 同会话只允许一次发送；人类输入等待后仍忙则返回 `busy: true`，页面必须保留草稿。面板只能操作模型已开的终端，没有 `open`/`close` 端点；沙箱沿用 `terminal-bash` 的 `ctx.sandbox.confine()`。事实链见 docs/02 §14；升级后跑 `node scripts/terminal-check.mjs`
-- **工具状态视图在 `packages/plugins/tools-inspector`**：会话头部视图切换栏里的「工具」tab，展示当前会话注册了哪些工具、哪些用过、各调用/失败多少次。⚠️⚠️ **dsh 没有工具延迟加载（deferred tool loading）**：全仓库搜 `setActiveTools|getActiveTools|activeTools` 零命中，`ToolRuntime.view(scope)` 同步算出唯一一个 `visible` 直接喂给系统提示装配，**注册即对模型可见**，不存在「已注册但未激活」的中间态（对照 pi-coding-agent 有这组 API）。⚠️ `llm-pi-ai/src/catalog.ts:240` 的 `deferredToolsMode: 'withhold'` 是 OpenAI 协议兼容位，**不是**这回事，别拿它当证据。所以状态**只有 used / unused 两档**，页面底部有一行如实说明；将来上游若加 active-set API，在 `ToolStatus` 与 `GROUPS` 各加一行即可。⚠️ **`ctx.tools.schemas(scope)` 的 scope 必须传 `ctx.agents.get(sessionId)`**：preset 把工具挂在每会话 scope 下，不传只读得到全局层（实测只剩 11 个插件工具）。⚠️⚠️ **调用次数必须回放会话日志，不能在内存里累加**：`tool/call` 是 dsh 的**持久化**会话事件且 data 自带 `name`（`session/src/known-event-types.ts:66`、`types.ts:306`），`ctx.agents.get(id)?.session.snapshotEvents()` 给出整段不可变日志 —— 所以统计覆盖**整个会话历史**，dsh 重启后依然准确。**§13.2 说的是「不能 append 自己的新事件类型」，不是「不能读 dsh 自己的事件」**，这两件事第一版搞混了，结果用户一重启就看到「全部未使用」。失败数靠 callId 回填（callId 在 `message.source.callId` 与 `content[0].toolCallId` 两个等价位置），配不上对的安全忽略。⚠️ 座位 `conversation.view` 是 list 槽，`label` 必须传 **thunk** 否则切语言不变。**它是只读观察窗口：不注册工具、不 restrict、不 guard**，冒烟脚本显式断言这三条。事实链见 docs/02 §15；升级后跑 `node scripts/tools-inspector-check.mjs`
-- **技能状态视图在 `packages/plugins/skills-inspector`**：会话头部视图切换栏里的「技能」tab（order 30），展示本会话有哪些技能、来自哪一层、agent 已加载了哪些，点开可打开技能的本地文件。⚠️⚠️ **「已加载」能精确回放且覆盖整个会话历史**：dsh 只有两条把技能正文注入上下文的路径，都是持久化事件 —— ① 模型加载 → `tool/call`，`data.name === 'skill'`，技能名在 `data.arguments`；② 用户 `/技能名` → `user/message`，`source.kind === 'skill-invocation'`、`source.name`（`tool-skill/src/index.ts:127-204`）。**加载失败的（配对 `tool/result` 带 `error`）不算**，但**尚未配对的要算**（否则刚加载完的技能会闪一下才出现）。⚠️ **`tool/call.arguments` 是模型原样产出的未解析字符串**（`session/src/types.ts:302-306` 原话），取名必须 try 住 `JSON.parse`，一条畸形历史不该让整个 tab 崩掉。⚠️ **scope 必须传 `ctx.agents.get(sessionId)`**，与工具页同一个坑：实测没有活 agent 时**技能数为 0**，项目的 `.agents/skills` 一个都读不到；`cwd` 也不能省。⚠️ **用 `snapshot()` 不用 `list()`**：前者多给 `complete`，provider 失败时为 false，否则页面会把「provider 挂了」显示成「技能凭空消失」。⚠️ **`list()` 拿不到文件路径**（`toSummary()` 只抄 7 个字段，`path` 不在其中，只有 `resourceBase` 这个**目录**），精确 `SKILL.md` 只有 `skills.get()` 给、而那会连带读进整个正文 —— 所以拆成独立 `locate` 端点，**只在点开某行时调一次**。「全局还是项目级」直接读 `SkillSummary.source` 七个来源桶（`skill-filesystem/src/index.ts:246-258`），⚠️ 它是**开放联合**必须有未知兜底。「打开本地文件」用 dsh 自己的 `session.canOpenWorkspacePath()` + `openWorkspacePath()`（`inject: ['remote','remote.session']`），**不自己 spawn**；⚠️ 它开的是**宿主机**桌面、对手机远程不可见，所以**先探测、能开才显示按钮**，路径始终显示成可复制等宽文本。**只读观察窗口：不注册技能/来源/工具、不 restrict、不 guard**，且**刻意没有「加载」按钮**。事实链见 docs/02 §16；升级后跑 `node scripts/skills-inspector-check.mjs`
-- ⚠️ **改完插件必须重启 dsh，刷新页面没用**：`dsh-remote-web` profile 里**没有挂任何 hmr 行**，所以宿主半不会热重载；浏览器半更是在注册时就被 `readFileSync` 读成不可变快照、以 `IMMUTABLE_CACHE` 下发，**只有 HMR 的 watch 回调会调 `rebuilt()` 重新读盘**，没有 HMR 就没人调它。改样式也一样 —— 别让用户白刷新一次（docs/02 §13.7；roadmap 里 proxy 那条「重新构建 `dist/index.js` 触发了热重载」不适用于当前启动方式）
-- **Windows 上杀子进程树**用 `taskkill /pid <pid> /T /F`，`child.kill()` 杀不掉 dsh 派生的 shell
-- ⚠️⚠️ **反过来：想让一个进程活过 dsh，`detached: true` 是不够的**。`/T` 是按**记录的父 pid** 递归杀，而 Windows 的 `DETACHED_PROCESS` 只解除**控制台**、**不清父 pid**，所以 detached 的服务仍是 dsh 的直接子进程，重启 dsh 就一起没了（用户实机一重启就暴露）。两条实测约束堵死了单进程解法：**孙进程不能 detach**（没 console 的 pwsh 立刻退出且不输出，日志全空），**启动器又不能直接退出**（Windows 上非 detached 的子进程活不过父进程退出）。解法是**两级启动器**：`dsh → L1(detached，起完就 exit，断开父子链) → L2(detached，node 不需要 console，常驻) → pwsh(普通子进程，因此有 console)`；注册表记 **L2** 的 pid（经 sidecar 文件交回），**不能记 L1**（几毫秒后就没了，`identify()` 会一律报 `gone`）。事实链与探针见 docs/02 §13.8
-- 安全相关改动前先读 [docs/04-security.md](docs/04-security.md)，那里记了显式接受的风险
+## 文档与运行
 
-## 不确定时
-
-- dsh 的行为 → 加载 skill `dsh-source` 后读 dsh 源码，不要猜、不要凭记忆
-- 架构决策 → 读 docs/01 和 docs/03；如果那里没写，说明需要和用户确认，**先问再做**
+- 插件使用说明放包根 README，docs/plugins.md 做索引；源码契约按 docs/dsh 的主题归属维护。
+- docs 每个文件最多 600 行，只保留现行行为与明确待办，不追加旧方案或调试过程。
+- 修改插件任何一半后都要构建并重启 dsh，dsh-remote-web 没有 HMR，刷新页面不会更新产物。
+- 安全活动写 relay.db 的 audit_log 与 pino，没有管理页面；查询加载 relay-audit skill。
+- 上游源码引用使用相对 dsh 根路径，不在其他文件记录本地绝对路径。
+- 未记录的架构决策先向用户确认，不猜 dsh 行为。

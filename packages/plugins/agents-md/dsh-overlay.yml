@@ -1,17 +1,11 @@
 # dsh-remote 的 dsh 插件叠加层，由 launcher 用 `dsh --patch <这个文件>` 传给 dsh。
 #
-# `id` 让更后面的 `--patch` 能按 id 覆盖这一行的 config（补丁层顺序见 docs/02 §9）。
-# 这个插件**没有 config**：它编辑的是一个固定路径的文件（`$DSH_HOME/AGENTS.md`），
-# 内容存在那个文件里，不存在设置命名空间、也不走 composition。
+# `id` 让后续 `--patch` 可按 id 覆盖 config；本插件没有 config，
+# 只为 `$DSH_HOME/AGENTS.md` 提供编辑界面，不创建 settings namespace。
 #
-# ⚠️ 这一行**不改动 dsh 读取全局提示词的任何行为**。dsh 自己的 `agent-instructions`
-# 行（在每个预设的 composition 里）照旧把 `$DSH_HOME/AGENTS.md` 读进上下文；本插件只是
-# 给那个文件补一个编辑界面。所以本行放在哪里都不影响加载顺序：它既不注册工具、
-# 不挂瀑布，也不占用任何 keyed 槽。
-#
-# 双面插件：insert 加载宿主半（dist/index.js），dsh 的客户端模块系统顺着这个路径
-# 找到本包的 package.json，按 `dsh.client` + exports["./client"] 下发 dist/client.js。
-# **dist/client.js 缺失会让 dsh 启动即失败**，不是静默降级。
+# 双面插件：insert 加载宿主半 `dist/index.js`；dsh 客户端模块系统依据
+# `dsh.client` 与 `exports["./client"]` 下发 `dist/client.js`。
+# **dist/client.js 缺失会让 dsh 启动失败**，不是静默降级。
 - insert:
     - id: agents-md
       name: './dist/index.js'

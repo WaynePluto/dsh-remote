@@ -1,0 +1,31 @@
+{
+  "name": "@dsh-remote/plugin-ui",
+  "version": "0.0.1",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./test": {
+      "types": "./src/dialog-test.ts",
+      "import": "./src/dialog-test.ts",
+      "default": "./src/dialog-test.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.27",
+    "react": "18.3.1"
+  }
+}

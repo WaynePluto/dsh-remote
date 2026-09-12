@@ -49,12 +49,12 @@ describe('relay authentication configuration', () => {
     expect(memberPortBaseFor(lan)).toBe(30_810)
     expect(lan.memberPortCount).toBe(64)
 
-    // Subdomains already address every machine, so no ports are bound silently.
+    // 子域名已经为每台机器提供地址，因此不会静默绑定端口。
     const domain = resolveRelayConfig({ port: 30_809, publicDomain: 'dsh.test' })
     expect(memberPortBaseFor(domain)).toBeUndefined()
     expect(memberPortBaseFor({ ...domain, memberPortBase: 40_000 })).toBe(40_000)
 
-    // An ephemeral main port has no predictable neighbourhood to derive from.
+    // 临时主端口没有可供推导的确定邻近范围。
     expect(memberPortBaseFor({ port: 0, publicDomain: undefined })).toBeUndefined()
   })
 

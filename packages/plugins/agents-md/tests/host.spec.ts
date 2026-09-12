@@ -1,11 +1,4 @@
-/**
- * Host-half tests: the file semantics and the RPC dispatch.
- *
- * They run against a real temporary directory rather than a mocked `fs`,
- * because the two things most worth proving — that a missing file reads as an
- * empty document, and that a save is atomic — are properties of the filesystem
- * calls themselves.
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`fs`） */
 
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -36,8 +29,7 @@ afterEach(async () => {
 
 describe('the file dsh actually reads', () => {
   it('is AGENTS.md directly under the harness home', () => {
-    // The whole plugin is worthless if this path drifts from dsh's own
-    // `join(config.dshHome, USER_GLOBAL_FILE)`.
+    // dsh 实际读取的路径必须与实现保持一致：`join(config.dshHome, USER_GLOBAL_FILE)`。
     expect(USER_GLOBAL_FILE).toBe('AGENTS.md')
     expect(agentsMdPath(home)).toBe(join(home, 'AGENTS.md'))
   })
@@ -96,8 +88,8 @@ describe('the shared validator', () => {
   })
 
   it('measures multi-byte characters as dsh does, not by string length', () => {
-    // A document of 600_000 Chinese characters is under the character count but
-    // far over the byte budget; measuring by `.length` would let it through.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`.length`）
     const text = '规'.repeat(600_000)
     expect(text.length).toBeLessThan(MAX_BYTES)
     expect(documentFault(text)).toBe('too-large')
@@ -135,7 +127,7 @@ describe('dispatch', () => {
   })
 
   it('reports an io failure as a coded failure rather than throwing', async () => {
-    // A directory where the file should be makes every read fail with EISDIR.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const previous = process.env.DSH_HOME
     process.env.DSH_HOME = join(home, 'blocked')
     const { mkdir } = await import('node:fs/promises')

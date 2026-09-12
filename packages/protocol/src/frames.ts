@@ -5,23 +5,23 @@ import {
   PROTOCOL_VERSION,
 } from './constants.js'
 
-/** One DNS-label-compatible machine slug (one controlled machine = one subdomain). */
+/** 一个符合 DNS label 的机器 slug（一台受控机器对应一个子域名）。 */
 export const machineSlugSchema = z.string()
   .min(1)
   .max(63)
   .regex(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/, 'must be a lowercase DNS label')
 
-/** Stable device id. M2 may choose UUIDs; the protocol does not require one representation. */
+/** 稳定的设备 id。M2 可以选择 UUID；协议不要求固定的表示形式。 */
 export const machineIdSchema = z.string().min(1).max(128)
 
 export const streamIdSchema = z.string().min(1).max(128)
 const opaqueSecretSchema = z.string().min(16).max(4096)
-/** Raw 32-byte Ed25519 public key, base64url without padding. */
+/** 原始 32 字节 Ed25519 公钥，无填充的 base64url。 */
 export const devicePublicKeySchema = z.string().regex(
   /^[A-Za-z0-9_-]{43}$/,
   'must be a base64url-encoded 32-byte Ed25519 public key',
 )
-/** Raw 64-byte Ed25519 signature, base64url without padding. */
+/** 原始 64 字节 Ed25519 签名，无填充的 base64url。 */
 export const deviceSignatureSchema = z.string().regex(
   /^[A-Za-z0-9_-]{86}$/,
   'must be a base64url-encoded 64-byte Ed25519 signature',
@@ -45,12 +45,12 @@ export const challengeFrameSchema = z.strictObject({
 })
 
 /**
- * Device credentials. The M1 shared static token was removed in protocol v2:
- * every connector proves possession of a machine-bound Ed25519 key.
+ * 设备凭据。M1 共享静态 token 已在 protocol v2 中移除：
+ * 每个 connector 都证明持有与机器绑定的 Ed25519 密钥。
  *
- * A machine that has never registered presents `ed25519-enroll` with a
- * single-use enrollment token; the signature is still required, so the token
- * alone cannot register a key its bearer does not hold.
+ * 从未注册过的机器使用 `ed25519-enroll` 携带
+ * 一次性注册令牌；仍然必须提供签名，因此仅凭令牌
+ * 无法注册令牌持有者并不拥有的密钥。
  */
 export const authCredentialSchema = z.discriminatedUnion('method', [
   z.strictObject({
@@ -92,10 +92,10 @@ export const openStreamFrameSchema = z.strictObject({
 })
 
 /**
- * dsh's own browser login token, as printed by `dsh web` on start-up.
+ * dsh 自己的浏览器登录 token，即启动时由 `dsh web` 打印的 token。
  *
- * It is a base64url secret, so the character class is deliberately narrow: it
- * ends up in a URL the relay hands to the browser.
+ * 它是 base64url 密钥，因此字符类特意限制得很窄：它
+ * 最终会出现在 relay 交给浏览器的 URL 中。
  */
 export const dshWebTokenSchema = z.string().min(16).max(512).regex(
   /^[A-Za-z0-9._~-]+$/,
@@ -103,12 +103,12 @@ export const dshWebTokenSchema = z.string().min(16).max(512).regex(
 )
 
 /**
- * The connector reporting the dsh launch token of the machine it serves.
+ * Connector 报告其所服务机器的 dsh 启动 token。
  *
- * Sent right after `auth-ok`, and again whenever the token changes. dsh 0.1.2
- * refuses every `/api` request and every index render without its own cookie,
- * and that cookie is only minted by `GET /?token=<token>`; the relay needs the
- * token so it can send an authenticated browser through that exchange once.
+ * 在 `auth-ok` 之后立即发送，并在 token 变化时再次发送。dsh 0.1.2
+ * 没有自己的 cookie 就会拒绝所有 `/api` 请求和首页渲染，
+ * 而该 cookie 只能由 `GET /?token=<token>` 签发；relay 需要这个
+ * token，才能让浏览器通过该交换流程完成一次认证。
  */
 export const dshAuthFrameSchema = z.strictObject({
   type: z.literal('dsh-auth'),
@@ -167,7 +167,7 @@ export const controlFrameSchema = z.discriminatedUnion('type', [
   errorFrameSchema,
 ])
 
-/** Frames a connector may send on the control channel. */
+/** Connector 可以在控制信道上发送的帧。 */
 export const connectorToRelayFrameSchema = z.discriminatedUnion('type', [
   helloFrameSchema,
   authFrameSchema,
@@ -177,7 +177,7 @@ export const connectorToRelayFrameSchema = z.discriminatedUnion('type', [
   errorFrameSchema,
 ])
 
-/** Frames a relay may send on the control channel. */
+/** Relay 可以在控制信道上发送的帧。 */
 export const relayToConnectorFrameSchema = z.discriminatedUnion('type', [
   challengeFrameSchema,
   authOkFrameSchema,

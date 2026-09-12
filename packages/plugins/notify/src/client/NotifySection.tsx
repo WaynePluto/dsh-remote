@@ -1,27 +1,7 @@
-/**
- * The Notifications settings page.
- *
- * Two switches and a test button. Each switch commits on click — unlike the
- * Proxy page there is nothing to draft, because a boolean cannot be
- * half-entered and the namespace has no validator that could refuse one.
- *
- * ⚠️ A REFUSED WRITE STILL LOOKS LIKE A SUCCESSFUL ONE. `SettingsScope.mutate`
- * RESOLVES when the Host refuses — it reloads the stored document and returns
- * normally (`packages/client/ui-settings/src/client/settings-scope.ts:132-135`),
- * so `catch` never runs and the only visible effect is the switch snapping
- * back. This page therefore reads the stored value back after every write
- * instead of trusting the promise. The case that reaches it here is a read-only
- * settings mirror, which is also announced above the switches.
- *
- * WHY THE TEST BUTTON IS NOT A NICETY. A Windows toast sent under an AppID that
- * is not a registered AUMID can be accepted by the API and never appear. There
- * is no way to observe that from the Host, so the only honest answer to "is
- * this working" is to send one and let the person look at their own screen.
- *
- * @module @dsh-remote/dsh-plugin-notify/client/NotifySection
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`SettingsScope.mutate`、`packages/client/ui-settings/src/client/settings-scope.ts:132-135`、`catch`） */
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { Button, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CSSProperties, ReactNode } from 'react'
 import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { DEFAULT_SETTINGS, FIELDS } from '../shared.js'
@@ -29,17 +9,17 @@ import type { NotifySettings, NotifyTestResult } from '../shared.js'
 import { fill } from './locales.js'
 import type { NotifyKey } from './locales.js'
 
-/** What this plugin injects into its own registration. */
+/** 本插件注册时注入的内容。 */
 export interface NotifySectionInjected {
-  /** The bound `dsh-plugin-notify` settings scope. */
+  /** 绑定的 `dsh-plugin-notify` settings scope。 */
   scope: SettingsScope<NotifySettings>
-  /** Ask the Host to send one notification now. */
+  /** 请求宿主立即发送一条通知。 */
   test: () => Promise<NotifyTestResult>
 }
 
-/** Everything the component reads. */
+/** 组件读取的全部内容。 */
 export type NotifySectionProps = Partial<NotifySectionInjected> & {
-  /** Locale seat bound to this plugin's namespace. */
+  /** 绑定到本插件命名空间的 locale 槽位。 */
   t?: (key: NotifyKey) => string
 }
 
@@ -51,40 +31,21 @@ const label: CSSProperties = { fontWeight: 600 }
 
 const muted: CSSProperties = { color: 'var(--dsw-alias-label-secondary, #6b7280)' }
 
-/**
- * A muted paragraph with no margin of its own.
- *
- * The page is a flex column with its own gap; a `<p>`'s default margin stacks
- * on top of that and doubles every gap it appears in.
- */
+/** 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。（涉及：`<p>`） */
 const note: CSSProperties = { ...muted, margin: 0 }
 
 const intro: CSSProperties = { display: 'flex', flexDirection: 'column', gap: '4px' }
 
 const row: CSSProperties = { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }
 
-/** The hint under a switch, indented to the switch's own text column. */
-const hint: CSSProperties = { ...muted, paddingLeft: '22px' }
-
-const button: CSSProperties = {
-  padding: '6px 12px',
-  borderRadius: '8px',
-  border: '1px solid var(--dsw-alias-border-l1, rgba(128,128,128,0.3))',
-  background: 'transparent',
-  color: 'inherit',
-  cursor: 'pointer',
-  font: 'inherit',
-}
+/** 开关下方的提示，缩进到开关自己的文字列。 */
+const hint: CSSProperties = { ...muted, paddingLeft: '44px' }
 
 const errorStyle: CSSProperties = { color: 'var(--dsw-alias-state-error-primary, #dc2626)' }
 
 const okStyle: CSSProperties = { color: 'var(--dsw-alias-state-success-primary, #16a34a)' }
 
-/**
- * The page.
- * @param props - injected scope and test caller, plus the locale seat.
- * @returns the page, or a short notice when there is nothing to configure.
- */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 export function NotifySection(props: NotifySectionProps): ReactNode {
   const { scope, test, t } = props
   const snapshot: SettingsScopeSnapshot<NotifySettings> | undefined = useSyncExternalStore(
@@ -99,24 +60,20 @@ export function NotifySection(props: NotifySectionProps): ReactNode {
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [saved, setSaved] = useState(false)
   const [result, setResult] = useState<NotifyTestResult | undefined>(undefined)
-  /** The section this page last wrote, so its own echo is not read as an outside edit. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   const committed = useRef<NotifySettings | undefined>(undefined)
 
-  // An edit from elsewhere (another window, a hand edit of settings.yaml)
-  // retires the "Saved." note. The change this page just made itself is not
-  // such an edit — without that exception the note is wiped by the very update
-  // that proves the write worked.
+  // 来自其他位置的修改（另一个窗口或手工编辑 settings.yaml）
+  // 会撤销“Saved.”提示。本页面刚做的修改不属于
+  // 这种外部修改；没有例外时，证明保存成功的更新反而会清掉提示
+  // 。
   useEffect(() => {
     const echo = committed.current
     if (echo !== undefined && FIELDS.every(key => echo[key] === settings[key])) return
     setSaved(false)
   }, [settings.enabled, settings.waiting])
 
-  /**
-   * Write one field and confirm it landed.
-   * @param key - the field to change.
-   * @param value - its new value.
-   */
+  /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
   const commit = useCallback(async (key: typeof FIELDS[number], value: boolean): Promise<void> => {
     if (scope === undefined) return
     setFailure(undefined)
@@ -124,8 +81,8 @@ export function NotifySection(props: NotifySectionProps): ReactNode {
     const next: NotifySettings = { ...settings, [key]: value }
     try {
       await scope.mutate([{ op: 'set', path: [key], value }])
-      // Not `catch`: a Host refusal resolves. The stored section is the only
-      // honest answer to "did it save".
+      // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`catch`）
+      // 能诚实回答“是否保存”。
       const stored = scope.getSnapshot().value
       if (stored === undefined || stored[key] !== value) {
         setFailure(t?.('rejected') ?? 'rejected')
@@ -173,37 +130,38 @@ export function NotifySection(props: NotifySectionProps): ReactNode {
       {!writable ? <p style={note}>{t('readOnly')}</p> : null}
 
       <div style={field}>
-        <label style={row}>
-          <input
-            type="checkbox"
+        <div style={row}>
+          <Switch
             checked={settings.enabled}
             disabled={disabled}
-            onChange={(event) => { void commit('enabled', event.target.checked) }}
+            label={t('enable')}
+            title={!writable ? t('readOnly') : undefined}
+            onChange={(next) => { void commit('enabled', next) }}
           />
           <span>{t('enable')}</span>
-        </label>
+        </div>
         <span style={hint}>{t('enableHint')}</span>
       </div>
 
       <div style={field}>
-        <label style={row}>
-          <input
-            type="checkbox"
+        <div style={row}>
+          <Switch
             checked={settings.waiting}
-            // The sub-switch is meaningless while the master switch is off, and
-            // a control that can be flipped without effect reads as a bug.
+            label={t('waiting')}
+            // 主开关关闭时子开关没有意义，
+            // 一个切换后没有效果的控件看起来就是 bug。
             disabled={disabled || !settings.enabled}
-            onChange={(event) => { void commit('waiting', event.target.checked) }}
+            onChange={(next) => { void commit('waiting', next) }}
           />
           <span>{t('waiting')}</span>
-        </label>
+        </div>
         <span style={hint}>{t('waitingHint')}</span>
       </div>
 
       <div style={row}>
-        <button type="button" style={button} disabled={testing} onClick={() => { void runTest() }}>
+        <Button variant="outline" size="sm" disabled={testing} onClick={() => { void runTest() }}>
           {testing ? t('testing') : t('test')}
-        </button>
+        </Button>
         {saved ? <span style={muted}>{t('saved')}</span> : null}
       </div>
 

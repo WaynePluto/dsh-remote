@@ -30,7 +30,7 @@ import {
 
 const MACHINE_ID = 'machine-test-01'
 const MACHINE_SLUG = 'pc1'
-/** Stands in for the token dsh prints on start-up. */
+/** 代替 dsh 启动时打印的 token。 */
 const DSH_TOKEN = 'dsh-test-token-0123456789'
 
 interface Fixture {
@@ -52,8 +52,8 @@ async function startFixture(): Promise<Fixture> {
   upstreamWss.on('connection', (ws) => ws.on('message', data => ws.send(data)))
 
   const upstream = http.createServer((req, res) => {
-    // Stand-in for dsh 0.1.2: an index request without dsh's own cookie is a
-    // bare 401, whatever the relay already decided about the browser.
+    // dsh 0.1.2 的替身：没有 dsh 自身 cookie 的 index 请求是
+    // 裸 401，与 relay 对浏览器已经作出的决定无关。
     const path = req.url ?? '/'
     if ((path === '/' || path.startsWith('/?')) && !(req.headers.cookie ?? '').includes('dsh-auth')) {
       res.writeHead(401, { 'content-type': 'text/plain' })
@@ -185,8 +185,8 @@ describe('M1 relay', () => {
       cookie: fixture.browserCookie,
     }
     const first = await request({ port: fixture.relayPort, path: '/', headers })
-    // A request that already carries a token must pass the 401 through instead
-    // of redirecting again, or a rejected token would loop forever.
+    // 已携带令牌的请求必须原样通过 401，
+    // 而不是再次重定向，否则被拒绝的令牌会造成无限循环。
     const retry = await request({
       port: fixture.relayPort,
       path: `/?token=${DSH_TOKEN}`,

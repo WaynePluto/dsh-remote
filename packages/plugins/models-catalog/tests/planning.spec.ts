@@ -1,31 +1,33 @@
-/**
- * The rules this plugin exists to enforce, tested as pure functions: what gets
- * added, what gets handed back to dsh, what is refused, and when the overlay
- * disappears entirely.
- */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 
 import { describe, expect, it } from 'vitest'
 import { canAddModels, planRevert, planRoute } from '../src/planning.js'
 import type { ModelEntry, RouteFacts } from '../src/planning.js'
 import type { SourceProvider } from '../src/models-dev.js'
 
-/** A route the installed catalog ships, with one protocol and two models. */
+/** 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。 */
 function facts(overrides: Partial<RouteFacts> = {}): RouteFacts {
   return {
     route: 'anthropic',
     displayName: 'Anthropic',
     hasConfiguredApi: false,
+    shipped: true,
     hasModelsList: false,
     configuredEntries: [],
     ownedIds: [],
+    ownedModels: [],
     managed: false,
+    installedModels: [
+      { id: 'old-1', api: 'anthropic-messages' },
+      { id: 'old-2', api: 'anthropic-messages' },
+    ],
     installedIds: ['old-1', 'old-2'],
     installedApis: ['anthropic-messages'],
     ...overrides,
   }
 }
 
-/** A source provider offering one model beyond the installed pair. */
+/** 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。 */
 function source(ids: readonly string[] = ['new-1']): SourceProvider {
   return {
     id: 'anthropic',
@@ -33,7 +35,7 @@ function source(ids: readonly string[] = ['new-1']): SourceProvider {
   }
 }
 
-/** Ids of a planned list, or a marker for the two non-list outcomes. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 function written(next: readonly ModelEntry[] | null | undefined): readonly string[] | 'removed' | 'untouched' {
   if (next === null) return 'removed'
   if (next === undefined) return 'untouched'
@@ -63,12 +65,33 @@ describe('adding models', () => {
     expect(written(plan.next)).toBe('untouched')
   })
 
-  it('refuses a route whose installed models span several protocols', () => {
-    const route = facts({ installedApis: ['openai-completions', 'openai-responses'] })
-    expect(canAddModels(route)).toBe(false)
-    const plan = planRoute(route, source())
-    expect(plan.preview.blocked).toBe('multi-protocol')
-    expect(written(plan.next)).toBe('untouched')
+  it('uses the naming fallback for a mixed native route', () => {
+    const route = facts({
+      route: 'github-copilot',
+      installedModels: [
+        { id: 'known-chat', api: 'openai-completions' },
+        { id: 'known-response', api: 'openai-responses' },
+        { id: 'known-claude', api: 'anthropic-messages' },
+      ],
+      installedIds: ['known-chat', 'known-response', 'known-claude'],
+      installedApis: ['openai-completions', 'openai-responses', 'anthropic-messages'],
+    })
+    const offered: SourceProvider = {
+      id: 'github-copilot',
+      models: [
+        { id: 'gpt-new', name: 'GPT New' },
+        { id: 'claude-new', name: 'Claude New' },
+        { id: 'gemini-new', name: 'Gemini New' },
+      ],
+    }
+    expect(canAddModels(route)).toBe(true)
+    const plan = planRoute(route, offered)
+    expect(plan.preview.blocked).toBeUndefined()
+    expect(plan.nextOwnedModels.map(model => [model.id, model.api])).toEqual([
+      ['gpt-new', 'openai-responses'],
+      ['claude-new', 'anthropic-messages'],
+      ['gemini-new', 'openai-completions'],
+    ])
   })
 
   it('allows a multi-protocol route that names its own api', () => {
@@ -77,11 +100,15 @@ describe('adding models', () => {
     expect(planRoute(route, source()).preview.blocked).toBeUndefined()
   })
 
-  it('leaves a model list this plugin did not write alone', () => {
-    const route = facts({ hasModelsList: true, configuredEntries: [{ id: 'old-1' }], managed: false })
+  it('appends to a foreign list without rewriting its existing entries', () => {
+    const route = facts({ hasModelsList: true, configuredEntries: [{ id: 'old-1', custom: true }], managed: false })
     const plan = planRoute(route, source())
-    expect(plan.preview.blocked).toBe('foreign-models')
-    expect(written(plan.next)).toBe('untouched')
+    expect(plan.preview.blocked).toBeUndefined()
+    expect(plan.next).toEqual([
+      { id: 'old-1', custom: true },
+      { id: 'new-1', name: 'Name new-1', contextWindow: 1000, maxTokens: 100 },
+    ])
+    expect(plan.nextOwnedIds).toEqual(['new-1'])
   })
 
   it('reports a route the source does not describe', () => {
@@ -90,7 +117,7 @@ describe('adding models', () => {
 })
 
 describe('handing models back to dsh', () => {
-  /** A route where this plugin previously added two models. */
+  /** 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。 */
   function managed(installedIds: readonly string[]): RouteFacts {
     return facts({
       hasModelsList: true,

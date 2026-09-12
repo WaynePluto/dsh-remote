@@ -71,6 +71,8 @@ pnpm install
 pnpm build
 ```
 
+> Source development requires pnpm >=10. The project does not force a local pnpm version; it uses the version you have installed. CI pins pnpm 10.17.0 for reproducible installs.
+
 ## First start
 
 On the machine you want as the **entry machine**:
@@ -158,6 +160,7 @@ This tool hands your dev machine to a browser. Read this once:
 - **Never expose it to the public internet without HTTPS.** Plain HTTP on the LAN is an accepted trade-off (a loud warning is printed at startup); on the public internet you must put HTTPS in front (Caddy or similar with automatic certificates).
 - dsh itself has no authentication and only listens on `127.0.0.1`; the console is the only door — **a compromised console account equals a compromised machine** (whoever can start a session can run commands).
 - Five failed logins lock the account for 15 minutes.
+- **The default is fixed YOLO mode**: `dsh-remote-web` hides the permission selector, `bash` / `pwsh` / `write` / `edit` run with the dsh process user's permissions, and legitimate approval requests are allowed automatically. Disable the `yolo-mode` plugin and restart dsh to restore dsh's native permission protection. `ask_user_question` still asks you questions.
 - **Security records are not in the web UI**: login attempts, machine attach/remove, password/authenticator changes are written to both the relay log (JSON lines with `"audit":true`) and the `audit_log` table in `relay.db`, never auto-expiring; inspect them on the machine running the relay.
 - Threat model and accepted trade-offs: [docs/04-security.md](docs/04-security.md) (Chinese).
 
@@ -175,7 +178,9 @@ This tool hands your dev machine to a browser. Read this once:
 | Doc | Contents |
 |---|---|
 | [AGENTS.md](AGENTS.md) | conventions and hard rules for AI assistants |
-| [docs/01-decisions.md](docs/01-decisions.md) | decisions made; list of rejected designs |
+| [docs/README.md](docs/README.md) | documentation navigation and maintenance rules |
+| [docs/plugins.md](docs/plugins.md) | plugin features, entry points, and package READMEs |
+| [docs/01-decisions.md](docs/01-decisions.md) | current decisions, terminology, and product boundaries |
 | [docs/02-dsh-facts.md](docs/02-dsh-facts.md) | verified dsh source facts (each with file paths) |
 | [docs/03-architecture.md](docs/03-architecture.md) | components, tunnel protocol, request flow |
 | [docs/04-security.md](docs/04-security.md) | auth design, threat model, accepted risks |
@@ -184,11 +189,11 @@ This tool hands your dev machine to a browser. Read this once:
 
 ## Status
 
-M0–M2 complete; M3 (portable package and launcher) working. See [docs/05-roadmap.md](docs/05-roadmap.md) (Chinese).
+The tunnel, authentication, portable packages, and 21 bundled plugins are implemented. Outstanding device checks and next steps are tracked in [docs/05-roadmap.md](docs/05-roadmap.md) (Chinese).
 
 | Item | Value |
 |---|---|
-| dsh version | `0.1.2-alpha.4` (developer preview, **breaking changes expected**) |
+| dsh version | `0.1.5-rc.2` (developer preview, **breaking changes expected**) |
 | dsh Node requirement | `^22.19.0 \|\| >=24.0.0` |
 | Runtime policy | uses your local Node; no Node binary bundled |
 | Native modules | zero in our own code (scrypt from Node core); dsh ships prebuilt per-platform binaries, hence per-platform packages |

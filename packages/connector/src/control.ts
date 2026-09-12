@@ -24,32 +24,32 @@ import { WorkStreamPool } from './stream.js'
 type Phase = 'challenge' | 'auth' | 'ready'
 
 export interface SessionOutcome {
-  /** The session reached `auth-ok` at least once. */
+  /** 会话至少一次到达 `auth-ok`。 */
   readonly authenticated: boolean
-  /** Reconnecting cannot help: rejected/revoked device key or incompatible protocol. */
+  /** 重连无济于事：设备密钥被拒绝或吊销，或协议不兼容。 */
   readonly fatal: boolean
   readonly message: string
 }
 
 export interface ControlSessionOptions {
-  /** The hub is already resolved: one session dials exactly one relay. */
+  /** hub 已经解析完成：一个会话只拨号连接一个 relay。 */
   readonly config: SessionConfig
-  /** This machine's Ed25519 identity; answers the relay challenge. */
+  /** 这台机器的 Ed25519 身份；用于回答 relay challenge。 */
   readonly deviceKey: DeviceKey
   /**
-   * True once any earlier session reached `auth-ok`. An enrollment token is
-   * single-use, so replaying it after registration would only be rejected.
+   * 任何更早会话到达 `auth-ok` 后为 true。注册令牌是
+   * 一次性的，因此注册后重放它只会被拒绝。
    */
   readonly registered?: boolean
   readonly logger: Logger
-  /** Aborting asks for a graceful shutdown of this session. */
+  /** 中止会话会请求优雅关闭。 */
   readonly signal: AbortSignal
   readonly onReady?: (frame: AuthOkFrame) => void
 }
 
 /**
- * Relay-reported codes a retry loop must not spin on. Each one needs an
- * operator action on the relay, so reconnecting can never succeed on its own.
+ * 重试循环不能空转等待的 relay 报告代码。每个代码都需要
+ * 操作者在 relay 上采取行动，因此仅靠重连永远不会自行成功。
  */
 const FATAL_RELAY_CODES: ReadonlySet<ProtocolErrorCode> = new Set([
   'AUTH_FAILED',
@@ -58,7 +58,7 @@ const FATAL_RELAY_CODES: ReadonlySet<ProtocolErrorCode> = new Set([
   'UNSUPPORTED_PROTOCOL',
 ])
 
-/** How long to wait for the close handshake before ripping the socket down. */
+/** 关闭 socket 前等待 close 握手的时长。 */
 const CLOSE_GRACE_MS = 2_000
 
 function normalizeRawData(data: RawData): Buffer | ArrayBuffer | ArrayBufferView {
@@ -66,9 +66,9 @@ function normalizeRawData(data: RawData): Buffer | ArrayBuffer | ArrayBufferView
 }
 
 /**
- * Run one control-channel lifetime: hello → challenge → auth → auth-ok, then
- * heartbeats plus `open-stream` dispatch. Resolves when the channel is gone;
- * it never rejects, so the caller only has to decide whether to retry.
+ * 运行一个控制信道生命周期：hello → challenge → auth → auth-ok，然后
+ * 处理 heartbeat 和 `open-stream` 分发。信道消失时 resolve；
+ * 它从不 reject，因此调用方只需决定是否重试。
  */
 export function runControlSession(options: ControlSessionOptions): Promise<SessionOutcome> {
   const { config, deviceKey, logger, signal } = options
@@ -185,8 +185,8 @@ export function runControlSession(options: ControlSessionOptions): Promise<Sessi
 
     const handleFrame = (frame: ControlFrame): void => {
       if (frame.type === 'error') {
-        // A revoked device or a burnt enrollment token is terminal even when the
-        // relay forgets to mark the frame fatal: retrying cannot change it.
+        // 设备被吊销或注册令牌已耗尽时，即使
+        // relay 忘记将帧标记为 fatal，结果仍是终态：重试无法改变它。
         const unrecoverable = FATAL_RELAY_CODES.has(frame.code)
         const stop = frame.fatal || unrecoverable
         logger[stop ? 'error' : 'warn']({ code: frame.code, message: frame.message }, 'relay reported a tunnel error')
@@ -251,8 +251,8 @@ export function runControlSession(options: ControlSessionOptions): Promise<Sessi
           { machineId: frame.machineId, slug: frame.slug, relayUrl: config.relayUrl },
           'control channel authenticated',
         )
-        // Every reconnect re-reports it: the relay keeps the token per live
-        // control channel, and a dsh restart mints a new one.
+        // 每次重连都会再次报告：relay 按活动
+        // 控制信道保存 token，而 dsh 重启会生成新的 token。
         if (config.dshToken !== undefined) {
           send({ type: 'dsh-auth', version: PROTOCOL_VERSION, token: config.dshToken })
         } else {

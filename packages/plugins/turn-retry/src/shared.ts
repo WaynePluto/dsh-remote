@@ -1,50 +1,15 @@
-/**
- * Contract shared by this plugin's two halves.
- *
- * Everything here is plain JSON or a type: the Host half folds session events
- * into {@link TurnRetryView} and publishes it through dsh's session-projection
- * registry; the browser half reads that same value through `useProjection` and
- * calls back over {@link CHANNEL}. Nothing in this module imports a runtime
- * from either side, so both `tsconfig.json` programs can include it.
- *
- * @module @dsh-remote/dsh-plugin-turn-retry/shared
- */
+/** 两半共享的纯 JSON/type contract；Host fold session events，browser 用 `useProjection` 读取并通过 RPC 回调。 */
 
-/**
- * RPC channel this plugin serves. dsh wraps it in the same Host/Origin fence
- * and browser authentication as `/api`
- * (`packages/client/connection/src/rpc-host.ts`), and dsh-remote's relay login
- * sits in front of that again.
- */
+/** 私有 RPC channel；dsh 以与 `/api` 相同的 Host/Origin fence 和 browser authentication 保护它。 */
 export const CHANNEL = '/turn-retry'
 
-/** Copy namespace this plugin owns; the package name without the scope. */
+/** 本插件拥有的文案/设置 namespace。 */
 export const SELF_NAMESPACE = 'dsh-plugin-turn-retry'
 
-/**
- * Session-projection key this plugin owns.
- *
- * Registered on the Host (`ctx.sessionProjections.register`) and read in the
- * browser as `useProjection('turnRetry')`. dsh pushes every registered wire key
- * to the page without either side enumerating it
- * (`packages/api/session-controller/src/control.ts:27,88`), so this one string
- * is the whole coupling.
- */
+/** Host 注册、browser 读取的 session-projection key；这一字符串是两半唯一 coupling。 */
 export const PROJECTION_KEY = 'turnRetry'
 
-/**
- * Failure codes where offering a retry would be dishonest: the request did not
- * fail *in transit*, it was refused on its merits, and running it again
- * reproduces the same refusal.
- *
- * Deliberately a deny-list rather than an allow-list. dsh's own automatic
- * policy uses an allow-list (`DEFAULT_RETRYABLE_CODES` in
- * `packages/llm/llm/src/retry-policy.ts`) because it retries *without asking*;
- * a human pressing a button has already decided to spend the attempt, so the
- * safe default is to let them. Codes come from
- * `packages/llm/llm/src/error.ts` plus the `UNKNOWN` the agent loop stamps on
- * any non-`LlmError` (`packages/core/agent-loop/src/agent.ts:318-323`).
- */
+/** 不应提供手动 retry 的失败码 deny-list；dsh 自动 retry 使用 allow-list，而人工按钮默认允许，只有明确无望的请求被排除。 */
 export const HOPELESS_CODES: readonly string[] = [
   'CONTEXT_WINDOW_EXCEEDED',
   'QUOTA',
@@ -54,129 +19,83 @@ export const HOPELESS_CODES: readonly string[] = [
   'NO_ADAPTER',
 ]
 
-/**
- * Whether retrying a failure with this code has a realistic chance.
- *
- * Only drives copy — the button is offered either way. See
- * {@link HOPELESS_CODES} for why this is a deny-list.
- * @param code - the `LlmFailure.code` recorded on the turn's end reason.
- * @returns false when the failure is a refusal rather than a transport fault.
- */
+/** 判断该失败码是否值得再次尝试；只影响文案，按钮仍会显示。 */
 export function isWorthRetrying(code: string): boolean {
   return !HOPELESS_CODES.includes(code)
 }
 
-/**
- * How much of a provider message this projection is willing to carry.
- *
- * A failure message is provider text, not a field we control: an HTML error
- * page or a rejected request body can be hundreds of kilobytes. Every
- * registered wire key is pushed to EVERY attached browser on change
- * (`packages/api/session-controller/src/control.ts:88`), and the banner has to
- * render whatever arrives — so the cut happens once, at the fold, rather than
- * being paid on the wire and papered over with CSS.
- */
+/** projection 传输的 provider message 上限，避免错误页通过 wire 推给所有 browser。 */
 export const MESSAGE_LIMIT = 2000
 
-/**
- * Cut a failure message down to what the banner can honestly show.
- * @param message - the recorded `LlmFailure.message`.
- * @returns the message, with an ellipsis when it was cut.
- */
+/** 将失败 message 截到 {@link MESSAGE_LIMIT}，超出时追加省略号。 */
 export function clampMessage(message: string): string {
   return message.length <= MESSAGE_LIMIT ? message : `${message.slice(0, MESSAGE_LIMIT)}…`
 }
 
-/** A most-recent turn that ended in a terminal model failure. */
+/** 最近一轮以 terminal model failure 结束的视图。 */
 export interface FailedTurnView {
-  /** Discriminator: this turn failed on its own. */
+  /** 判别字段：本 turn 自身失败。 */
   kind: 'failed'
-  /** The turn that ended in `{kind:'error'}`. */
+  /** 以 `{kind:'error'}` 结束的 turn。 */
   turn: number
-  /** Stable machine code from the recorded `LlmFailure`. */
+  /** 记录的稳定 machine code。 */
   code: string
-  /** The failure's human-readable message, clamped by {@link clampMessage}. */
+  /** 经 {@link clampMessage} 截断的可读失败 message。 */
   message: string
-  /** Whether retrying is worth the attempt; see {@link isWorthRetrying}. */
+  /** 是否值得再次尝试。 */
   retryable: boolean
 }
 
-/**
- * Why a turn stopped short of finishing.
- *
- * `user` is the stop button (`aborted{reason:{kind:'user'}}`); `interrupted`
- * covers the ends nobody chose — a disposed agent, a crash-orphaned turn closed
- * by the persistence repair pass, and the `legacy` cause imported records carry.
- */
+/** turn 未完成的原因：`user` 是 stop button；`interrupted` 覆盖 disposed、crash repair 和 legacy 记录。 */
 export type StoppedCause = 'user' | 'interrupted'
 
-/** A most-recent turn that was cut short before it finished. */
+/** 最近一轮在完成前被截断的视图。 */
 export interface StoppedTurnView {
-  /** Discriminator: this turn was interrupted, not failed. */
+  /** 判别字段：本 turn 被中断而非失败。 */
   kind: 'stopped'
-  /** The turn that ended without finishing. */
+  /** 没有完成的 turn。 */
   turn: number
-  /** What cut it short. */
+  /** 截断原因。 */
   cause: StoppedCause
 }
 
-/**
- * What the browser sees for the current session: the most recent turn that ended
- * with work left on the table — a terminal failure or an interruption — or
- * `null` when the last turn ran to its own end.
- *
- * Whole-value by the session-projection contract — never a delta.
- */
+/** browser 当前 session 可见的最近可继续 turn；正常结束时为 null。 */
 export type TurnRetryView = FailedTurnView | StoppedTurnView
 
-/** The projection's whole value: a resumable turn, or nothing to act on. */
+/** projection 的完整值，而不是 delta。 */
 export type TurnRetryState = TurnRetryView | null
 
-// The one projection type table, joined through the Service Definition
-// package's PURE-TYPE outlet (`/types`) rather than its root: the root's
-// dsh-agent → dsh-session chain would drag the Host `Context.sessions` merge
-// into the browser program, and one program must not hold both sides
-// (`packages/api/session-controller/src/client/sessions/projection-store.ts:16-23`).
-// Declaring both tables here is what makes `useProjection('turnRetry')` typed
-// in the browser half with zero client-side registration.
+// 只从 `/types` 引入 projection type table，避免 browser program 被 Host Context.sessions merge 拖入；因此 `useProjection('turnRetry')` 在无 client registration 时也有类型。
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionMap {
-    /** Unfinished business of this session's most recent turn, or null. */
+    /** 本 session 未完成工作的完整 projection 值，或 null。 */
     turnRetry: TurnRetryState
   }
 
   interface SessionProjectionStateMap {
-    /** Same value as the wire view: the fold state is already the whole value. */
+    /** 与 wire view 相同；fold state 本身就是完整值。 */
     turnRetry: TurnRetryState
   }
 }
 
-/** Endpoints {@link CHANNEL} serves. */
+/** {@link CHANNEL} 提供的端点。 */
 export const ENDPOINTS = ['retry'] as const
 
-/** One endpoint name. */
+/** `CHANNEL` 提供的 endpoint 名称。 */
 export type TurnRetryEndpoint = (typeof ENDPOINTS)[number]
 
-/**
- * Narrow an incoming endpoint name.
- * @param value - the endpoint the browser asked for.
- * @returns whether this channel serves it.
- */
+/** 收窄并校验 endpoint 名称。 */
 export function isTurnRetryEndpoint(value: string): value is TurnRetryEndpoint {
   return (ENDPOINTS as readonly string[]).includes(value)
 }
 
-/** Payload of the `retry` endpoint. */
+/** `retry` endpoint 的 request/response shape。 */
 export interface RetryRequest {
-  /** The session whose last unfinished turn should be re-driven. */
+  /** 要重新驱动的 session id。 */
   sessionId: string
 }
 
-/**
- * Narrow the `retry` payload.
- * @param value - the browser's payload.
- * @returns whether it carries a usable session id.
- */
+/** 收窄 `retry` payload，要求非空 sessionId。 */
 export function isRetryRequest(value: unknown): value is RetryRequest {
   return typeof value === 'object'
     && value !== null
@@ -184,19 +103,19 @@ export function isRetryRequest(value: unknown): value is RetryRequest {
     && (value as { sessionId: string }).sessionId.length > 0
 }
 
-/** What the `retry` endpoint answers with. */
+/** `retry` endpoint 的结果。 */
 export interface RetryResult {
-  /** Whether a retry turn was actually started. */
+  /** 是否真的启动了继续/重试 turn。 */
   started: boolean
-  /** Present when `started` is false: why the retry was refused. */
+  /** `started` 为 false 时的拒绝原因。 */
   reason?: 'not-failed' | 'busy' | 'pending-input' | 'no-agent' | 'subagent'
 }
 
-/** Failure code this channel reports for an unknown endpoint. */
+/** 未知 endpoint 的错误码。 */
 export const UNKNOWN_ENDPOINT_CODE = 'turn-retry/unknown-endpoint'
 
-/** Failure code this channel reports for a malformed payload. */
+/** malformed payload 的错误码。 */
 export const BAD_PAYLOAD_CODE = 'turn-retry/bad-payload'
 
-/** Failure code this channel reports when an endpoint threw. */
+/** Host endpoint 抛错时的错误码。 */
 export const INTERNAL_CODE = 'turn-retry/internal'

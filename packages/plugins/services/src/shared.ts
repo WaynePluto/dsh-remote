@@ -1,170 +1,118 @@
 /**
- * The contract both halves of this plugin agree on: the RPC channel, its
- * endpoints, the wire shapes, and the few pure functions that would otherwise
- * be written twice.
- *
- * This module is compiled into BOTH programs (`tsconfig.json` and
- * `tsconfig.client.json`), so it must not import `node:*` or any dsh package —
- * a browser bundle cannot carry either. Everything that touches the filesystem
- * or spawns a process lives in `./core.ts`, which the browser never sees.
- *
- * WHY THERE IS A WIRE CONTRACT AT ALL, i.e. why the panel is not a session
- * projection like `turn-retry`'s banner. Two independent reasons, both load
- * bearing:
- *
- *  1. A plugin CANNOT append its own session event type on dsh 0.1.2-alpha.4.
- *     `Session.append()` takes no `ignorable` option (`packages/core/session/
- *     src/index.ts:668-672`), and a persisted event whose type is outside the
- *     build-time `KNOWN_SESSION_EVENT_TYPES` set without that marker makes the
- *     persistence layer REFUSE to load the session ever again
- *     (`session-persistence/src/coordinator.ts:1248-1253`). A projection needs
- *     an event to fold, so this path would trade a panel for corrupted logs.
- *  2. Even with an event, a fold could only report what this plugin last did.
- *     A service is an operating-system process: it exits on its own, it gets
- *     killed from a terminal, its pid gets recycled. The registry file is a
- *     CACHE, and the truth is a live probe — which is exactly why the pi
- *     extension this plugin is modelled on reconciles against the OS on every
- *     single call.
- *
- * So the browser asks and the Host answers, and the answer is always freshly
- * reconciled. `ServicesSnapshot.now` is what keeps that honest across the
- * relay: the page renders uptime from the HOST's clock plus its own elapsed
- * time since the response, so a phone in another timezone — or with a wrong
- * clock — still shows the right number.
+ * 两半共享的 contract：RPC channel、端点、wire shape 和纯校验函数。
+ * 本模块同时编译到 Host 与 browser，不能导入 `node:*` 或 dsh package；文件系统和 spawn 逻辑只在 `./core.ts`，浏览器不会加载。
+ * 不能追加自定义 session event：dsh 的持久化事件类型受 `KNOWN_SESSION_EVENT_TYPES` 约束，OS 进程状态也必须实时 probe，因此 panel 由 Host 每次 fresh reconciliation 后回答。
  *
  * @module @dsh-remote/dsh-plugin-services/shared
  */
 
 /**
- * This plugin's identity: the RPC channel, the copy namespace, the slot entry
- * id, and the settings-style namespace all derive from the package suffix, so
- * one string is the single source of that name.
+ * 本插件的 identity；RPC channel、文案 namespace、slot entry id 和 settings-style namespace 都从包后缀派生，因此单一字符串是名称的唯一来源。
  */
 export const SELF_NAMESPACE = 'dsh-plugin-services'
 
 /**
- * The absolute RPC channel the Host registers and the page calls.
- *
- * ⚠️ The endpoint is part of the URL PATH: the browser must POST to
- * `/services/<endpoint>`, and the envelope's `method` has to equal that same
- * path segment. Calling `/services` alone is a flat 404 (docs/02 §10.8) — a
- * mistake this repository has already made once, in a smoke check that passed
- * every unit test.
+ * Host 注册、页面调用的绝对 RPC channel。endpoint 属于 URL path，浏览器必须 POST 到 `/services/<endpoint>`，envelope 的 `method` 也必须等于该 path segment；单独调用 `/services` 是 flat 404。
  */
 export const CHANNEL = '/services'
 
-/** Every endpoint this channel serves. */
+/** 本 channel 提供的全部 endpoint。 */
 export const ENDPOINTS = ['list', 'stop', 'restart', 'logs'] as const
 
-/** One endpoint name. */
+/** 一个 endpoint 名称。 */
 export type Endpoint = typeof ENDPOINTS[number]
 
 /**
- * Whether a decoded endpoint belongs to this channel.
- * @param endpoint - the channel-relative endpoint name.
- * @returns whether this plugin serves it.
+ * 判断解码后的 endpoint 是否属于本 channel。
+ * @param endpoint - 相对 channel 的 endpoint 名称。
+ * @returns 本插件是否提供该 endpoint。
  */
 export function isServicesEndpoint(endpoint: string): endpoint is Endpoint {
   return (ENDPOINTS as readonly string[]).includes(endpoint)
 }
 
-/** Failure code for an endpoint this channel does not serve. */
+/** 本 channel 不提供 endpoint 时的错误码。 */
 export const UNKNOWN_ENDPOINT_CODE = 'services/unknown-endpoint'
 
-/** Failure code for a payload that does not satisfy its endpoint. */
+/** payload 不满足 endpoint contract 时的错误码。 */
 export const BAD_PAYLOAD_CODE = 'services/bad-payload'
 
-/** Failure code for an unexpected Host-side throw. */
+/** Host 侧意外抛错时的错误码。 */
 export const INTERNAL_CODE = 'services/internal'
 
 /**
- * How confident the Host is that a recorded pid is still the service.
- *
- * `unknown` is NOT a synonym for `running`: it means the operating system
- * would not say when the process started, so pid recycling cannot be ruled
- * out. Every path that kills a process treats it as "do not touch".
+ * Host 对记录 pid 仍属于该服务的 confidence。`unknown` 不等于 running：OS 未提供创建时间，无法排除 pid recycling；任何终止路径都按“不要碰”处理。
  */
 export type ServiceIdentity = 'ours' | 'unknown'
 
-/** One live service, as the page sees it. */
+/** 页面看到的一项存活服务。 */
 export interface ServiceView {
-  /** Registry primary key, and the log file's base name. */
+  /** registry 主键，也是日志文件基本名。 */
   name: string
-  /** The command as it was typed; restart replays exactly this. */
+  /** 用户输入的命令；restart 精确重放此值。 */
   command: string
-  /** Working directory the command runs in. */
+  /** 命令运行的工作目录。 */
   cwd: string
-  /** Operating-system process id of the launcher process. */
+  /** launcher 进程的 OS process id。 */
   pid: number
-  /** Epoch ms when this plugin spawned it; uptime is measured from here. */
+  /** 本插件 spawn 它时的 epoch ms；uptime 从这里计算。 */
   startedAt: number
-  /** Absolute path of the combined stdout/stderr log. */
+  /** 合并 stdout/stderr 日志的绝对路径。 */
   logFile: string
-  /** TCP port, when one was declared at start time. */
+  /** 启动时声明的 TCP port（若有）。 */
   port?: number
-  /** Whether the recorded pid could still be confirmed to be this service. */
+  /** 是否仍能确认记录的 pid 属于该服务。 */
   identity: ServiceIdentity
 }
 
-/** Everything one `list` call reports. */
+/** 一次 `list` 调用报告的全部内容。 */
 export interface ServicesSnapshot {
-  /**
-   * The project directory this snapshot is about, or null when the session's
-   * working directory could not be resolved (a session created without one).
-   */
+  /** 本 snapshot 所属的项目目录；session 没有可解析工作目录时为 null。 */
   cwd: string | null
-  /** Live services, in registration order. */
+  /** 存活服务，按注册顺序排列。 */
   services: ServiceView[]
-  /**
-   * Names that have a readable log but no running service — a service that
-   * died. Reading its log is the only useful thing left to do, and that needs
-   * the name.
-   */
+  /** 有可读日志但没有存活服务的名称；读取日志是服务退出后唯一有用的操作，且需要名称。 */
   stoppedLogs: string[]
-  /**
-   * The Host's clock at the moment this snapshot was built. The page renders
-   * uptime as `now - startedAt` plus its own elapsed time since the response,
-   * so a wrong clock on the phone cannot produce a wrong uptime.
-   */
+  /** Host 构造 snapshot 时的时钟；页面用 `now - startedAt` 加上响应后的本地耗时计算 uptime，手机时钟错误也不会影响结果。 */
   now: number
 }
 
-/** Result of one `stop` or `restart` call. */
+/** 一次 `stop` 或 `restart` 调用的结果。 */
 export interface ServiceActionResult {
-  /** Whether the action did what it says. */
+  /** 操作是否完成其声明的动作。 */
   ok: boolean
-  /** One human sentence, already final — including a refusal. */
+  /** 已经可直接展示的一句人类文案，包括拒绝原因。 */
   message: string
 }
 
-/** Result of one `logs` call. */
+/** 一次 `logs` 调用的结果。 */
 export interface ServiceLogsResult {
-  /** Absolute log path, echoed so the user can open it themselves. */
+  /** 绝对日志路径，回显以便用户自行打开。 */
   file: string
-  /** Trailing lines, possibly empty. */
+  /** 末尾日志行，可能为空。 */
   tail: string
-  /** Whether a service by that name is currently running. */
+  /** 该名称服务当前是否运行。 */
   running: boolean
 }
 
-/** Payload of `list`. */
+/** `list` 的 payload。 */
 export interface ListRequest {
-  /** The session whose working directory selects the registry. */
+  /** 其工作目录用于选择 registry 的 session。 */
   sessionId: string
 }
 
-/** Payload of `stop`, `restart`, and `logs`. */
+/** `stop`、`restart` 和 `logs` 的 payload。 */
 export interface NamedRequest extends ListRequest {
-  /** Service name. */
+  /** 服务名称。 */
   name: string
-  /** Trailing line count; only `logs` reads it. */
+  /** 末尾行数；只有 `logs` 使用。 */
   lines?: number
 }
 
 /**
- * Whether a decoded payload carries a session id.
- * @param value - the browser's payload.
- * @returns whether it satisfies {@link ListRequest}.
+ * 判断解码后的 payload 是否携带 session id。
+ * @param value - browser payload。
+ * @returns 是否满足 {@link ListRequest}。
  */
 export function isListRequest(value: unknown): value is ListRequest {
   return typeof value === 'object' && value !== null
@@ -173,9 +121,9 @@ export function isListRequest(value: unknown): value is ListRequest {
 }
 
 /**
- * Whether a decoded payload carries a session id and a service name.
- * @param value - the browser's payload.
- * @returns whether it satisfies {@link NamedRequest}.
+ * 判断解码后的 payload 是否携带 session id 和服务名。
+ * @param value - browser payload。
+ * @returns 是否满足 {@link NamedRequest}。
  */
 export function isNamedRequest(value: unknown): value is NamedRequest {
   if (!isListRequest(value)) return false
@@ -186,34 +134,25 @@ export function isNamedRequest(value: unknown): value is NamedRequest {
 }
 
 /**
- * A service name is both a filename and a registry key, so path traversal and
- * blank names are rejected before either is built from it.
- *
- * The bare `.` and `..` cases are excluded explicitly even though the character
- * class technically permits them. They are not exploitable here — `logPath`
- * would build a file literally named `...log` rather than escaping the
- * directory — but a registry key of `..` is meaningless, and a name whose
- * safety depends on remembering how `path.join` treats a suffix is a name worth
- * refusing outright.
- * @param name - the candidate name.
- * @returns whether it is safe to use as both.
+ * 服务名同时是文件名和 registry key，因此在构造任一路径前拒绝空名、路径穿越以及 `.`/`..`；即使 `path.join` 不会越界，`..` 作为 registry key 也没有意义。
+ * @param name - 候选名称。
+ * @returns 是否可安全用于两者。
  */
 export function isValidName(name: string): boolean {
   if (name === '.' || name === '..') return false
   return /^[A-Za-z0-9._-]{1,64}$/u.test(name)
 }
 
-/** Default number of trailing log lines returned when a caller does not say. */
+/** 调用方未指定时返回的默认末尾日志行数。 */
 export const DEFAULT_LOG_LINES = 40
 
-/** Hard cap on trailing log lines, so one call cannot ship a whole log file. */
+/** 末尾日志行数硬上限，避免一次调用传输整个日志文件。 */
 export const MAX_LOG_LINES = 500
 
 /**
- * Format a duration the way a status line should read it: one unit of
- * precision, never a wall of digits.
- * @param ms - elapsed milliseconds; negative clamps to zero.
- * @returns a short human duration such as `3m` or `2d4h`.
+ * 将时长格式化为状态行可读的单一精度单位，避免显示一长串数字。
+ * @param ms - 已过毫秒数；负值截为零。
+ * @returns 如 `3m` 或 `2d4h` 的短时长。
  */
 export function formatUptime(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return '0s'
@@ -227,19 +166,15 @@ export function formatUptime(ms: number): string {
 }
 
 /**
- * Keep the last `lines` lines of a text blob.
- *
- * Pure and shared because both the tools and the panel show a log tail, and
- * two implementations of "what is the end of this file" would drift.
- * @param text - the whole file contents.
- * @param lines - how many trailing lines to keep.
- * @returns the trailing lines, joined by newline.
+ * 保留文本末尾的 `lines` 行。tools 与 panel 都显示日志 tail，因此共享纯函数避免两套“文件末尾是什么”的实现发生偏差。
+ * @param text - 完整文件内容。
+ * @param lines - 要保留的末尾行数。
+ * @returns 用换行连接的末尾行。
  */
 export function tailText(text: string, lines: number): string {
   if (lines <= 0) return ''
   const all = text.split(/\r?\n/u)
-  // A trailing newline yields one empty element; dropping it stops the tail
-  // from spending a line on nothing.
+  // 末尾换行会产生一个空元素；丢掉它可避免 tail 把一行浪费在空内容上。
   if (all.length > 0 && all[all.length - 1] === '') all.pop()
   return all.slice(-lines).join('\n')
 }

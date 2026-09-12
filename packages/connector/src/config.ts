@@ -5,7 +5,7 @@ import { DEVICE_KEY_FILE_NAME } from './device-key.js'
 import { defaultDshRemoteHome } from './membership.js'
 import { CONNECTOR_VERSION } from './version.js'
 
-/** A relay URL this connector cannot dial; the message says why. */
+/** Connector 无法拨号的 relay URL；消息会说明原因。 */
 export class RelayUrlError extends Error {
   constructor(message: string) {
     super(message)
@@ -14,12 +14,12 @@ export class RelayUrlError extends Error {
 }
 
 /**
- * Accept ws/wss (and the http/https spellings people paste from a browser) and
- * normalize to a bare WebSocket origin, because tunnel paths are appended later.
+ * 接受 ws/wss（以及人们从浏览器粘贴的 http/https 写法），并
+ * 规范化为裸 WebSocket origin，因为隧道路径稍后才会追加。
  *
- * @param value - a relay URL from the command line or from membership.json.
- * @returns The normalized `scheme://host[:port]` origin.
- * @throws RelayUrlError When the URL cannot address a relay.
+ * @param value - 来自命令行或 membership.json 的 relay URL。
+ * @returns 规范化后的 `scheme://host[:port]` origin。
+ * @throws RelayUrlError URL 无法指向 relay 时抛出。
  */
 export function normalizeRelayUrl(value: string): string {
   let url: URL
@@ -53,45 +53,45 @@ const relayUrlSchema = z.string().min(1).transform((value, ctx) => {
 
 const connectorConfigShape = z.strictObject({
   /**
-   * Relay WebSocket origin, e.g. wss://relay.dsh.example.com.
+   * Relay WebSocket origin，例如 wss://relay.dsh.example.com。
    *
-   * Optional on purpose: when it is absent the hub comes from
-   * `<home>/membership.json` instead, and the connector idles until it appears.
+   * 特意设为可选：缺少它时 hub 来自
+   * `<home>/membership.json`，connector 会空闲等待它出现。
    */
   relayUrl: relayUrlSchema.optional(),
-  /** Stable device id; the Ed25519 device key is bound to it by the relay. */
+  /** 稳定的设备 id；relay 将 Ed25519 设备密钥绑定到它。 */
   machineId: machineIdSchema,
   /**
-   * One controlled machine = one subdomain. Optional: a machine that joins from
-   * a hub's admin console learns its slug from `membership.json`, so only the
-   * CLI-selected path has to supply one.
+   * 一台受控机器对应一个子域名。可选：从
+   * hub 的管理控制台加入的机器从 `membership.json` 获取 slug，因此只有
+   * 通过 CLI 选择的路径必须提供 slug。
    */
   slug: machineSlugSchema.optional(),
-  /** Per-user state directory holding `device.key` and `membership.json`. */
+  /** 保存 `device.key` 和 `membership.json` 的每用户状态目录。 */
   home: z.string().min(1).default(() => defaultDshRemoteHome()),
-  /** Where this machine's Ed25519 identity lives; created on first run. */
+  /** 这台机器的 Ed25519 身份所在位置；首次运行时创建。 */
   deviceKeyPath: z.string().min(1).optional(),
   /**
-   * Single-use relay enrollment token. Only needed until the relay knows this
-   * device's public key; afterwards the signature alone authenticates.
+   * 一次性 relay 注册令牌。仅在 relay 尚不知道这台机器的
+   * 设备公钥时需要；之后仅凭签名即可认证。
    */
   enrollToken: z.string().min(16).optional(),
   /**
-   * Browser-facing authority of the hub named by `--relay`, e.g. `10.1.2.87`.
-   * Mode A forwards the browser's original Host untouched, so this machine's
-   * dsh must trust it; the connector only records and reports it.
+   * `--relay` 指定的 hub 面向浏览器的 authority，例如 `10.1.2.87`。
+   * Mode A 原样转发浏览器的 Host，因此这台机器上的
+   * dsh 必须信任它；connector 只记录并报告它。
    */
   hubAuthority: z.string().min(1).max(255).optional(),
-  /** Security invariant: dsh itself is never exposed beyond IPv4 loopback. */
+  /** 安全不变量：dsh 本身绝不暴露到 IPv4 loopback 之外。 */
   dshHost: z.literal('127.0.0.1').default('127.0.0.1'),
   dshPort: z.number().int().min(1).max(65_535).default(3080),
   /**
-   * dsh's own browser login token, printed by `dsh web` as
-   * `dsh web: http://127.0.0.1:<port>/?token=<token>`.
+   * dsh 自己的浏览器登录 token，由 `dsh web` 打印为
+   * 示例输出：`dsh web: http://127.0.0.1:<port>/?token=<token>`。
    *
-   * Optional: a connector started beside a dsh nobody captured the line from
-   * still tunnels traffic, but the browser then has to reach dsh's own login
-   * exchange some other way. Whoever spawns dsh (the launcher) supplies it.
+   * 可选：如果与 dsh 一起启动的 connector 没有人捕获到这一行，
+   * 仍然会转发流量，但浏览器随后必须以其他方式完成 dsh 自己的登录
+   * 交换。启动 dsh 的进程（launcher）负责提供它。
    */
   dshToken: dshWebTokenSchema.optional(),
   connectorVersion: z.string().min(1).max(64).default(CONNECTOR_VERSION),
@@ -99,8 +99,8 @@ const connectorConfigShape = z.strictObject({
 
 export const connectorConfigSchema = connectorConfigShape.transform(value => ({
   ...value,
-  // The device key lives in the same home as membership.json, so pointing
-  // --home at a scratch directory keeps a whole identity together.
+  // 设备密钥与 membership.json 位于同一个 home，因此将
+  // --home 指向临时目录也能让完整身份保持在一起。
   deviceKeyPath: value.deviceKeyPath ?? join(value.home, DEVICE_KEY_FILE_NAME),
 }))
 
@@ -108,34 +108,34 @@ export type ConnectorConfig = z.output<typeof connectorConfigSchema>
 export type ConnectorConfigInput = z.input<typeof connectorConfigSchema>
 
 /**
- * One hub this connector can dial, after precedence between `--relay` and
- * `membership.json` has been decided.
+ * Connector 可以拨号连接的一个 hub，此时 `--relay` 与
+ * `membership.json` 的优先级已经确定。
  */
 export interface HubTarget {
-  /** Normalized WebSocket origin. */
+  /** 规范化后的 WebSocket origin。 */
   readonly relayUrl: string
-  /** The slug this machine claims on that hub. */
+  /** 这台机器在该 hub 上声明的 slug。 */
   readonly slug: string
   readonly enrollToken?: string | undefined
   /**
-   * Browser-facing authority of the hub, e.g. `10.1.2.87:30810`. Mode A
-   * forwards the browser's original Host untouched, so this machine's dsh must
-   * trust it via `--trusted-host`. The connector only records it; spawning and
-   * configuring dsh is the launcher's job.
+   * hub 面向浏览器的 authority，例如 `10.1.2.87:30810`。Mode A
+   * 原样转发浏览器的 Host，因此这台机器上的 dsh 必须
+   * 通过 `--trusted-host` 信任它。connector 只记录它；启动和
+   * 配置 dsh 是 launcher 的职责。
    */
   readonly browserAuthority?: string | undefined
 }
 
-/** A config whose hub is known: what a single control session actually dials. */
+/** 已知 hub 的配置：单个控制会话实际拨号连接的目标。 */
 export type SessionConfig = Omit<ConnectorConfig, 'relayUrl' | 'slug'> & {
   readonly relayUrl: string
   readonly slug: string
 }
 
 /**
- * @param config - the process-wide connector config.
- * @param hub - the hub this session dials.
- * @returns The config a control session sees, with the hub's identity applied.
+ * @param config - 进程级 connector 配置。
+ * @param hub - 本会话拨号连接的 hub。
+ * @returns 控制会话看到的配置，其中已应用 hub 的身份。
  */
 export function toSessionConfig(config: ConnectorConfig, hub: HubTarget): SessionConfig {
   return { ...config, relayUrl: hub.relayUrl, slug: hub.slug, enrollToken: hub.enrollToken }

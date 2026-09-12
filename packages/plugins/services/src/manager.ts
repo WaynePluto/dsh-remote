@@ -1,17 +1,6 @@
 /**
- * The operations, one layer above {@link module:@dsh-remote/dsh-plugin-services/core}
- * and still free of any dsh import.
- *
- * Everything a tool call and a panel button can do lives here, ONCE. The model
- * facing tools in `./index.ts` and the RPC endpoints the browser calls are two
- * presentations of these same functions — there is deliberately no "the button
- * does it one way and the tool another", because the two would drift and the
- * divergence would only ever show up as a service that the panel thinks is
- * stopped and the model thinks is running.
- *
- * Every entry point begins by reconciling the registry against the operating
- * system. That is not defensive padding: the registry is a cache, and a service
- * can die, be killed by hand, or have its pid recycled between any two calls.
+ * services 的操作层：registry reconciliation、启动/停止/重启和日志读取都在此实现一次。
+ * tools 与浏览器 panel 只是这些函数的两种入口；每次入口都先把 registry 与 OS 状态对齐。
  *
  * @module @dsh-remote/dsh-plugin-services/manager
  */
@@ -24,23 +13,23 @@ import type { Identity, ServiceRecord } from './core.js'
 import { DEFAULT_LOG_LINES, MAX_LOG_LINES, isValidName } from './shared.js'
 import type { ServiceActionResult, ServiceLogsResult, ServiceView, ServicesSnapshot } from './shared.js'
 
-/** Default readiness deadline, in milliseconds. */
+/** 默认就绪 deadline（毫秒）。 */
 export const DEFAULT_READY_TIMEOUT_MS = 8000
 
-/** Hard ceiling on a caller-supplied readiness deadline. */
+/** 调用方提供的就绪 deadline 上限。 */
 export const MAX_READY_TIMEOUT_MS = 120_000
 
-/** Probes injected by tests in place of the real operating system. */
+/** 测试注入的 probe，用于替代真实 OS。 */
 export interface ManagerDeps {
   identify?: (record: ServiceRecord) => Identity
   now?: () => number
 }
 
 /**
- * Reconcile the stored registry against the OS and persist the repair.
- * @param cwd - the project directory.
- * @param deps - injected probes.
- * @returns the rows that are still live, each with its verdict.
+ * 将已保存 registry 与 OS 对齐，并持久化修复结果。
+ * @param cwd - 项目目录。
+ * @param deps - 注入的 probe。
+ * @returns 仍存活的记录及各自的身份判定。
  */
 export function refresh(
   cwd: string,
@@ -54,10 +43,10 @@ export function refresh(
 }
 
 /**
- * Project one row onto the wire shape.
- * @param record - the stored row.
- * @param identity - its current verdict.
- * @returns the view the page renders.
+ * 将一条 registry 记录投影为 wire shape。
+ * @param record - 已保存记录。
+ * @param identity - 当前身份判定。
+ * @returns 页面渲染的 view。
  */
 function toView(record: ServiceRecord, identity: Identity): ServiceView {
   return {
@@ -73,10 +62,10 @@ function toView(record: ServiceRecord, identity: Identity): ServiceView {
 }
 
 /**
- * Build the snapshot the panel and `service_list` both read.
- * @param cwd - the project directory.
- * @param deps - injected probes.
- * @returns live services, readable dead logs, and the Host clock.
+ * 构造 panel 与 `service_list` 共用的 snapshot。
+ * @param cwd - 项目目录。
+ * @param deps - 注入的 probe。
+ * @returns 存活服务、可读的已停止日志和 Host 时钟。
  */
 export function snapshot(cwd: string, deps: ManagerDeps = {}): ServicesSnapshot {
   const live = refresh(cwd, deps)
@@ -90,10 +79,10 @@ export function snapshot(cwd: string, deps: ManagerDeps = {}): ServicesSnapshot 
 }
 
 /**
- * Find one live row by name.
- * @param live - the reconciled rows.
- * @param name - the service name.
- * @returns the matching entry, or undefined.
+ * 按名称查找一条存活记录。
+ * @param live - reconciliation 后的记录。
+ * @param name - 服务名称。
+ * @returns 匹配项；没有时返回 undefined。
  */
 function find(
   live: { record: ServiceRecord; identity: Identity }[],
@@ -103,17 +92,11 @@ function find(
 }
 
 /**
- * Stop one service and drop it from the registry.
- *
- * A refusal is a RESULT, not an error: when the recorded pid cannot be
- * confirmed to still be this service, not killing it is the correct outcome and
- * the message says what to run by hand. The alternative — killing a process
- * tree that now belongs to something else — is the one failure mode with no
- * recovery.
- * @param cwd - the project directory.
- * @param name - the service to stop.
- * @param deps - injected probes.
- * @returns whether it stopped, and the sentence to show.
+ * 停止一个服务并从 registry 移除。无法确认 pid 仍属于该服务时返回拒绝结果而不是抛错，避免误杀其他进程树。
+ * @param cwd - 项目目录。
+ * @param name - 要停止的服务。
+ * @param deps - 注入的 probe。
+ * @returns 是否停止成功及展示文案。
  */
 export function stopService(cwd: string, name: string, deps: ManagerDeps = {}): ServiceActionResult {
   const live = refresh(cwd, deps)
@@ -136,21 +119,16 @@ export function stopService(cwd: string, name: string, deps: ManagerDeps = {}): 
   return { ok: true, message: `${name} 已停止（pid ${String(entry.record.pid)}）` }
 }
 
-/** Everything {@link startService} accepts. */
+/** {@link startService} 接受的全部请求字段。 */
 export interface StartRequest {
   name: string
   command: string
   /**
-   * The project directory that owns the registry and the log — always the
-   * session's project directory, never the command's.
-   *
-   * ⚠️ Keeping this separate from {@link cwd} is what makes a service started
-   * with a custom working directory still visible to `service_list` and to the
-   * panel: both of those only know the session's directory. Collapsing the two
-   * produces a service that is demonstrably running and reported as absent.
+   * 拥有 registry 和日志的项目目录：始终是 session 项目目录，而不是命令目录。
+   * ⚠️ 必须与 {@link cwd} 分开，才能让自定义工作目录的服务仍被 `service_list` 和 panel 看到；两者只知道 session 目录。
    */
   root: string
-  /** Working directory the command runs in; may differ from {@link root}. */
+  /** 命令运行的工作目录；可以不同于 {@link root}。 */
   cwd: string
   port?: number
   readyLog?: string
@@ -158,25 +136,21 @@ export interface StartRequest {
   shell?: string
 }
 
-/** What a start attempt produced. */
+/** 一次启动尝试的结果。 */
 export interface StartResult {
   ok: boolean
   message: string
-  /** How the readiness wait ended, when the process was actually spawned. */
+  /** 实际 spawn 进程后，就绪等待的结束状态。 */
   outcome?: 'ready' | 'timeout' | 'exited'
-  /** The spawned row, when it survived startup. */
+  /** 启动后仍存活时的 registry 行。 */
   record?: ServiceRecord
 }
 
 /**
- * Start one service and wait for it to look ready.
- *
- * A process that dies during startup is removed from the registry before
- * returning: a row claiming to be running when it is not would make every later
- * operation lie.
- * @param request - name, command, directory, and probe configuration.
- * @param deps - injected probes.
- * @returns the outcome, with the log tail folded into the message.
+ * 启动一个服务并等待其看起来已就绪。启动期间退出的进程会先从 registry 移除，避免后续操作把不存在的服务当成存活。
+ * @param request - 名称、命令、目录和 probe 配置。
+ * @param deps - 注入的 probe。
+ * @returns 等待结果及合并日志 tail 的文案。
  */
 export async function startService(request: StartRequest, deps: ManagerDeps = {}): Promise<StartResult> {
   if (!isValidName(request.name)) {
@@ -188,9 +162,7 @@ export async function startService(request: StartRequest, deps: ManagerDeps = {}
     return { ok: false, message: `${request.name} 已在运行；要换命令请先 service_stop，或用 service_restart` }
   }
 
-  // The Windows pid handoff can fail (the launcher never reported, or the
-  // command could not be spawned at all). That is a failed START, not an
-  // exception for a tool call to propagate — the caller wants a sentence.
+  // Windows pid handoff 或命令 spawn 可能失败；这是启动失败结果，不应作为异常冒泡，调用方需要可展示的句子。
   let record
   try {
     record = await startProcess({
@@ -241,16 +213,12 @@ export async function startService(request: StartRequest, deps: ManagerDeps = {}
 }
 
 /**
- * Stop a service and start it again with the command recorded at start time.
- *
- * Replaying the STORED command rather than asking for one again is what makes
- * this safe to put behind a panel button: the user pressing 重启 cannot
- * accidentally change what runs.
- * @param root - the project directory owning the registry.
- * @param name - the service to restart.
- * @param readyTimeoutMs - optional readiness deadline.
- * @param deps - injected probes.
- * @returns whether it came back up, and the sentence to show.
+ * 使用启动时记录的命令停止并重新启动服务。重放 stored command 可保证 panel 的“重启”不会意外改变实际执行内容。
+ * @param root - 拥有 registry 的项目目录。
+ * @param name - 服务名称。
+ * @param readyTimeoutMs - 可选的就绪 deadline。
+ * @param deps - 注入的 probe。
+ * @returns 是否重新启动成功及展示文案。
  */
 export async function restartService(
   root: string,
@@ -262,16 +230,14 @@ export async function restartService(
   if (previous === undefined) return { ok: false, message: `没有名为 ${name} 的运行中服务` }
 
   const stopped = stopService(root, name, deps)
-  // A refusal to kill must abort the restart: starting a second copy while the
-  // first may still hold the port is strictly worse than doing nothing.
+  // 拒绝终止时必须中止重启：第一份服务可能仍占用 port，启动第二份比不操作更危险。
   if (!stopped.ok) return { ok: false, message: `重启中止：${stopped.message}` }
 
   const started = await startService({
     name: previous.name,
     command: previous.command,
     root,
-    // The command's own directory is replayed from the record, so a service
-    // started in a sub-package comes back in that sub-package.
+    // 从记录重放命令自身目录，因此在子包启动的服务会回到同一子包。
     cwd: previous.cwd,
     ...previous.port === undefined ? {} : { port: previous.port },
     ...previous.shell === undefined ? {} : { shell: previous.shell },
@@ -281,15 +247,12 @@ export async function restartService(
 }
 
 /**
- * Read one service's log tail.
- *
- * This works for a service that has already exited — which is precisely when it
- * matters most, because the log is the only remaining evidence of why it died.
- * @param cwd - the project directory.
- * @param name - the service name.
- * @param lines - how many trailing lines; clamped to {@link MAX_LOG_LINES}.
- * @param deps - injected probes.
- * @returns the log path, its tail, and whether the service is running.
+ * 读取一个服务的日志 tail；服务已退出时仍可用，这正是最需要日志判断退出原因的时刻。
+ * @param cwd - 项目目录。
+ * @param name - 服务名称。
+ * @param lines - 末尾行数，截到 {@link MAX_LOG_LINES}。
+ * @param deps - 注入的 probe。
+ * @returns 日志路径、tail 和运行状态。
  */
 export function logsOf(
   cwd: string,
@@ -307,12 +270,9 @@ export function logsOf(
 }
 
 /**
- * The model-facing rendering of a snapshot.
- *
- * Dead services are listed separately by name because reading their log is the
- * only remaining action and it needs a name to address.
- * @param value - the snapshot to describe.
- * @returns a compact multi-line report.
+ * 面向模型的 snapshot 文本。已停止服务按名称单独列出，因为读取日志是唯一剩余操作且需要名称。
+ * @param value - 要描述的 snapshot。
+ * @returns 紧凑的多行报告。
  */
 export function formatSnapshot(value: ServicesSnapshot): string {
   const staleLine = value.stoppedLogs.length === 0

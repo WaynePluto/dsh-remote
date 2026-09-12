@@ -1,13 +1,12 @@
 import { defineConfig } from 'tsdown'
+import { createPluginBuildConfig } from '../../plugin-build/index.mjs'
 
-export default defineConfig({
-  entry: ['src/index.ts'],
-  format: 'esm',
-  platform: 'node',
-  target: 'node22',
-  // dsh imports this file directly from disk (the overlay names ./dist/index.js),
-  // so the build must stay a single dependency-free module.
-  dts: false,
-  clean: true,
-  outExtensions: () => ({ js: '.js' }),
-})
+export default defineConfig(
+  createPluginBuildConfig({
+    id: '@dsh-remote/dsh-plugin-remote-privileged',
+    entry: ['src/index.ts'],
+    hostDeps: {},
+    client: false,
+    hostName: false,
+  }),
+)

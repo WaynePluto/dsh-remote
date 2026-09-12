@@ -1,21 +1,7 @@
 /**
- * tools-inspector 宿主半：把「当前会话 agent 看得见哪些工具」+「本次运行以来各调用了多少次」
- * 合成一份快照，经私有 RPC 通道交给页面。
- *
- * 为什么要这个插件：dsh 没有把工具表暴露成任何进程外 API（docs/02 §13.4），
- * 用户在页面上看不到 agent 到底注册了什么、在用什么。
- *
- * ## 两条必须记住的事实（完整证据链见 docs/02 §15）
- *
- * 1. **dsh 没有 deferred / dynamic tool loading。** `ToolRuntime.view(scope)` 同步算出唯一一个
- *    `visible` 集合并直接喂给系统提示装配，注册即对模型可见。所以本插件只区分
- *    「用过 / 没用过」两档 —— 没有「已注册但未激活」这种状态可报。
- *    （对照：pi-coding-agent 有 `setActiveTools`，dsh 全仓库零命中。）
- * 2. **计数只能活在内存里。** 插件不能往会话日志 append 自定义事件类型（docs/02 §13.2），
- *    历史轮次无法回填，重启归零 —— 页面必须如实说明统计范围，不能伪装成全历史。
- *
- * 本插件是**只读观察窗口**：不 register 工具、不 restrict、不 guard，
- * 对 agent 行为零影响。
+ * tools-inspector 宿主半：按当前 session Agent 的 scope 读取可见工具，回放持久化
+ * `tool/call`/`tool/result` 历史，经 `/tools-inspector` RPC 返回快照。
+ * dsh 没有进程外工具表 API；本插件只读，不注册、restrict 或 guard，不改变 agent 行为。
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -105,7 +91,7 @@ export function dispatch(
 
     // 计数来自**回放这个会话的持久化日志**，不是进程内累加：
     // `tool/call` 是 dsh 的持久化事件类型且自带 `name`
-    // （dsh `session/src/known-event-types.ts:66`、`types.ts:306`），
+    // 事件路径见 dsh `session/src/known-event-types.ts:66`、`types.ts:306`。
     // `snapshotEvents()` 给出整段不可变快照（`session/src/index.ts:600`）。
     // 所以 dsh 重启、会话重开之后统计依然准确。
     const session = (agent as { session?: { snapshotEvents?: () => readonly ReplayableEvent[] } } | undefined)?.session

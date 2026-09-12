@@ -1,35 +1,12 @@
-/**
- * Turning "the agent stopped" into two lines a person can read from across the
- * room.
- *
- * Everything here is pure and free of `ctx`, so the wording is unit-testable
- * without a live harness — which matters more than usual because the output is
- * a fire-and-forget toast nobody can inspect afterwards.
- *
- * @module @dsh-remote/dsh-plugin-notify/notice
- */
+/** 将 turn end reason 和 session facts 转成可从远处读到的两行通知。 */
 
 import type { TurnEndReason } from '@deepseek-ai/dsh-session'
 import type { Notice } from './toast.js'
 
-/**
- * How the turn that just ended finished, reduced to the distinctions a person
- * standing at the machine actually acts on.
- *
- * dsh's own `TurnEndReason` is finer than this on purpose (`docs/02` §10.4),
- * but the extra branches answer "may this turn be resumed", which is
- * `turn-retry`'s question, not this plugin's. Here they collapse: what the
- * reader needs is whether the work landed, and if not, in which of three ways
- * it did not.
- */
+/** 将 dsh 细粒度 TurnEndReason 收窄为用户真正需要行动的粗粒度 outcome。 */
 export type Outcome = 'completed' | 'failed' | 'stopped' | 'blocked' | 'max-tokens' | 'unknown'
 
-/**
- * Classify one recorded turn end.
- * @param reason - the reason recorded in `turn/end`, or undefined when no turn
- *   has ended in this session yet.
- * @returns the coarse outcome to report.
- */
+/** 根据记录在 `turn/end` 的 reason 分类 outcome。 */
 export function outcomeOf(reason: TurnEndReason | undefined): Outcome {
   if (reason === undefined) return 'unknown'
   switch (reason.kind) {
@@ -45,44 +22,37 @@ export function outcomeOf(reason: TurnEndReason | undefined): Outcome {
       return 'stopped'
     case 'aborted':
       return 'stopped'
-    /* v8 ignore next 2 -- the union is closed; this is the compiler's witness */
+    /** closed union 的编译器 witness；未知值按 unknown。 */
     default:
       return 'unknown'
   }
 }
 
-/** The facts a settled notification is built from. */
+/** 构造完成通知所需的事实。 */
 export interface SettledFacts {
-  /** Absolute working directory of the session, when it has one. */
+  /** session 的绝对 working directory。 */
   cwd?: string | undefined
-  /** The session's current title, when one has been generated. */
+  /** session 当前生成的 title。 */
   title?: string | undefined
-  /** How the last turn ended. */
+  /** 上一轮如何结束。 */
   outcome: Outcome
-  /** The failure code, for a turn that ended in `error`. */
+  /** outcome 为 error 时的 failure code。 */
   code?: string | undefined
 }
 
-/** The facts a "waiting for you" notification is built from. */
+/** 构造“等待你处理”通知所需的事实。 */
 export interface WaitingFacts {
-  /** Absolute working directory of the session, when it has one. */
+  /** session 的绝对 working directory。 */
   cwd?: string | undefined
-  /** The session's current title, when one has been generated. */
+  /** session 当前生成的 title。 */
   title?: string | undefined
-  /** What is being waited on. */
+  /** 正在等待的事项。 */
   kind: 'approval' | 'question'
-  /** The tool that wants permission, for an approval. */
+  /** approval 请求权限的工具。 */
   toolName?: string | undefined
 }
 
-/**
- * The last path segment of a working directory.
- *
- * The whole path does not fit on a toast line and its distinguishing part is at
- * the end, which is also why every editor's window title is built this way.
- * @param cwd - an absolute working directory, or undefined.
- * @returns the directory's own name, or undefined when there is nothing to show.
- */
+/** 取 working directory 的最后路径段；完整路径放不进 toast 且末段最有辨识度。 */
 export function projectName(cwd: string | undefined): string | undefined {
   if (cwd === undefined) return undefined
   const trimmed = cwd.replace(/[\\/]+$/u, '')
@@ -92,15 +62,7 @@ export function projectName(cwd: string | undefined): string | undefined {
   return last === undefined || last.length === 0 ? undefined : last
 }
 
-/**
- * The shared first line: which harness, which project, which conversation.
- *
- * `DSH` is always present so a toast is attributable even for a session with
- * neither a directory nor a title yet — an unattributed notification is worse
- * than none, because the reader cannot tell which machine wants them.
- * @param facts - the session's directory and title.
- * @returns the toast title.
- */
+/** 构造共享首行：harness、project、conversation title。始终带 `DSH` 以便归因。 */
 export function noticeTitle(facts: { cwd?: string | undefined; title?: string | undefined }): string {
   const parts = ['DSH']
   const project = projectName(facts.cwd)
@@ -110,7 +72,7 @@ export function noticeTitle(facts: { cwd?: string | undefined; title?: string | 
   return parts.join(' · ')
 }
 
-/** The body of a settled notification, by outcome. */
+/** 按 outcome 选择 settled notice 的 body。 */
 const SETTLED_BODY: Record<Outcome, string> = {
   completed: '任务已完成，等待输入',
   failed: '这一轮失败了，等待输入',
@@ -120,14 +82,7 @@ const SETTLED_BODY: Record<Outcome, string> = {
   unknown: '等待输入',
 }
 
-/**
- * Build the notification for an agent that has come to rest.
- *
- * This is the plugin's reason for existing: the moment the pi extension calls
- * `agent_settled`, and the moment dsh calls `agent/status → idle`.
- * @param facts - what just happened, and to which session.
- * @returns the toast to show.
- */
+/** 构造 agent 已 idle 的 settled notification。 */
 export function settledNotice(facts: SettledFacts): Notice {
   const base = SETTLED_BODY[facts.outcome]
   const body = facts.outcome === 'failed' && facts.code !== undefined && facts.code.length > 0
@@ -136,16 +91,7 @@ export function settledNotice(facts: SettledFacts): Notice {
   return { title: noticeTitle(facts), body }
 }
 
-/**
- * Build the notification for a turn that has stalled on a human decision.
- *
- * dsh has this state and pi does not: an approval card or a question holds the
- * agent in `running`, so it never settles and the notification above never
- * fires. Without this one, the unattended case this plugin exists for — start
- * a long task, walk away — stalls silently on the first tool that asks.
- * @param facts - what is being waited on, and in which session.
- * @returns the toast to show.
- */
+/** 构造 approval/question 仍阻塞 agent 时的 waiting notification。 */
 export function waitingNotice(facts: WaitingFacts): Notice {
   const tool = facts.toolName?.trim()
   const body = facts.kind === 'approval'

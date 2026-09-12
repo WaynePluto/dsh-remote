@@ -1,9 +1,9 @@
 /**
- * Shared settings for the local development stack.
+ * 本地开发栈的共享设置。
  *
- * Scope: development only. The shipped green package uses `@dsh-remote/launcher`
- * (M3.1) to start dsh + connector; this harness additionally starts a relay so
- * one machine can exercise the full LAN path.
+ * 范围：仅用于开发。发行绿色包使用 `@dsh-remote/launcher`
+ *（M3.1）启动 dsh + connector；此脚本还会启动 relay，
+ * 以便单机验证完整的局域网链路。
  */
 
 import { randomBytes } from 'node:crypto'
@@ -17,9 +17,9 @@ export const ROOT = fileURLToPath(new URL('..', import.meta.url))
 export const DEV_DIRECTORY = join(ROOT, '.dev')
 export const SECRETS_FILE = join(DEV_DIRECTORY, 'local-secrets.json')
 export const RELAY_DATABASE = join(DEV_DIRECTORY, 'relay.db')
-/** Development identity only; the real connector key lives in ~/.dsh-remote. */
+/** 仅用于开发环境的身份；真实 connector 密钥位于 ~/.dsh-remote。 */
 export const DEVICE_KEY_FILE = join(DEV_DIRECTORY, 'device.key')
-/** Keep membership.json in .dev/ too, so `pnpm dev` never joins a real hub. */
+/** 也把 membership.json 保存在 .dev/ 中，避免 `pnpm dev` 加入真实 hub。 */
 export const DSH_REMOTE_HOME = DEV_DIRECTORY
 
 export const RELAY_PORT = 30_809
@@ -27,29 +27,22 @@ export const DSH_PORT = 3080
 export const MACHINE_SLUG = 'pc1'
 export const DSH_PROFILE = 'dsh-remote-web'
 
-// Resolve through Node from the launcher package instead of hardcoding a
-// node_modules path: the hoisted layout keeps dsh in the workspace root, and a
-// literal path can silently point at a stale copy left by an earlier install.
+// 通过 launcher 包让 Node 解析，而不是硬编码
+// node_modules 路径：hoisted 布局把 dsh 放在工作区根目录，而字面路径
+// 可能静默指向上一次安装残留的旧副本。
 export const DSH_BIN = fileURLToPath(pathToFileURL(
   createRequire(join(ROOT, 'packages/launcher/package.json')).resolve('@deepseek-ai/dsh/lib/bin.js'),
 ))
 
-/** Where every dsh-remote dsh plugin lives (D17). */
+/** 所有 dsh-remote dsh 插件所在的位置（D17）。 */
 export const PLUGINS_DIRECTORY = join(ROOT, 'packages/plugins')
 
 /**
- * The `--patch` overlays of dsh-remote's own dsh plugins, read straight from the
- * workspace.
- *
- * The launcher resolves the same overlays from installed packages
- * (`packages/launcher/src/dsh-plugins.ts`); this harness scans the source tree
- * instead, so a newly added plugin is picked up by `pnpm dev` without editing
- * two lists. Both paths must agree, because a dev stack that boots a dsh
- * without the plugins tests something nobody ships.
- * @returns Absolute overlay paths, sorted by plugin directory name.
- * @throws Error When a plugin has no build output, which dsh would only report
- * as an unresolvable module deep inside its loader — or, for the browser half
- * of a `dsh.client` plugin, as a FAILED fiber that takes the whole web UI down.
+ * 直接从工作区读取 dsh-remote 自有插件的 `--patch` overlay。
+ * launcher 从已安装包解析相同 overlay（`packages/launcher/src/dsh-plugins.ts`），本脚本扫描源码树，新增插件后 `pnpm dev` 无需维护两份列表。
+ * 两条路径必须一致，否则启动不含插件的开发栈就不是发行版本的验证。
+ * @returns 按插件目录名排序的绝对 overlay 路径。
+ * @throws Error 插件缺少构建产物时抛出：dsh 可能只在加载器深处报模块解析失败，带 `dsh.client` 的浏览器半则会触发 FAILED fiber。
  */
 export function dshPluginOverlays() {
   if (!existsSync(PLUGINS_DIRECTORY)) return []
@@ -59,9 +52,9 @@ export function dshPluginOverlays() {
     const packageDirectory = join(PLUGINS_DIRECTORY, entry.name)
     const overlay = join(packageDirectory, 'dsh-overlay.yml')
     if (!existsSync(overlay)) continue
-    // The manifest decides which artifacts must exist: every plugin has a Host
-    // module, and one declaring `dsh.client` also has a browser bundle dsh
-    // serves to the page.
+    // manifest 决定必须存在的产物：每个插件都有宿主
+    // 模块，声明 `dsh.client` 的插件还要有 dsh
+    // 提供给页面的浏览器 bundle。
     const manifest = JSON.parse(readFileSync(join(packageDirectory, 'package.json'), 'utf8'))
     const artifacts = ['dist/index.js', ...(manifest.dsh?.client === undefined ? [] : ['dist/client.js'])]
     for (const artifact of artifacts) {
@@ -73,7 +66,7 @@ export function dshPluginOverlays() {
   return overlays
 }
 
-/** First non-internal IPv4 address, skipping APIPA. */
+/** 第一个非内部 IPv4 地址，跳过 APIPA。 */
 export function lanAddress() {
   for (const addresses of Object.values(networkInterfaces())) {
     for (const address of addresses ?? []) {
@@ -86,10 +79,10 @@ export function lanAddress() {
 }
 
 /**
- * Load or create the local JWT secret.
+ * 加载或创建本地 JWT 密钥。
  *
- * This is a development credential for one machine; it never leaves `.dev/`,
- * which is git-ignored. Connector identity is a device key, not a secret here.
+ * 这是单机开发凭据；它不会离开 `.dev/`（该目录被 git 忽略）。
+ * Connector 身份是设备密钥，而不是这里的密钥。
  */
 export function localSecrets() {
   mkdirSync(DEV_DIRECTORY, { recursive: true })

@@ -1,122 +1,77 @@
-/**
- * Deciding, for one route, what would change — and producing the exact list
- * that would be written. Pure functions over plain facts, so every rule below
- * is testable without a running harness.
- *
- * THE THREE RULES THIS FILE ENCODES.
- *
- * 1. *dsh wins.* A model our overlay added that dsh's installed catalog now
- *    ships stops being ours: it stays in the list as a bare `{ id }`, which
- *    dsh materializes from its own catalog entry, and our field values go away.
- *    When that leaves us owning nothing, the whole `models` key is removed and
- *    the route is pristine again.
- *
- * 2. *We only ever touch what we wrote.* A `models` list this plugin has no
- *    provenance for belongs to a person or to another plugin (`copilot-auth`
- *    narrows the Copilot route to what the account may call), and is refused
- *    rather than rebuilt. Entries beside ours are carried across verbatim, so
- *    a field this plugin does not model — and a hand-tuned value on one of our
- *    own rows — survives a rewrite.
- *
- * 3. *We never claim a protocol.* An entry cannot name its own `api`
- *    (`PiAiModelProfile` has no such field), so a model the installed catalog
- *    does not describe resolves its protocol from the route — which only works
- *    when the route names one or its shipped models all agree. Everywhere else
- *    an addition would make the whole route unserviceable and dsh would refuse
- *    the entire settings write, so those routes are reported as blocked
- *    instead of half-written.
- *
- * @module @dsh-remote/dsh-plugin-models-catalog/planning
- */
+/** 纯规划逻辑：根据 installed/configured facts 和可选 source 生成不写入的 route plan。 */
 
 import type { SourceProvider } from './models-dev.js'
-import type { ModelAddition, RoutePreview } from './shared.js'
+import { catalogApiForId, inferredApi } from './runtime-catalog.js'
+import type { ModelAddition, RoutePreview, RuntimeModelSpec } from './shared.js'
 
-/**
- * One entry of a route's `models` list.
- *
- * Open by construction: dsh's entry schema carries fields this plugin has no
- * opinion about (`reasoningEfforts`, `compat`), and a rewrite must not be the
- * thing that drops them.
- */
+/** dsh `models` list 中的一项；index signature 保留用户自有字段。 */
 export interface ModelEntry {
-  /** Model id; the only field a catalog model needs, since the rest is inherited. */
+  /** provider 原样使用的 model id。 */
   readonly id: string
-  /** Everything else the profile stated, carried across untouched. */
+  /** 用户/上游其余字段，规划时保留。 */
   readonly [field: string]: unknown
 }
 
-/** Everything planning needs to know about one route. */
+/** 一个 llm-pi-ai route 的 installed/configured/provenance facts。 */
 export interface RouteFacts {
-  /** llm-pi-ai route key. */
+  /** route 的 key。 */
   route: string
-  /** Name the Models page shows. */
+  /** Models 页面显示的名称。 */
   displayName: string
-  /** Whether the profile names a route-level wire protocol. */
+  /** route 是否已有配置 API。 */
   hasConfiguredApi: boolean
-  /** Whether the profile carries a `models` list at all. */
+  /** 已配置的 API protocol。 */
+  configuredApi?: string
+  /** dsh 是否原生 shipped 该 provider。 */
+  shipped: boolean
+  /** settings 中是否有 `models` list。 */
   hasModelsList: boolean
-  /** The entries of that list, in configuration order; empty when there is none. */
+  /** settings 中的完整 model entries。 */
   configuredEntries: readonly ModelEntry[]
-  /** Ids our provenance claims we added to this route. */
+  /** provenance 标记的本插件 owned ids。 */
   ownedIds: readonly string[]
-  /** Whether provenance says this plugin wrote the list. */
+  /** owned id 对应的 runtime model specs。 */
+  ownedModels: readonly RuntimeModelSpec[]
+  /** 本 route 是否由本插件 provenance 管理。 */
   managed: boolean
-  /** Model ids pi-ai's installed catalog serves for this route. */
+  /** 已安装 catalog models 及各自 API。 */
+  installedModels: readonly { id: string; api: string }[]
+  /** 已安装 model ids。 */
   installedIds: readonly string[]
-  /** Distinct wire protocols across those installed models. */
+  /** 已安装 API protocol 集合。 */
   installedApis: readonly string[]
 }
 
-/** A plan for one route: what to show, and what to write. */
+/** 一个 route 的 preview 以及 apply/revert 将写入的 next state。 */
 export interface RoutePlan {
-  /** What the panel renders. */
+  /** 对用户展示的 route preview。 */
   preview: RoutePreview
-  /**
-   * The next `models` value: a list to write, `null` to remove the key
-   * (restoring the pristine catalog), or `undefined` when nothing would change.
-   */
+  /** 下一份 models list；null 表示删除为空的插件 list，undefined 表示无需写入。 */
   next?: readonly ModelEntry[] | null
-  /** The ids provenance should claim after the write. */
+  /** 写入后仍由本插件拥有的 ids。 */
   nextOwnedIds: readonly string[]
+  /** 写入后需要 runtime catalog 注册的 model specs。 */
+  nextOwnedModels: readonly RuntimeModelSpec[]
 }
 
-/**
- * Whether an entry may be added to this route at all.
- *
- * A route naming its own protocol can take anything. A route relying on the
- * installed catalog can only take entries when every shipped model agrees on
- * one protocol, which is dsh's own `sharedCatalogApi` rule.
- * @param facts - the route's facts.
- * @returns true when an addition would resolve a protocol.
- */
+/** 判断 route 是否有足够的 API/template facts 接收 additions。 */
 export function canAddModels(facts: RouteFacts): boolean {
-  return facts.hasConfiguredApi || facts.installedApis.length === 1
+  return facts.hasConfiguredApi || facts.installedApis.length === 1 || (facts.shipped && facts.installedModels.length > 0)
 }
 
-/** Whether two id collections describe the same set. */
+/** 判断两个 id 集合是否相同，不要求顺序相同。 */
 function sameSet(left: readonly string[], right: readonly string[]): boolean {
   if (left.length !== right.length) return false
   const seen = new Set(right)
   return left.every(id => seen.has(id))
 }
 
-/**
- * Whether removing the `models` key would restore the route rather than break
- * it: nothing of ours would be left, the remaining list says exactly what the
- * installed catalog says, and there IS an installed catalog to fall back to.
- * A hand-declared route has none, so its list is the only thing naming its
- * models and dsh refuses a route that resolves none.
- * @param facts - the route's facts.
- * @param nextOwned - ids we would still own after the write.
- * @param nextIds - ids the rebuilt list would carry.
- * @returns true when the key may be removed.
- */
+/** 判断 next list 是否已恢复为 installed 原生 ids，可将 settings list 清为 null。 */
 function canRestore(facts: RouteFacts, nextOwned: readonly string[], nextIds: readonly string[]): boolean {
   return nextOwned.length === 0 && facts.installedIds.length > 0 && sameSet(nextIds, facts.installedIds)
 }
 
-/** The entry an addition is written as. */
+/** 将 models.dev addition 转为 dsh `models` entry，只复制允许字段。 */
 function entryOf(model: ModelAddition): ModelEntry {
   return {
     id: model.id,
@@ -127,51 +82,64 @@ function entryOf(model: ModelAddition): ModelEntry {
   }
 }
 
-/**
- * The base of a rebuilt list: every entry in it that is not ours, verbatim.
- *
- * When we own the list, the base is what it holds minus our own rows, so a
- * person who deleted a model from our list does not get it back on the next
- * pass. When there is no list, the base is the installed catalog spelled out as
- * bare ids, because an explicit list replaces that catalog and leaving it out
- * would narrow the route to whatever we added.
- * @param facts - the route's facts.
- * @param owned - the ids currently ours on this route.
- * @returns base entries, in the order they should be written.
- */
+/** 保留用户 entries，并排除本插件拥有的旧 ids；无 models list 时以 installed ids 为 base。 */
 function baseEntries(facts: RouteFacts, owned: ReadonlySet<string>): readonly ModelEntry[] {
   if (!facts.hasModelsList) return facts.installedIds.map(id => ({ id }))
   return facts.configuredEntries.filter(entry => !owned.has(entry.id))
 }
 
-/**
- * Plan one route.
- * @param facts - the route's facts.
- * @param source - what the upstream document says about the matched provider,
- *   or undefined when nothing matched (a cleanup-only pass, or a hand-declared
- *   route the document does not describe).
- * @returns the preview and the write it implies.
- */
+/** 按 installed 同 id、catalog inference、owned spec、configured API 的优先级决定 addition 的 API。 */
+function apiForAddition(facts: RouteFacts, model: ModelAddition): string {
+  const installed = facts.installedModels.find(entry => entry.id === model.id)
+  if (installed !== undefined) return installed.api
+  const catalog = catalogApiForId(facts.route, model.id)
+  if (catalog !== undefined) return catalog
+  const owned = facts.ownedModels.find(entry => entry.id === model.id)
+  if (owned !== undefined) return owned.api
+  if (facts.configuredApi !== undefined) return facts.configuredApi
+  if (facts.installedApis.length === 1) return facts.installedApis[0] as string
+  return inferredApi(model.id)
+}
+
+/** 从 addition 生成 runtime catalog spec，并补入 route/API。 */
+function runtimeSpecOf(facts: RouteFacts, model: ModelAddition): RuntimeModelSpec {
+  return {
+    id: model.id,
+    name: model.name,
+    ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
+    ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
+    ...model.input === undefined ? {} : { input: [...model.input] },
+    api: apiForAddition(facts, model),
+    route: facts.route,
+  }
+}
+
+/** 规划一个 route 的 preview 与下一份 settings；不执行写入。 */
 export function planRoute(facts: RouteFacts, source: SourceProvider | undefined): RoutePlan {
   const installed = new Set(facts.installedIds)
   const configured = new Map(facts.configuredEntries.map(entry => [entry.id, entry]))
-  // Provenance is a claim, not a fact: an id we recorded but that no longer
-  // appears in the list was removed by a person, and is not ours to manage.
+  // 只有 provenance 仍指向当前 configured entry 时才认领；用户删除或改写的 id 不再由本插件管理。
   const owned = facts.managed ? facts.ownedIds.filter(id => configured.has(id)) : []
-  // Rule 1: what dsh now ships is dsh's again.
+  // 已安装 id 被视为 reclaimed，其他仍由本插件保留。
   const reclaimed = owned.filter(id => installed.has(id))
   const kept = owned.filter(id => !installed.has(id))
+  const keptModels = kept.flatMap(id => {
+    const model = facts.ownedModels.find(entry => entry.id === id)
+    return model === undefined ? [] : [model]
+  })
 
-  const foreign = facts.hasModelsList && !facts.managed
-  const blockedReason = foreign
-    ? 'foreign-models' as const
-    : !canAddModels(facts)
-        ? 'multi-protocol' as const
-        : source === undefined ? 'no-source' as const : undefined
+  const blockedReason = !canAddModels(facts)
+    ? 'no-template' as const
+    : source === undefined ? 'no-source' as const : undefined
 
   const additions = blockedReason !== undefined || source === undefined
     ? []
     : source.models.filter(model => !installed.has(model.id) && !configured.has(model.id))
+  // 没有 configured API 时，runtime catalog 需要补齐 models.dev additions 的 API spec。
+  const needsRuntimeCatalog = !facts.hasConfiguredApi && facts.installedApis.length !== 1
+  const runtimeAdditions = needsRuntimeCatalog
+    ? additions.map(model => runtimeSpecOf(facts, model))
+    : []
 
   const preview: RoutePreview = {
     route: facts.route,
@@ -183,37 +151,28 @@ export function planRoute(facts: RouteFacts, source: SourceProvider | undefined)
     ...blockedReason === undefined ? {} : { blocked: blockedReason },
   }
 
-  // A route whose list is someone else's is reported and left alone, even for
-  // cleanup: we have no provenance there to clean.
-  if (foreign) return { preview, nextOwnedIds: [] }
-  if (additions.length === 0 && reclaimed.length === 0) return { preview, nextOwnedIds: kept }
+  if (additions.length === 0 && reclaimed.length === 0) {
+    return { preview, nextOwnedIds: kept, nextOwnedModels: keptModels }
+  }
 
   const base = baseEntries(facts, new Set(owned))
   const nextOwned = [...kept, ...additions.map(model => model.id)]
+  const nextOwnedModels = [...keptModels, ...runtimeAdditions]
   const next: ModelEntry[] = [
     ...base,
-    // A reclaimed model is written bare on purpose: that is what makes dsh's
-    // catalog entry — its capacities, modalities, reasoning levels, compat —
-    // take over from the values we had guessed for it.
+    // 新 additions 只写目录能提供的容量和 modality；其余 wire/compat 设置继续由 route 接管。
     ...reclaimed.map(id => ({ id })),
     ...kept.map(id => configured.get(id) ?? { id }),
     ...additions.map(entryOf),
   ]
-  // Nothing of ours left and the list says exactly what the catalog says: the
-  // key is redundant, so remove it and let the route serve the catalog again.
-  // Guarded on the route being shipped at all — removing the list of a
-  // hand-declared route would leave it with no models, which dsh refuses.
+  // 若结果已经等于 installed 原生列表，清理 settings list 而不是保留空的插件痕迹。
   if (canRestore(facts, nextOwned, next.map(entry => entry.id))) {
-    return { preview, next: null, nextOwnedIds: [] }
+    return { preview, next: null, nextOwnedIds: [], nextOwnedModels: [] }
   }
-  return { preview, next, nextOwnedIds: nextOwned }
+  return { preview, next, nextOwnedIds: nextOwned, nextOwnedModels }
 }
 
-/**
- * Plan the removal of everything this plugin wrote on one route.
- * @param facts - the route's facts.
- * @returns the write that restores the route to what it was before us.
- */
+/** 规划撤销一个 route 的本插件 additions。 */
 export function planRevert(facts: RouteFacts): RoutePlan {
   const preview: RoutePreview = {
     route: facts.route,
@@ -222,12 +181,12 @@ export function planRevert(facts: RouteFacts): RoutePlan {
     additions: [],
     reclaimed: [],
   }
-  if (!facts.managed || !facts.hasModelsList) return { preview, nextOwnedIds: [] }
+  if (!facts.managed || !facts.hasModelsList) return { preview, nextOwnedIds: [], nextOwnedModels: [] }
   const configured = new Set(facts.configuredEntries.map(entry => entry.id))
   const owned = facts.ownedIds.filter(id => configured.has(id))
   const base = baseEntries(facts, new Set(owned))
   if (canRestore(facts, [], base.map(entry => entry.id))) {
-    return { preview, next: null, nextOwnedIds: [] }
+    return { preview, next: null, nextOwnedIds: [], nextOwnedModels: [] }
   }
-  return { preview, next: base, nextOwnedIds: [] }
+  return { preview, next: base, nextOwnedIds: [], nextOwnedModels: [] }
 }

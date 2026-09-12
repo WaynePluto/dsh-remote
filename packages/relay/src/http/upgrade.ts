@@ -87,7 +87,7 @@ export async function proxyWebSocketUpgrade(options: {
     browserSocket.once('error', error => upstreamSocket.destroy(error))
   })
 
-  // dsh returns ordinary 403/426 responses when the fence or upgrade path rejects.
+  // fence 或升级路径拒绝时，dsh 会返回普通的 403/426 响应。
   upstream.once('response', (response) => {
     settled = true
     writeResponseHead(
@@ -104,8 +104,8 @@ export async function proxyWebSocketUpgrade(options: {
 
   upstream.once('error', (error) => {
     logger.warn({ err: error, slug, path: req.url }, 'upstream WebSocket upgrade failed')
-    // The ClientRequest already surfaced and logged this socket failure. Destroy
-    // without re-emitting the same error on a tunnel that may have no listener.
+    // ClientRequest 已经报告并记录此 socket 失败。直接销毁，而不要在可能没有 listener 的隧道上
+    // 再次发出同一错误。
     tunnel.destroy()
     if (!settled && !browserSocket.destroyed) rejectUpgrade(browserSocket, 502, 'upstream upgrade failed')
   })

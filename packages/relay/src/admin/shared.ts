@@ -14,17 +14,16 @@ import {
 } from './theme.js'
 
 /**
- * The one sentence that states the password policy.
+ * 说明密码策略的一句话。
  *
- * Every place that asks for a password renders this exact text, next to the
- * field and again in the rejection: a rule the operator only learns by failing
- * is the reason people fall back to a password they reuse elsewhere.
+ * 所有要求输入密码的地方都会在字段旁和拒绝消息中渲染完全相同的文本：
+ * 操作员只有失败后才知道规则，正是人们退回复用其他地方密码的原因。
  */
 export const PASSWORD_RULE_TEXT = `至少 ${String(PASSWORD_MIN_CHARACTERS)} 个字符，并且用上大写字母、小写字母、数字、符号里的至少 ${String(PASSWORD_REQUIRED_CLASSES)} 类`
 
 /**
- * @param error - the policy violation.
- * @returns The Chinese sentence to show the operator.
+ * @param error - 违反的策略。
+ * @returns 展示给操作员的中文句子。
  */
 export function passwordPolicyMessage(error: PasswordPolicyError): string {
   return error.reason === 'too-long'
@@ -33,9 +32,8 @@ export function passwordPolicyMessage(error: PasswordPolicyError): string {
 }
 
 /**
- * The dark half of the palette, applied either because the operator chose it
- * or because `system` resolved that way. Written once and used twice: the two
- * selectors below must never drift apart.
+ * 配色的深色部分，操作员选择深色或 `system` 解析为深色时使用。
+ * 只写一份并使用两次：下面两个选择器绝不能发生偏差。
  */
 const DARK_TOKENS = `
 --page:rgb(21,21,23);--card:rgb(35,35,36);--field:rgb(27,27,28);--inset:rgb(27,27,28);
@@ -49,17 +47,14 @@ const DARK_TOKENS = `
 `.trim()
 
 /**
- * Base stylesheet shared by every relay-served page. Inline because the login
- * page must render before any tunnel exists, so there is no route that could
- * serve a stylesheet to an unauthenticated browser.
+ * 所有 relay 页面共用的基础样式表。采用内联方式，因为登录页必须在隧道存在前渲染，
+ * 因此没有可向未认证浏览器提供样式表的路由。
  *
- * The palette, type scale and geometry are dsh's own design tokens, copied
- * from `packages/client/ui-theme/src/styles/design-platform.css` and the
- * `ui-primitives` component sheets (input h32/r8, capsule button h36/r18,
- * card r12, dialog r24) so a relay page and the dsh UI behind it read as one
- * product. dsh resolves `system` with an inline script; these pages carry no
- * script at all (`default-src 'none'`), so the resolution is a media query and
- * the two explicit choices are an attribute the server renders from a cookie.
+ * 配色、字号比例和几何尺寸使用 dsh 自己的设计 token，复制自
+ * `packages/client/ui-theme/src/styles/design-platform.css` 和 `ui-primitives` 组件样式
+ * （input h32/r8、胶囊按钮 h36/r18、card r12、dialog r24），使 relay 页面与其后的 dsh UI
+ * 看起来像同一个产品。dsh 用内联脚本解析 `system`；这些页面完全没有脚本（`default-src 'none'`），
+ * 因此通过 media query 解析，两个显式选项则由 server 从 cookie 渲染成 attribute。
  */
 const PAGE_STYLE = `
 :root{
@@ -83,8 +78,8 @@ ${DARK_TOKENS}
 ${DARK_TOKENS}
 }}
 *{box-sizing:border-box}
-/* Reserve the scrollbar track always, so moving between a page that scrolls
-   and one that does not never shifts the card sideways. */
+/* 始终预留滚动条轨道；页面在可滚动与不可滚动之间切换时，
+   卡片不会横向偏移。 */
 html{scrollbar-gutter:stable}
 body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:24px 16px;background:var(--page);color:var(--ink);font-family:var(--font);font-size:14px;line-height:22px;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 main{width:min(100%,440px);border:1px solid var(--line);border-radius:24px;background:var(--card);box-shadow:var(--shadow);overflow:hidden}
@@ -123,27 +118,24 @@ button:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 `.trim()
 
 /**
- * Public icon routes. Relay serves the console and the login page itself, so it
- * has to serve their favicon too — and before authentication, exactly like the
- * manifest: a browser fetches an icon without credentials, and the bytes are
- * fixed build-time assets that say nothing about any machine.
+ * 公开图标路由。relay 自己提供控制台和登录页，因此也必须提供它们的 favicon——并且和
+ * manifest 一样在认证前提供：浏览器无凭据获取图标，而这些字节是与机器无关的固定构建期资源。
  *
- * Namespaced under `/_icon` rather than the conventional `/favicon.ico` so that
- * relay never shadows a path the tunnelled dsh frontend owns.
+ * 使用 `/_icon` 命名空间而不是常规 `/favicon.ico`，避免 relay 遮蔽隧道中 dsh 前端拥有的路径。
  */
 export const ICON_PATH_PREFIX = '/_icon'
 export const ICON_SVG_PATH = `${ICON_PATH_PREFIX}/dsh-remote.svg`
 export const ICON_ICO_PATH = `${ICON_PATH_PREFIX}/dsh-remote.ico`
 export const ICON_PNG_PATH = `${ICON_PATH_PREFIX}/dsh-remote.png`
 
-/** The <link> block every relay-served page carries. */
+/** 每个 relay 页面都携带的 <link> 区块。 */
 const ICON_LINKS = [
   `<link rel="icon" href="${ICON_SVG_PATH}" type="image/svg+xml">`,
   `<link rel="alternate icon" href="${ICON_ICO_PATH}" sizes="16x16 32x32 48x48">`,
   `<link rel="apple-touch-icon" href="${ICON_PNG_PATH}">`,
 ].join('\n')
 
-/** Escape text that is interpolated into HTML; never skip this for stored values. */
+/** 转义插入 HTML 的文本；存储值绝不能跳过此步骤。 */
 export function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
@@ -154,27 +146,26 @@ export function escapeHtml(value: string): string {
 }
 
 /**
- * The appearance every relay-served page carries.
+ * 每个 relay 页面携带的外观信息。
  *
- * `returnTo` is where the switcher's links come back to, so it must be a path
- * a GET can re-render; a page rendered without one shows no switcher (there
- * would be nowhere to return to).
+ * `returnTo` 是切换器链接返回的位置，因此必须是可由 GET 重新渲染的路径；
+ * 没有该路径的页面不显示切换器（因为没有可返回的位置）。
  */
 export interface PageAppearance {
   readonly theme: ThemePreference
   readonly returnTo?: string
 }
 
-/** The default a page falls back to when its caller states no appearance. */
+/** 调用方未指定外观时页面使用的默认值。 */
 export const DEFAULT_APPEARANCE: PageAppearance = { theme: DEFAULT_THEME }
 
 /**
- * The appearance control shown in the page header.
+ * 页面头部显示的外观控制。
  *
- * Plain links, because these pages have no script: each one is a GET that
- * stores the preference and sends the browser straight back to `returnTo`.
- * @param appearance The current preference and the page to return to.
- * @returns The switcher markup, or nothing when there is no return path.
+ * 使用普通链接，因为这些页面没有脚本：每个链接都是一个 GET，保存偏好后
+ * 直接把浏览器送回 `returnTo`。
+ * @param appearance 当前偏好和要返回的页面。
+ * @returns 切换器 markup；没有返回路径时返回空字符串。
  */
 function themeSwitcher(appearance: PageAppearance): string {
   const { returnTo } = appearance
@@ -188,10 +179,10 @@ function themeSwitcher(appearance: PageAppearance): string {
 }
 
 /**
- * Wrap page content in the shared relay document shell.
- * @param options Page title, the panel body markup, optional page-specific CSS
- * appended after the shared stylesheet, and the appearance to render in.
- * @returns A complete HTML document.
+ * 将页面内容包进共享 relay 文档外壳。
+ * @param options 页面标题、面板主体 markup、追加在共享样式表后的可选页面专属 CSS，
+ * 以及要渲染的外观。
+ * @returns 完整的 HTML 文档。
  */
 export function renderPage(options: {
   title: string
@@ -219,7 +210,7 @@ ${options.body}
 </section></main></body></html>`
 }
 
-/** Read a form field that a client may have sent as a file or omitted entirely. */
+/** 读取表单字段；客户端可能将其作为文件发送，也可能完全省略。 */
 export function textField(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
@@ -248,11 +239,10 @@ export function sameOrigin(request: Request, publicScheme: 'http' | 'https'): bo
   }
 }
 
-/** No scripts, no external assets: every relay page is self-contained HTML. */
-// `img-src 'self'` covers the favicon only: Firefox applies the page CSP to
-// icon fetches, and without it every page load would log a violation. Page
-// content itself still carries no external images — the TOTP QR code is inline
-// SVG on purpose.
+/** 没有脚本、没有外部资源：每个 relay 页面都是自包含的 HTML。 */
+// `img-src 'self'` 只覆盖 favicon：Firefox 会将页面 CSP 应用于图标获取，
+// 没有它每次加载页面都会记录违规。页面内容本身仍不携带外部图片——TOTP QR code
+// 特意使用内联 SVG。
 export const PAGE_CSP = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
 
 export function htmlHeaders(setCookies: readonly string[] = []): Headers {
@@ -260,10 +250,10 @@ export function htmlHeaders(setCookies: readonly string[] = []): Headers {
     'cache-control': 'no-store',
     'content-security-policy': PAGE_CSP,
     'content-type': 'text/html; charset=utf-8',
-    // Chromium serializes a form POST Origin as "null" under no-referrer,
-    // making a legitimate same-origin login indistinguishable from a sandbox.
-    // same-origin still sends no referrer to other sites while preserving the
-    // concrete Origin required by our CSRF check.
+    // 在 no-referrer 下，Chromium 会将表单 POST Origin 序列化为 "null"，
+    // 使合法的同源登录无法与 sandbox 区分。
+    // same-origin 仍不会向其他站点发送 referrer，同时保留 CSRF 检查所需的
+    // 具体 Origin。
     'referrer-policy': 'same-origin',
     'x-content-type-options': 'nosniff',
   })

@@ -1,20 +1,11 @@
 /**
- * skills-inspector 浏览器半：往 `conversation.view` 这个 list 槽注册一个「技能」tab。
+ * skills-inspector 浏览器半：向 `conversation.view` 的 list 槽注册「技能」tab。
+ * `ui-conversation` 将槽条目投影为 tab；实现参照 dsh
+ * `client/ui-conversation/src/client/apply.ts:121-132` 与 `contract/slots.ts:117`，不改 dsh 源码。
+ * `label` 必须是 thunk，切换语言后 tab 文案才会更新。
  *
- * `conversation.view` 就是会话头部那条视图切换栏的来源：`ui-conversation` 把每个槽条目
- * 投影成一个 tab（dsh `client/ui-conversation/src/client/apply.ts:121-132`，
- * 契约在同包 `contract/slots.ts:117`）。dsh 自己的 `ui-trajectory` 与本仓库的
- * tools-inspector 也是这么加的 tab —— **不用碰 dsh 源码**。
- *
- * ⚠️ `label` 必须传 **thunk** 而不是字符串：thunk 每次读都会走当前语言，
- * 字符串则会把注册时的语言钉死，切换语言后 tab 文字不跟着变。
- *
- * ## 两个数据源，刻意分开
- *
- * - **技能目录与加载状态**走本插件自己的私有通道 `/skills-inspector`（宿主半合成）。
- * - **打开本地文件**走 dsh **自己的** Remote `session.openWorkspacePath`
- *   （`api/session-controller/src/index.ts:274`）。不自己 spawn ——
- *   自己 spawn 就绕过了沙箱，而这件事 dsh 已经做好了。
+ * 技能目录和加载状态走 `/skills-inspector`；打开文件走 dsh 的
+ * `session.openWorkspacePath`（`api/session-controller/src/index.ts:274`），不自行 spawn。
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -66,12 +57,9 @@ class ChannelError extends Error {
 }
 
 /**
- * 必需服务。
- *
- * `slots` 是座位，`locale` 出文案，`connection` 承载私有通道；
- * `remote` + `remote.session` 是 dsh 自己的「打开本机路径」能力
- * —— 声明 `remote.session` 这一条与 dsh 的 `ui-deliverables` 一致
- * （`client/ui-deliverables/src/client/index.ts:34`）。
+ * 必需服务：`slots` 注册 tab，`locale` 提供文案，`connection` 调用私有通道；
+ * `remote.session` 提供 dsh 的 `session.canOpenWorkspacePath` 与 `openWorkspacePath`。
+ * 它与 dsh `ui-deliverables` 使用同一声明（`client/ui-deliverables/src/client/index.ts:34`）。
  */
 export const inject = ['slots', 'locale', 'connection', 'remote', 'remote.session']
 
@@ -86,13 +74,9 @@ export function apply(ctx: Context): void {
   const t = ctx.locale.bind(NS)
 
   /**
-   * 调用本插件私有通道。
-   *
-   * ⚠️ 端点是**路径段**：这里实际 POST 到 `/skills-inspector/<endpoint>`，
-   * 只打 `/skills-inspector` 一律 404（docs/02 §10.8）。
-   *
-   * ⚠️ 泛型参数后面那个逗号不是笔误：在 `.tsx` 里 `<T>` 会被解析成 JSX 标签，
-   * `<T,>` 才是类型参数。
+   * 调用本插件私有通道；endpoint 是路径段，实际请求为
+   * `/skills-inspector/<endpoint>`，只发送 channel 本身会 404（docs/dsh/transport.md）。
+   * `.tsx` 中泛型写 `<T,>`，避免 `<T>` 被解析为 JSX。
    * @param endpoint - 端点名。
    * @param payload - 载荷。
    * @returns 宿主返回的值。

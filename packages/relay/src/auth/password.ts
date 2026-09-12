@@ -2,22 +2,17 @@ import { Buffer } from 'node:buffer'
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 
 /**
- * Password hashing uses `node:crypto` scrypt rather than Argon2id.
- *
- * Argon2id is the stronger primitive, but every Argon2 binding for Node is a
- * native module. Under D16 every machine runs a relay, so the relay ships in
- * the desktop green package, and 铁律 3 requires that package to stay free of
- * native modules: one archive has to unzip and run on any platform without a
- * toolchain. scrypt is memory-hard, built into Node, and still an accepted
- * password KDF (OWASP lists it as the alternative when Argon2id is
- * unavailable), so it is the parameter that gives way here.
+ * 密码哈希使用 `node:crypto` 的 scrypt，而不是 Argon2id。
+ * Argon2id 的 Node 绑定是原生模块；D16 要求 relay 随绿色包分发且不含原生模块。
+ * scrypt 内置 Node 并具备内存硬化特性，是 OWASP 在 Argon2id 不可用时接受的替代方案；
+ * 这里的取舍是算法参数选择。
  */
 
 /**
- * OWASP's scrypt profile `N=2^16, r=8, p=2`.
+ * OWASP 的 scrypt 配置 `N=2^16, r=8, p=2`。
  *
- * Memory is `128 * N * r` ≈ 64 MiB and is independent of `p`; `maxmem` has to
- * be raised explicitly because Node's default ceiling is 32 MiB.
+ * 内存用量为 `128 * N * r`，约 64 MiB，与 `p` 无关；必须显式提高 `maxmem`，
+ * 因为 Node 的默认上限是 32 MiB。
  */
 export const SCRYPT_OPTIONS = Object.freeze({
   cost: 65_536,
@@ -28,23 +23,23 @@ export const SCRYPT_OPTIONS = Object.freeze({
 })
 
 const SALT_BYTES = 16
-/** Identifies the encoding below, and tells a legacy `$argon2…` hash apart. */
+/** 标识下面的编码，并将旧版 `$argon2…` 哈希区分开。 */
 const SCRYPT_PREFIX = '$scrypt$'
 
 export const PASSWORD_MIN_CHARACTERS = 6
 export const PASSWORD_MAX_BYTES = 1_024
 
 /**
- * How many of the four character classes a password has to mix.
+ * 密码必须混合四类字符中的多少类。
  *
- * Length alone is the stronger lever, but a 6-character minimum is short
- * enough that an all-lowercase password would be trivially guessable, so the
- * shortfall is covered by requiring variety instead. TOTP and the 5-failure
- * lockout remain the real defences (docs/04 §2).
+ * 长度本身是更强的手段，但 6 个字符的下限太短，
+ * 全小写密码很容易被猜到，因此
+ * 通过要求多样性来弥补不足。TOTP 和五次失败
+ * 锁定仍是实际防线（docs/04 §2）。
  */
 export const PASSWORD_REQUIRED_CLASSES = 3
 
-/** Why a candidate password was refused; pages turn this into user-facing text. */
+/** 候选密码被拒绝的原因；页面会将其转换成面向用户的文本。 */
 export type PasswordPolicyReason = 'too-short' | 'too-long' | 'not-varied-enough'
 
 export class PasswordPolicyError extends Error {
@@ -58,11 +53,11 @@ export class PasswordPolicyError extends Error {
 }
 
 /**
- * Count the character classes present: upper case, lower case, digit, and
- * everything else (symbols, spaces, and any script without case, which is why
- * the fallback is "other" rather than a fixed symbol list).
- * @param password - the candidate.
- * @returns How many of the four classes occur at least once.
+ * 统计出现的字符类别：大写、小写、数字以及其他字符
+ * （符号、空格和不区分大小写的文字，因此兜底类别是“other”，
+ * 而不是固定符号列表）。
+ * @param password - 候选密码。
+ * @returns 四类字符中至少出现一次的类别数。
  */
 function characterClasses(password: string): number {
   let upper = false
@@ -133,9 +128,9 @@ function derive(
 }
 
 /**
- * Parse the encoded form. Parameters are read back from the string rather than
- * assumed, so raising the cost later leaves existing hashes verifiable.
- * @returns the stored parameters, or undefined when this is not a scrypt hash.
+ * 解析编码形式。参数从字符串中读回而不是假定固定值，
+ * 因此日后提高成本仍能验证现有哈希。
+ * @returns 存储的参数；不是 scrypt 哈希时返回 undefined。
  */
 function parse(encoded: string): ScryptParameters | undefined {
   if (!encoded.startsWith(SCRYPT_PREFIX)) return undefined
@@ -164,8 +159,8 @@ function parse(encoded: string): ScryptParameters | undefined {
 }
 
 /**
- * @param passwordHash - a stored password hash.
- * @returns Whether it predates the scrypt format and can no longer be verified.
+ * @param passwordHash - 存储的密码哈希。
+ * @returns 是否早于 scrypt 格式且已经无法验证。
  */
 export function isLegacyPasswordHash(passwordHash: string): boolean {
   return !passwordHash.startsWith(SCRYPT_PREFIX)
@@ -184,12 +179,12 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 /**
- * Verify a candidate password.
+ * 验证候选密码。
  *
- * An unparsable or legacy hash returns false instead of throwing: the login
- * path must not turn an operational problem into a different observable
- * outcome. The relay warns about legacy hashes at startup instead.
- * @returns Whether the candidate matches.
+ * 无法解析或旧版哈希返回 false 而不是抛错：登录
+ * 路径不能把运行问题变成另一种可观察的
+ * 结果。relay 会在启动时警告旧版哈希。
+ * @returns 候选密码是否匹配。
  */
 export async function verifyPassword(passwordHash: string, candidate: string): Promise<boolean> {
   if (Buffer.byteLength(candidate, 'utf8') > PASSWORD_MAX_BYTES) return false

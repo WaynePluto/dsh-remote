@@ -1,16 +1,12 @@
-/**
- * The Host half against a fake undici, so the suite can assert the one thing
- * that matters and cannot be observed from outside: which dispatcher the
- * process is left holding, and whether the environment ever leaks into it.
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 
-/** Every agent the code under test constructed, with the options it passed. */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 const agents: { opts: Record<string, unknown>; closed: boolean }[] = []
 
-/** The dispatcher the process currently holds; `original` is what it started with. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`original`） */
 const original = { name: 'original' }
 let installed: unknown = original
 
@@ -30,8 +26,8 @@ vi.mock('undici', () => ({
       if (record !== undefined) record.closed = true
     }
   },
-  // Reads the live value on purpose: the bug this suite guards against was a
-  // dispatcher owner that trusted its own memory instead of the process.
+  // 实现说明：此处记录相关接口、边界和生命周期约束。
+  // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
   getGlobalDispatcher: () => installed,
   setGlobalDispatcher: (next: unknown) => { installed = next },
 }))
@@ -49,7 +45,7 @@ const {
   apply,
 } = await import('../src/index.js')
 
-/** A settings section with the fields this plugin owns. */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 function settings(overrides: Partial<{ enabled: boolean; url: string; bypass: string }> = {}) {
   return { enabled: false, url: '', bypass: 'localhost,127.0.0.1', ...overrides }
 }
@@ -66,8 +62,8 @@ describe('validating the section', () => {
   })
 
   it('supplies the scheme for the bare host:port people actually paste', () => {
-    // The regression this fixes: `127.0.0.1:7890` is what a local proxy hands
-    // out, and refusing it produced a page that silently reverted every edit.
+    // 测试契约：此处说明本测试锁定的行为和回归边界。（涉及：`127.0.0.1:7890`）
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(parseProxyUrl('127.0.0.1:7890')?.toString()).toBe('http://127.0.0.1:7890/')
     expect(parseProxyUrl('proxy.test:8080')?.toString()).toBe('http://proxy.test:8080/')
     expect(parseProxyUrl(' proxy.test:8080 ')?.hostname).toBe('proxy.test')
@@ -76,7 +72,7 @@ describe('validating the section', () => {
 
   it('still refuses an address that could not be a proxy', () => {
     expect(parseProxyUrl('')).toBeUndefined()
-    // A scheme that IS written must be one we can dial.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(parseProxyUrl('socks5://proxy.test:1080')).toBeUndefined()
     expect(parseProxyUrl('ftp://proxy.test')).toBeUndefined()
     expect(parseProxyUrl('http://')).toBeUndefined()
@@ -102,9 +98,9 @@ describe('validating the section', () => {
   })
 
   it('answers the page with the same verdict it throws at every other writer', () => {
-    // One rule set, two shapes: the browser half decides BEFORE writing because
-    // a refused `SettingsScope.mutate` resolves rather than rejecting, so the
-    // Host's message never reaches the page.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。（涉及：`SettingsScope.mutate`）
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(proxyFault(settings({ url: 'socks5://nope:1' }))).toBe('badUrl')
     expect(proxyFault(settings({ enabled: true }))).toBe('needUrl')
     expect(proxyFault(settings({ enabled: true, url: '127.0.0.1:7890' }))).toBeUndefined()
@@ -119,9 +115,9 @@ describe('validating the section', () => {
 
 describe('owning the global dispatcher', () => {
   it('makes "off" mean direct, rather than handing control back to an ambient proxy', () => {
-    // The deployment preloads an environment proxy into this process, so
-    // "restore what was here" would have meant "keep proxying" — which is the
-    // bug this asserts against: the page said direct, the request did not.
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 测试契约：此处说明本测试锁定的行为和回归边界。
     const ambientProxy = { name: 'ambient env proxy' }
     installed = ambientProxy
     const dispatcher = new ProxyDispatcher()
@@ -134,10 +130,10 @@ describe('owning the global dispatcher', () => {
   })
 
   it('asserts a direct connection while off, so an ambient proxy cannot make the page lie', () => {
-    // Consequence worth stating: once this plugin is loaded, an environment
-    // proxy installed by anything else stops taking effect while the switch is
-    // off. That is the point — the page is the single source of truth — but it
-    // means the UI must be configured, not just present.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const dispatcher = new ProxyDispatcher()
     expect(dispatcher.apply(settings())).toEqual({ via: null, bypass: 'localhost,127.0.0.1' })
     expect(agents).toEqual([])
@@ -176,8 +172,8 @@ describe('owning the global dispatcher', () => {
     const dispatcher = new ProxyDispatcher()
     dispatcher.apply(settings({ enabled: true, url: 'http://proxy.test:8080' }))
     dispatcher.apply(settings({ enabled: false, url: 'http://proxy.test:8080' }))
-    // NOT `original`: switching off is a statement about what the process must
-    // do, not an instruction to hand control back to whatever was here first.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`original`）
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect((installed as { kind?: string }).kind).toBe('fresh-plain-agent')
     expect(dispatcher.current().via).toBeNull()
   })
@@ -192,21 +188,21 @@ describe('owning the global dispatcher', () => {
 })
 
 describe('surviving a reload while the proxy is on', () => {
-  // The bug this section exists for, reproduced against real undici before it
-  // was fixed: rebuilding the plugin while the proxy was enabled made the new
-  // incarnation adopt the OLD incarnation's proxy agent as the thing to
-  // "restore", so switching the proxy off reinstalled the proxy — while the
-  // page reported a direct connection for a request that went through it.
+  // 实现说明：此处记录相关接口、边界和生命周期约束。
+  // 实现说明：此处记录相关接口、边界和生命周期约束。
+  // 实现说明：此处记录相关接口、边界和生命周期约束。
+  // 实现说明：此处记录相关接口、边界和生命周期约束。
+  // 实现说明：此处记录相关接口、边界和生命周期约束。
   it('never adopts one of its own agents as the restore target', () => {
     const first = new ProxyDispatcher()
     first.apply(settings({ enabled: true, url: 'http://proxy.test:8080' }))
 
-    // A reload: the new owner is constructed while the old agent is installed.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const second = new ProxyDispatcher()
     second.apply(settings({ enabled: false, url: 'http://proxy.test:8080' }))
 
     expect(second.current().via).toBeNull()
-    // Whatever it restored, it is not a proxy agent of ours.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(agents.some(agent => agent.opts === (installed as { opts?: unknown }).opts)).toBe(false)
   })
 
@@ -214,8 +210,8 @@ describe('surviving a reload while the proxy is on', () => {
     const first = new ProxyDispatcher()
     first.apply(settings({ enabled: true, url: 'http://proxy.test:8080' }))
 
-    // A fresh owner that never applied anything still tells the truth, because
-    // it reads the live dispatcher rather than its own memory.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(new ProxyDispatcher().current().via).toBe('http://proxy.test:8080/')
   })
 
@@ -223,7 +219,7 @@ describe('surviving a reload while the proxy is on', () => {
     const dispatcher = new ProxyDispatcher()
     const on = settings({ enabled: true, url: 'http://proxy.test:8080' })
     dispatcher.apply(on)
-    // Something else replaced the dispatcher behind our back.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     installed = original
     dispatcher.apply(on)
     expect(agents).toHaveLength(2)
@@ -232,7 +228,7 @@ describe('surviving a reload while the proxy is on', () => {
 })
 
 describe('the test endpoint', () => {
-  /** A dispatcher reporting one proxy, without touching the global one. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   function proxied(): InstanceType<typeof ProxyDispatcher> {
     const dispatcher = new ProxyDispatcher()
     dispatcher.apply(settings({ enabled: true, url: 'http://proxy.test:8080' }))
@@ -244,7 +240,7 @@ describe('the test endpoint', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ status: 204, body: { cancel } })))
     const result = await runTest(proxied(), 'https://example.test/probe')
     expect(result).toMatchObject({ ok: true, status: 204, via: 'http://proxy.test:8080/' })
-    // The body is never read: the default target is a multi-megabyte document.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(cancel).toHaveBeenCalled()
   })
 

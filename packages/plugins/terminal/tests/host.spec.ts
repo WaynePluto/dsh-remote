@@ -1,35 +1,23 @@
-/**
- * The Host half's decision logic, driven through `dispatch` with a scripted
- * `ctx.terminals` — no PTY, no browser, no HTTP carrier.
- *
- * The one thing a fake cannot prove is that a real shell accepts the bytes;
- * `live.spec.ts` does that against a real PTY.
- *
- * @module @dsh-remote/dsh-plugin-terminal/tests/host
- */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`dispatch`、`ctx.terminals`、`live.spec.ts`） */
 
 import type { Context } from '@deepseek-ai/cordis'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  BAD_PAYLOAD_CODE, Config, INTERNAL_CODE, INTERACTIVE_TERMINAL_GUIDANCE, INTERACTIVE_TERMINAL_OPEN_DESCRIPTION,
+  BAD_PAYLOAD_CODE, Config, INTERNAL_CODE, INTERACTIVE_TERMINAL_DESCRIPTION, INTERACTIVE_TERMINAL_GUIDANCE, INTERACTIVE_TERMINAL_TOOL_NAME,
   MAX_SEND_LENGTH, NOTES, UPSTREAM_TERMINAL_TOOL_NAMES, apply, applyInteractiveTerminalTools, interactiveTerminalTools,
   PWSH_READLINE_SETUP, UNKNOWN_ENDPOINT_CODE, backendConfig, dispatch, installStartupRetry, isSendActive,
   pwshShellArgs, resetInFlight, resolveDialect, sendToTerminal, snapshot, toView,
 } from '../src/index.js'
 
-/**
- * Resolve a configuration the way cordis does before `apply` sees it.
- * @param overrides - the fields a test cares about.
- * @returns the resolved configuration.
- */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。（涉及：`apply`） */
 function resolved(overrides: Record<string, unknown> = {}): Config {
   return new (Config as unknown as new (value: unknown) => Config)(overrides)
 }
 
-/** The resolved configuration every test starts from. */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 const config = resolved()
 
-/** One scripted PTY session. */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 interface FakeSession {
   sessionId: string
   name?: string
@@ -38,22 +26,18 @@ interface FakeSession {
   status: { kind: 'running' } | { kind: 'exited', exitCode: number | null, signal: null }
 }
 
-/** A settled send operation the registry would have returned. */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 function operation() {
   return { done: Promise.resolve({}), readOutput: () => ({ delta: '', truncated: false }), cancel: () => false }
 }
 
-/** Everything the fake registry recorded, so a test can assert on the write. */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 interface Recorder {
   sends: { id: string, text: string, submit: boolean }[]
   signals: string[]
 }
 
-/**
- * Build a Context that answers exactly what these tests script.
- * @param options - the sessions, the screen, and the failures to inject.
- * @returns the fake context and its recorder.
- */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 function fakeContext(options: {
   sessions?: FakeSession[]
   agent?: unknown
@@ -94,17 +78,13 @@ function fakeContext(options: {
   return { ctx, recorder }
 }
 
-/** A running session, as the registry reports one. */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 const running: FakeSession = { sessionId: 'pty-1', type: 'shell', status: { kind: 'running' }, pid: 4321 }
 
 beforeEach(() => { resetInFlight() })
 
 describe('installStartupRetry', () => {
-  /**
-   * A context whose registry fails a scripted number of opens.
-   * @param failures - how many attempts throw before one succeeds.
-   * @returns the context, the registry, and the attempt record.
-   */
+  /** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
   function flakyRegistry(failures: number) {
     const state = { attempts: 0, signals: [] as (AbortSignal | undefined)[] }
     const registry = {
@@ -119,13 +99,13 @@ describe('installStartupRetry', () => {
     return { ctx, registry, state }
   }
 
-  /** A sleep that records instead of waiting. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   const noSleep = () => vi.fn(async () => { await Promise.resolve() })
 
   it('retries a flaky open until it succeeds', async () => {
-    // dsh's pwsh readiness probe fails intermittently and there is no seam to
-    // intercept `terminal_open`, so the retry lives on the registry this plugin
-    // mounted. A failed open is not degraded service — it is no terminal.
+    // dsh 的 pwsh 就绪探测会间歇失败，且没有接缝可以
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`terminal_open`）
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
     const { ctx, registry, state } = flakyRegistry(2)
     const sleep = noSleep()
     installStartupRetry(ctx, resolved({ startupAttempts: 3 }), sleep)
@@ -185,21 +165,21 @@ describe('resolveDialect', () => {
 
 describe('backendConfig', () => {
   it('starts pwsh without PSReadLine at all', () => {
-    // Not cosmetic. PSReadLine repaints the input line, which reorders dsh's
-    // prompt marker relative to the prompt text the backend waits for, and it
-    // writes the user's shell history, which feeds the same bootstrap line back
-    // as ghost text on the next run. Measured 500ms apart on one machine:
-    // dsh's default argv opened 7 sessions in 10; with this argv, 20 in 20.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const backend = backendConfig(resolved(), 'win32')
     expect(backend.shellDialect).toBe('pwsh')
     expect(backend.shellArgs).toStrictEqual(pwshShellArgs())
     expect(backend.shellArgs).toContain('-NoProfile')
-    // `-NoExit` is what keeps `-Command` from being a one-shot; without it pwsh
-    // would run the statement and exit instead of becoming a terminal.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`-NoExit`、`-Command`）
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
     expect(backend.shellArgs).toContain('-NoExit')
     expect(PWSH_READLINE_SETUP).toContain('Remove-Module PSReadLine')
-    // A pwsh without PSReadLine must still reach a prompt rather than printing
-    // a red error as the first thing in the transcript.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     expect(PWSH_READLINE_SETUP).toContain('SilentlyContinue')
   })
 
@@ -357,9 +337,9 @@ describe('sendToTerminal', () => {
   })
 
   it('waits out a busy session instead of bouncing the keystroke', async () => {
-    // The registry allows one active send and throws on the second. A password
-    // typed while the model's own send is still settling must land once the
-    // shell frees up, not be lost.
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
+    // 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
     const busy = Object.assign(new Error('already has an active send'), { code: 'SEND_ACTIVE' })
     const { ctx, recorder } = fakeContext({ sessions: [running], sendThrows: [busy, busy] })
     const wait = vi.fn(async () => { await Promise.resolve() })
@@ -426,11 +406,11 @@ describe('dispatch: interrupt', () => {
 })
 describe('interactive terminal tool wrapper', () => {
   function recordingContext() {
-    const tools: { name: string, description?: string }[] = []
+    const tools: Record<string, unknown>[] = []
     const sections: { name: string, text: string }[] = []
     const ctx = {
       terminals: {},
-      tools: { register: (tool: { name: string, description?: string }) => { tools.push(tool) } },
+      tools: { register: (tool: Record<string, unknown>) => { tools.push(tool) } },
       systemPrompt: {
         getSectionOrder: () => 10,
         section: (section: { name: string, text: string }) => { sections.push(section) },
@@ -438,33 +418,91 @@ describe('interactive terminal tool wrapper', () => {
     } as unknown as Context
     return { ctx, tools, sections }
   }
-  it('publishes exactly the six interactive names and no raw terminal names', () => {
+  function upstreamFor(calls: { name: string, args: unknown }[]) {
+    const outputSchema = { type: 'object', additionalProperties: true }
+    return (facade: Context) => {
+      const services = facade as unknown as {
+        tools: { register: (tool: Record<string, unknown>) => void }
+        systemPrompt: { section: (section: Record<string, unknown>) => void }
+      }
+      services.systemPrompt.section({ name: 'tool:pty', order: 10, text: 'upstream' })
+      for (const name of UPSTREAM_TERMINAL_TOOL_NAMES) {
+        services.tools.register({
+          name,
+          output: {
+            schema: outputSchema,
+            render: (_args: unknown, _value: unknown) => [{ type: 'text', text: name }],
+          },
+          execute: async (args: unknown) => {
+            calls.push({ name, args })
+            if (name === 'terminal_open') return { sessionId: 'pty-1', type: 'shell', status: { kind: 'running' }, motd: 'ready' }
+            if (name === 'terminal_send') return { kind: 'foreground', viewport: 'waiting', waitReason: 'stdin_read', sessionStatus: { kind: 'running' }, truncated: false }
+            if (name === 'terminal_read') return { text: 'out', totalLines: 1, lineBegin: 0, lineEnd: 1, truncated: false }
+            if (name === 'terminal_signal') return { delivered: true, targetPgid: 42 }
+            if (name === 'terminal_close') return { sessionId: 'pty-1', outcome: 'closed' }
+            return []
+          },
+        })
+      }
+    }
+  }
+  it('publishes exactly one composite tool and no raw or per-operation aliases', () => {
     const { ctx, tools, sections } = recordingContext()
     applyInteractiveTerminalTools(ctx)
-    expect(tools.map(tool => tool.name)).toStrictEqual(
-      UPSTREAM_TERMINAL_TOOL_NAMES.map(name => `interactive_${name}`),
-    )
+    expect(tools.map(tool => tool.name)).toStrictEqual([INTERACTIVE_TERMINAL_TOOL_NAME])
     expect(tools.some(tool => UPSTREAM_TERMINAL_TOOL_NAMES.includes(tool.name as never))).toBe(false)
-    const send = tools.find(tool => tool.name === 'interactive_terminal_send') as Record<string, unknown>
-    expect(JSON.stringify(send.parameters)).toContain('interactive_terminal_open')
-    expect(JSON.stringify(send.parameters)).toContain('interactive_terminal_list')
-    expect(typeof send.execute).toBe('function')
-    expect(send.output).toBeDefined()
-    expect(tools.every(tool => tool.description?.toLowerCase().includes('interactive terminal') === true)).toBe(true)
+    const tool = tools[0]!
+    expect(typeof tool.execute).toBe('function')
+    expect(tool.output).toBeDefined()
+    expect(JSON.stringify(tool.parameters)).toContain('start')
+    expect(JSON.stringify(tool.parameters)).not.toContain('run_in_background')
+    expect(JSON.stringify(tool.parameters)).not.toContain('interactive_terminal_open')
+    expect(tool.description).toBe(INTERACTIVE_TERMINAL_DESCRIPTION)
     expect(sections).toHaveLength(1)
   })
-  it('replaces the prompt and open description with the strict one-shot prohibition', () => {
+  it('describes the human-input boundary and directs ordinary work to pwsh/bash', () => {
     const { ctx, tools, sections } = recordingContext()
     applyInteractiveTerminalTools(ctx)
+    const tool = tools[0]!
     expect(sections[0]?.text).toBe(INTERACTIVE_TERMINAL_GUIDANCE)
-    expect(sections[0]?.text).toMatch(/Git, builds, tests, and scripts/)
-    expect(sections[0]?.text).toMatch(/always use pwsh or bash/)
-    expect(sections[0]?.text).toMatch(/long time is not by itself a reason/)
-    expect(sections[0]?.text).toContain('run_in_background')
-    const open = tools.find(tool => tool.name === 'interactive_terminal_open')
-    expect(open?.description).toBe(INTERACTIVE_TERMINAL_OPEN_DESCRIPTION)
-    expect(open?.description).toMatch(/Never use this for ordinary one-shot commands/)
-    expect(open?.description).toContain('run_in_background')
+    for (const text of [
+      'ordinary commands', 'Git', 'builds', 'tests', 'scripts', 'persistent shell state',
+      'long-running work', 'pwsh', 'bash', 'run_in_background', 'non-interactive',
+    ]) {
+      expect(`${tool.description}\n${sections[0]?.text}`).toContain(text)
+    }
+  })
+  it('combines start and maps the remaining actions to the upstream implementations', async () => {
+    const { ctx, tools } = recordingContext()
+    const calls: { name: string, args: unknown }[] = []
+    applyInteractiveTerminalTools(ctx, {}, upstreamFor(calls))
+    const tool = tools[0] as { execute: (args: unknown, exec: unknown) => Promise<Record<string, unknown>> }
+    const exec = { agent: {}, signal: new AbortController().signal }
+    const started = await tool.execute({ action: 'start', command: 'Read-Host password', name: 'main', cwd: 'C:\\work' }, exec)
+    expect(started).toMatchObject({ action: 'start', sessionId: 'pty-1', created: true })
+    expect(calls.slice(0, 2)).toStrictEqual([
+      { name: 'terminal_open', args: { type: 'shell', name: 'main', cwd: 'C:\\work' } },
+      { name: 'terminal_send', args: { sessionId: 'pty-1', text: 'Read-Host password', submit: true } },
+    ])
+    calls.length = 0
+    await tool.execute({ action: 'read', terminalId: 'pty-1', offset: 2, count: 4 }, exec)
+    await tool.execute({ action: 'list' }, exec)
+    await tool.execute({ action: 'interrupt', terminalId: 'pty-1' }, exec)
+    await tool.execute({ action: 'close', terminalId: 'pty-1' }, exec)
+    expect(calls).toStrictEqual([
+      { name: 'terminal_read', args: { sessionId: 'pty-1', offset: 2, count: 4 } },
+      { name: 'terminal_list', args: {} },
+      { name: 'terminal_signal', args: { sessionId: 'pty-1', signal: 'SIGINT' } },
+      { name: 'terminal_close', args: { sessionId: 'pty-1' } },
+    ])
+  })
+  it('requires a non-empty command for start before opening anything', async () => {
+    const { ctx, tools } = recordingContext()
+    const calls: { name: string, args: unknown }[] = []
+    applyInteractiveTerminalTools(ctx, {}, upstreamFor(calls))
+    const tool = tools[0] as { execute: (args: unknown, exec: unknown) => Promise<unknown> }
+    await expect(tool.execute({ action: 'start', command: '   ' }, { agent: {} })).rejects.toThrow('non-empty')
+    expect(calls).toHaveLength(0)
   })
   it.each([
     ['missing', UPSTREAM_TERMINAL_TOOL_NAMES.slice(0, -1)],
@@ -474,7 +512,7 @@ describe('interactive terminal tool wrapper', () => {
     const { ctx, tools, sections } = recordingContext()
     const upstream = (facade: Context) => {
       (facade as unknown as { systemPrompt: { section: (value: unknown) => void } }).systemPrompt.section({ name: 'tool:pty', order: 10, text: 'upstream' })
-      for (const name of names) (facade as unknown as { tools: { register: (value: unknown) => void } }).tools.register({ name, description: name } as never)
+      for (const name of names) (facade as unknown as { tools: { register: (value: unknown) => void } }).tools.register({ name } as never)
     }
     expect(() => { applyInteractiveTerminalTools(ctx, {}, upstream) }).toThrow(/rejected registrations/)
     expect(tools).toHaveLength(0)
@@ -486,8 +524,12 @@ describe('interactive terminal tool wrapper', () => {
     const plugins: unknown[] = []
     const ctx = {
       plugin: (plugin: unknown) => { plugins.push(plugin) },
+      inject: (_names: unknown, callback: (scope: { plugin: (plugin: unknown) => void }) => void) => {
+        callback({ plugin: (plugin: unknown) => { plugins.push(plugin) } })
+      },
       connection: { rpc: { handle: () => () => {} } },
       effect: () => {},
+      get: () => undefined,
     } as unknown as Context
     apply(ctx, resolved({ mountBackend: false, mountTools: true }))
     expect(plugins).toStrictEqual([interactiveTerminalTools])

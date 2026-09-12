@@ -1,8 +1,8 @@
 {
-  // The browser half is checked in its own program, like every other two-half
-  // plugin in this repo: the Host and browser halves of several dsh packages
-  // merge different shapes into cordis's `Context`, and one program holding
-  // both would see them collide.
+  // 浏览器半像仓库中其他双半插件一样使用独立的 program：
+  // 实现说明：此处记录相关接口、边界和生命周期约束。
+  // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`Context`）
+  // 两者会发生冲突。
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",

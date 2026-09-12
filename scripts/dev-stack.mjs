@@ -1,10 +1,9 @@
 /**
- * Local development stack: dsh + connector + relay on one machine.
+ * 本地开发栈：单机运行 dsh + connector + relay。
  *
- * `pnpm dev` runs the TypeScript sources through tsx; `pnpm start` runs the
- * built `dist/` output. Both bind the relay on all interfaces in the explicit
- * authenticated LAN HTTP mode, so a phone or a second machine can reach it
- * while every non-loopback request still has to log in.
+ * `pnpm dev` 通过 tsx 运行 TypeScript 源码；`pnpm start` 运行构建后的
+ * `dist/` 产物。两者都会在明确的、需要认证的局域网 HTTP 模式下把 relay
+ * 绑定到所有接口，因此手机或另一台机器可以访问，同时所有非 loopback 请求仍必须登录。
  */
 
 import { spawn } from 'node:child_process'
@@ -14,7 +13,7 @@ import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { DatabaseSync } from 'node:sqlite'
 import process from 'node:process'
-import { ensureProfile, profileDirectory, resolveDshHome } from '../packages/launcher/src/profile.ts'
+import { CONCISE_MODE_BUNDLE, ensureProfile, profileDirectory, resolveDshHome } from '../packages/launcher/src/profile.ts'
 import { issueDeviceEnrollToken, openRelayStore } from '../packages/relay/src/store/index.ts'
 import {
   DEVICE_KEY_FILE,
@@ -45,11 +44,11 @@ function fail(message, hint) {
 }
 
 /**
- * Report whether an administrator exists yet.
+ * 报告是否已经存在管理员。
  *
- * Missing is no longer fatal: the relay serves its loopback setup wizard until
- * someone creates the account, so the stack must be startable without one.
- * @returns true when the database already holds at least one user.
+ * 没有管理员不再视为致命错误：relay 会提供 loopback 设置向导，
+ * 直到有人创建账号，因此开发栈必须可以在没有管理员时启动。
+ * @returns 当数据库中已经至少有一个用户时返回 true。
  */
 function adminInitialized() {
   if (!existsSync(RELAY_DATABASE)) return false
@@ -73,7 +72,7 @@ function assertBuilt() {
   if (missing.length !== 0) fail(`缺少构建产物：${missing.join('、')}`, '先运行: pnpm build')
 }
 
-/** @returns The base64url raw public key of the local device key, if it exists. */
+/** @returns 如果存在本地设备密钥，则返回其 base64url 原始公钥。 */
 function localDevicePublicKey() {
   if (!existsSync(DEVICE_KEY_FILE)) return undefined
   try {
@@ -85,12 +84,11 @@ function localDevicePublicKey() {
 }
 
 /**
- * Decide whether this machine still needs to enroll.
+ * 判断本机是否仍需要注册。
  *
- * Checking only “is a device row present” is not enough: resetting `.dev/` or
- * deleting the key file leaves the two sides holding different keys, which
- * would surface as an opaque auth failure instead of re-enrolling.
- * @returns true when the relay does not already trust the local key.
+ * 仅检查是否存在设备记录并不够：重置 `.dev/` 或删除密钥文件会让两端持有不同的密钥，
+ * 结果会表现为含糊的认证失败，而不是重新注册。
+ * @returns 当 relay 尚未信任本地密钥时返回 true。
  */
 function needsEnrollment() {
   const publicKey = localDevicePublicKey()
@@ -108,12 +106,11 @@ function needsEnrollment() {
 }
 
 /**
- * Issue a short-lived enrollment token for the development machine.
+ * 为开发机签发短期注册令牌。
  *
- * This calls the relay's own library function rather than shelling out: the
- * user-facing CLI deliberately no longer carries a `token create` command, now
- * that the admin console issues tokens.
- * @returns The plaintext enrollment token.
+ * 这里调用 relay 自己的库函数，而不是通过 shell 调用：面向用户的 CLI 已经不再携带
+ * `token create` 命令，因为现在由管理控制台签发令牌。
+ * @returns 明文注册令牌。
  */
 function createEnrollToken() {
   const store = openRelayStore({ path: RELAY_DATABASE })
@@ -129,7 +126,7 @@ function createEnrollToken() {
   }
 }
 
-/** Windows needs the whole tree: dsh spawns shells that ignore child.kill(). */
+/** Windows 需要整个进程树：dsh 会生成忽略 child.kill() 的 shell。 */
 function killTree(child) {
   if (child.exitCode !== null || child.signalCode !== null) return
   if (process.platform === 'win32') {
@@ -175,26 +172,25 @@ const secrets = localSecrets()
 const environment = relayEnvironment(secrets)
 const lanIp = lanAddress()
 
-// No proxy preload: the outbound proxy is configured in dsh's own
-// Settings → Proxy page by `@dsh-remote/dsh-plugin-proxy`, which is
-// deliberately the only source of that fact (docs/proxy-plugin-design.md).
+// 不预加载 proxy：出站 proxy 在 dsh 自己的
+// Settings → Proxy 页面由 `@dsh-remote/dsh-plugin-proxy` 配置，
+// 该处刻意是这一事实的唯一来源（docs/dsh/models.md）。
 
-// Mode A: the relay forwards the original Host, so dsh must trust the exact
-// authorities a browser will send. Port-less entries match any port.
+// 模式 A：relay 转发原始 Host，因此 dsh 必须信任浏览器会发送的准确
+// authority。没有端口的条目匹配任意端口。
 const trustedHosts = ['127.0.0.1', 'localhost', ...lanIp === undefined ? [] : [lanIp]]
 
-// dsh refuses to boot a profile it has no template for, so the dev stack has to
-// bootstrap the shared DSH_HOME exactly like the launcher does (D14): create the
-// minimal template only when the directory is missing, never rewrite it.
+// dsh 拒绝启动没有模板的 profile，因此开发栈必须像 launcher 一样（D14）
+// 引导共享 DSH_HOME：仅在目录缺失时创建最小模板，绝不重写。
 const dshHome = resolveDshHome()
-const profileBootstrap = ensureProfile({ home: dshHome, profile: DSH_PROFILE })
-console.log(`[dsh-remote] ${profileBootstrap === 'created' ? '已创建' : '使用已有的'} dsh profile ${profileDirectory(dshHome, DSH_PROFILE)}`)
+const profileBootstrap = ensureProfile({ home: dshHome, profile: DSH_PROFILE, managedBundles: [CONCISE_MODE_BUNDLE] })
+console.log(`[dsh-remote] ${profileBootstrap === 'created' ? '已创建' : profileBootstrap === 'updated' ? '已更新' : '使用已有的'} dsh profile ${profileDirectory(dshHome, DSH_PROFILE)}`)
 
 const enrollToken = needsEnrollment() ? createEnrollToken() : undefined
 
-// dsh 0.1.2 authenticates browsers itself and prints the login token it minted
-// for this process; the connector reports it to the relay, which sends an
-// already-authenticated browser through dsh's own exchange once.
+// dsh 0.1.2 自己认证浏览器，并打印它为该进程生成的登录 token；
+// connector 将其报告给 relay，relay 再让已认证的浏览器
+// 通过 dsh 自己的交换流程完成一次交换。
 let noteDshToken
 const dshTokenPromise = new Promise((resolve) => { noteDshToken = resolve })
 let dshTokenSeen = false
@@ -202,8 +198,8 @@ let dshTokenSeen = false
 start('dsh', process.execPath, [
   DSH_BIN,
   '--profile', DSH_PROFILE,
-  // dsh-remote's own dsh plugins (D17). --patch is a launcher flag, so it has to
-  // sit next to --profile, ahead of everything the web app parses itself.
+  // dsh-remote 自有 dsh 插件（D17）。--patch 是 launcher 标志，因此必须
+  // 与 --profile 放在一起，并置于 web app 自行解析的所有参数之前。
   ...dshPluginOverlays().flatMap(overlay => ['--patch', overlay]),
   '--no-open',
   '--host', '127.0.0.1',
@@ -236,8 +232,8 @@ start('relay', process.execPath, [
   '--home', DSH_REMOTE_HOME,
 ], environment)
 
-// The connector needs dsh's token before it authenticates, so the stack waits
-// for the URL line here. A dsh that never prints one still tunnels traffic.
+// connector 需要 dsh 的 token 才能认证，因此栈在这里等待 URL 行。
+// 即使 dsh 从未打印它，流量仍会隧道转发。
 const dshToken = await Promise.race([
   dshTokenPromise,
   new Promise((resolve) => { setTimeout(() => resolve(undefined), 60_000).unref() }),

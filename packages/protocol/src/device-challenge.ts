@@ -1,13 +1,13 @@
 /**
- * Canonical bytes a connector signs to answer a control-channel challenge.
+ * Connector 为响应控制信道 challenge 而签名的规范字节。
  *
- * Both sides must derive the message identically, so it lives in the shared
- * protocol package rather than in either implementation.
+ * 两侧必须以完全相同的方式生成消息，因此它位于共享的
+ * protocol 包中，而不是任一实现包中。
  */
 
 /**
- * Domain separation tag. It keeps a device signature from being replayed as any
- * other signature this project might introduce over the same key.
+ * 域分离标签。它防止设备签名被重放为
+ * 本项目未来可能使用同一密钥生成的其他签名。
  */
 const DOMAIN = 'dsh-remote/device-challenge/v2'
 
@@ -30,19 +30,19 @@ function concat(chunks: readonly Uint8Array[]): Uint8Array {
 }
 
 export interface DeviceChallengeInput {
-  /** The relay-issued nonce for this handshake. */
+  /** Relay 为本次握手签发的 nonce。 */
   readonly nonce: string
   readonly machineId: string
   readonly slug: string
 }
 
 /**
- * Build the exact bytes signed for one challenge.
+ * 构建某个 challenge 要签名的精确字节。
  *
- * Every field is length-prefixed instead of delimiter-joined: `machineId`
- * accepts arbitrary text, so a delimiter could be smuggled inside a field to
- * make two different identities produce one identical message.
- * @returns The message bytes to sign or verify.
+ * 每个字段都带长度前缀而不是用分隔符连接：`machineId`
+ * 接受任意文本，因此可以把分隔符偷偷放进字段，使
+ * 两个不同身份生成完全相同的消息。
+ * @returns 要签名或验证的消息字节。
  */
 export function deviceChallengeMessage(input: DeviceChallengeInput): Uint8Array {
   return concat([

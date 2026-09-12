@@ -1,28 +1,13 @@
 /**
- * The「执行过程」row itself.
- *
- * One line per segment: `执行过程 思考12次·工具34次·失败2 最近read`,
- * with a chevron, collapsed by default. Clicking it collapses or expands every
- * process row of that segment.
- *
- * IT RENDERS WHILE THE TURN IS STILL RUNNING, and that is a deliberate reversal
- * of dsh's own rule (`turnClosed` in ChatNodeSeat.tsx:67). dsh can afford to
- * wait: its fold is a nicety over a transcript that is readable either way.
- * Here the fold IS the reading experience — a turn that stays flat for its
- * whole run means scrolling past sixty tool cards to reach the answer, and by
- * the time the fold appeared the reader has already lost their place. The
- * header updates live instead, so the counts are the progress indicator.
- *
- * THE ONE THING IT STILL REFUSES: a segment with nothing under it. A control
- * that discloses nothing is noise, so an empty fold renders no row at all.
- *
- * The body component takes plain props so it can be exercised without a slot
- * runtime; `ExecProcessSeat` in `./index.tsx` is the thin registration face.
+ * 「执行过程」行：每个非空 segment 一行，默认折叠；点击切换该 segment 的全部过程行。
+ * turn 运行期间也实时显示并更新计数，因为折叠本身就是长会话的主要阅读入口；空 segment 不渲染控件。
+ * 组件只接收普通 props，便于脱离 slot runtime 测试；`ExecProcessSeat` 负责薄注册层。
  *
  * @module @dsh-remote/dsh-plugin-exec-process/client/ExecProcessRow
  */
 
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
+import { IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CollapsedRowsController } from './hidden-rows.js'
 import { foldKey, type FoldStore } from './fold-store.js'
 import { en, fill, type ExecProcessKey } from './locales.js'
@@ -31,54 +16,54 @@ import type { SegmentFrameController } from './segment-frame.js'
 import { segmentContentEndSelector, type StickyPushController } from './sticky-push.js'
 import { execProcessStats, segmentEnded, segmentEndSeq, EMPTY_STATS, type ExecNodeView, type ExecProcessStats } from './stats.js'
 
-/** dsh's own `ic_ds_chevron_down_outline_14`, inlined. */
-const CHEVRON = 'M11.8486 5.5L11.4238 5.92383L8.69727 8.65137C8.44157 8.90706 8.21562 9.13382 8.01172 9.29785C7.79912 9.46883 7.55595 9.61756 7.25 9.66602C7.08435 9.69222 6.91565 9.69222 6.75 9.66602C6.44405 9.61756 6.20088 9.46883 5.98828 9.29785C5.78438 9.13382 5.55843 8.90706 5.30273 8.65137L2.57617 5.92383L2.15137 5.5L3 4.65137L3.42383 5.07617L6.15137 7.80273C6.42595 8.07732 6.59876 8.24849 6.74023 8.3623C6.87291 8.46904 6.92272 8.47813 6.9375 8.48047C6.97895 8.48703 7.02105 8.48703 7.0625 8.48047C7.07728 8.47813 7.12709 8.46904 7.25977 8.3623C7.40124 8.24849 7.57405 8.07732 7.84863 7.80273L10.5762 5.07617L11 4.65137L11.8486 5.5Z'
+/** 使用 dsh 原生 disclosure 行共用的 14px chevron。 */
 
-/** Minimal reader over the turn's Chat nodes; the real one is dsh's node store. */
+/** 对 turn Chat nodes 的最小读取接口；真实实现是 dsh 的 node store。 */
 export interface ExecNodeReader {
-  /** @param key - Chat node key. @returns the node, when loaded. */
+  /** @param key - Chat node key。@returns 已加载时返回该 node。 */
   get(key: string): ExecNodeView | undefined
 }
 
-/** Everything the row needs, free of slot plumbing. */
+/** 本行所需的全部数据，不依赖 slot plumbing。 */
 export interface ExecProcessRowProps {
-  /** Turn this row summarizes. */
+  /** 本行汇总的 turn。 */
   turn: number
-  /** Session owning the fold state. */
+  /** 本表头 wrapper 的 dsh flow key，用于隐藏空壳。 */
+  selfKey: string
+  /** 拥有 fold 状态的 session。 */
   sessionId: string
-  /** Chat node keys of this turn, in flow order. */
+  /** 本 turn 的 Chat node keys，按 flow 顺序排列。 */
   turnNodeKeys: readonly string[]
-  /** Live reader for those keys. */
+  /** 读取这些 key 的实时 reader。 */
   nodes: ExecNodeReader
-  /** First seq the fold owns: dsh's window start, clamped to this row's own
-   *  position so a fold never reaches above its own header. */
+  /** fold 拥有的首个 seq：从 dsh 窗口起点开始，但截到本行位置，避免折叠越过自己的表头。 */
   processStartSeq: number
-  /** This row's own anchor; the segment it owns starts here. */
+  /** 本行自己的 anchor；它拥有的 segment 从这里开始。 */
   selfAnchorSeq: number
-  /** Whether dsh's real Turn timeline says this turn is closed. */
+  /** dsh 的真实 Turn timeline 是否表示该 turn 已关闭。 */
   turnClosed: boolean
-  /** Finalized answer boundary; null while the turn runs or when it never answered. */
+  /** 最终答案边界；turn 运行中或没有答案时为 null。 */
   answerAnchorSeq: number | null
-  /** Shared fold state; absent before the registration binds. */
+  /** 共享 fold 状态；注册绑定前不存在。 */
   foldStore?: FoldStore | undefined
-  /** Shared collapse stylesheet; absent before the registration binds. */
+  /** 共享折叠 stylesheet；注册绑定前不存在。 */
   collapsed?: CollapsedRowsController | undefined
-  /** Shared expanded-segment frame controller. */
+  /** 共享的展开 segment frame controller。 */
   frame?: SegmentFrameController | undefined
-  /** Shared sticky-header controller; absent before the registration binds. */
+  /** 共享的 sticky header controller；注册绑定前不存在。 */
   stickyPush?: StickyPushController | undefined
-  /** Locale seat bound to this plugin's namespace. */
+  /** 绑定到本插件命名空间的 locale seat。 */
   t?: ((key: ExecProcessKey, params?: Record<string, unknown>) => string) | undefined
 }
 
 const NO_KEYS: readonly string[] = []
 
 /**
- * Assemble the row's summary fields.
- * @param stats - the fold's counts.
- * @param translate - bound translate function.
- * @param ended - whether the segment or its owning turn has ended.
- * @returns count summary, optional live/recent action, and running state.
+ * 组装本行的摘要字段。
+ * @param stats - fold 的计数。
+ * @param translate - 已绑定的翻译函数。
+ * @param ended - segment 或所属 turn 是否结束。
+ * @returns 计数摘要、可选的实时/最近动作以及运行状态。
  */
 export function summaryFields(
   stats: ExecProcessStats,
@@ -104,7 +89,7 @@ export function summaryFields(
 
 export type SummaryFields = ReturnType<typeof summaryFields>
 
-/** Render the truncatable action, running dot, and chevron in visual order. */
+/** 按视觉顺序渲染可截断动作、运行圆点和 chevron。 */
 export function ExecProcessTail({ fields }: { fields: SummaryFields }) {
   return (
     <>
@@ -114,20 +99,18 @@ export function ExecProcessTail({ fields }: { fields: SummaryFields }) {
         </span>
       )}
       {fields.running && <span className={`${ROW_CLASS}__dot`} aria-hidden />}
-      <svg className={`${ROW_CLASS}__chevron`} width={14} height={14} viewBox="0 0 14 14" fill="none" aria-hidden>
-        <path d={CHEVRON} fill="currentColor" />
-      </svg>
+      <IconChevronDownOutline14 className={`${ROW_CLASS}__chevron`} aria-hidden />
     </>
   )
 }
 
 /**
- * The collapsed process summary for one segment of one turn.
- * @param props - segment identity, the turn's nodes, its bounds, and the shared fold state.
- * @returns the row, or nothing when this segment folds nothing.
+ * 一个 turn 的单个 segment 的折叠过程摘要。
+ * @param props - segment 标识、turn nodes、边界和共享 fold 状态。
+ * @returns 本行；segment 没有可折叠内容时返回空。
  */
 export function ExecProcessRow({
-  turn, sessionId, turnNodeKeys, nodes,
+  turn, selfKey, sessionId, turnNodeKeys, nodes,
   processStartSeq, selfAnchorSeq, turnClosed, answerAnchorSeq, foldStore, collapsed, frame, stickyPush, t,
 }: ExecProcessRowProps) {
   const translate = useCallback(
@@ -136,9 +119,7 @@ export function ExecProcessRow({
     [t],
   )
 
-  // Recomputed only when the turn's node set or this segment's bounds move.
-  // Every other publication — a streamed token in a later turn, a scroll — must
-  // not walk sixty nodes again.
+  // 只有 turn 的 node 集合或本 segment 边界变化时才重新计算；其他发布（后续 turn 的流式 token、滚动）不能再次遍历几十个 node。
   const calculation = useMemo(() => {
     const views: ExecNodeView[] = []
     for (const key of turnNodeKeys) {
@@ -155,8 +136,7 @@ export function ExecProcessRow({
   }, [turnNodeKeys, nodes, processStartSeq, selfAnchorSeq, answerAnchorSeq, turnClosed])
   const stats = calculation.stats
 
-  // Keyed by segment, not by turn: a turn now has as many folds as it has
-  // formal messages, and opening one must not open the rest.
+  // 按 segment 而非 turn 取 key：一个 turn 可有多个正式消息对应的 fold，打开一个不能打开其他 fold。
   const key = useMemo(() => foldKey(sessionId, turn, selfAnchorSeq), [sessionId, turn, selfAnchorSeq])
   const subscribe = useCallback(
     (listener: () => void) => foldStore?.subscribe(listener) ?? (() => {}),
@@ -167,18 +147,17 @@ export function ExecProcessRow({
 
   const memberKeys = stats?.memberKeys ?? NO_KEYS
   const reasoningKeys = stats?.reasoningOnlyKeys ?? NO_KEYS
-  // Publish every state update without clearing first. Streaming produces fresh
-  // arrays every frame; keeping cleanup separate lets each controller's
-  // sameEntry check turn unchanged publications into true no-ops.
+  // 每次状态更新都直接发布，不先清空。流式过程每帧产生新数组，独立 cleanup 配合 controller 的 sameEntry 检查，可将未变化的发布变成真正的 no-op。
   useEffect(() => {
     if (collapsed === undefined) return
-    if (open) collapsed.set(key, NO_KEYS, NO_KEYS)
+    if (stats === null) collapsed.set(key, [selfKey], NO_KEYS)
+    else if (open) collapsed.set(key, NO_KEYS, NO_KEYS)
     else collapsed.set(key, memberKeys, reasoningKeys)
-  }, [collapsed, key, open, memberKeys, reasoningKeys])
+  }, [collapsed, key, open, memberKeys, reasoningKeys, selfKey, stats])
 
   useEffect(() => {
     if (collapsed === undefined) return
-    // Unmounting or changing controller/key must reveal the old rows again.
+    // 卸载或更换 controller/key 时，必须重新显示旧行。
     return () => { collapsed.clear(key) }
   }, [collapsed, key])
 
@@ -193,9 +172,7 @@ export function ExecProcessRow({
     return () => { frame.clear(key) }
   }, [frame, key])
 
-  // Only an OPEN header follows the reader, and only for as long as its own
-  // rows are still under it. Registered after the fold effect above so the
-  // first measurement reads the layout that effect just produced.
+  // 只有已打开的表头跟随阅读位置，且只持续到自己的行仍在其下方为止。它在 fold effect 之后注册，首次测量才能读到刚生成的布局。
   const buttonRef = useRef<HTMLButtonElement | null>(null)
   const contentEndSelector = segmentContentEndSelector(memberKeys, reasoningKeys)
   useEffect(() => {

@@ -55,9 +55,11 @@ export function project(
     totalCalls += count.calls
     if (count.calls > 0) used += 1
     const { params, required } = readParams(schema.parameters)
+    const fullDescription = schema.description ?? ''
     return {
       name: schema.name,
-      description: condense(schema.description ?? ''),
+      description: condense(fullDescription),
+      fullDescription,
       status: count.calls > 0 ? 'used' : 'unused',
       calls: count.calls,
       failures: count.failures,

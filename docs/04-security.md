@@ -1,232 +1,121 @@
 # 04 · 安全与认证
 
-## 0. 一句话威胁模型
+## 1. 威胁模型
 
-> 中转服务器上的一个 URL，等价于被控机器上的一个**无密码 root shell**（在该用户权限下）。
-> dsh 自己不提供任何认证。**relay 的认证是唯一防线。**
+能通过 relay 操作 dsh 的人，可以以 dsh 进程用户的权限执行命令、读写文件和读取凭据。
+这不是多租户隔离系统。relay 登录是远程访问的主要防线；dsh 自带 cookie 认证与 Host/Origin fence 是附加防护。
 
-## 1. 必须理解的三个事实
+dsh 永远只监听 127.0.0.1。connector 主动拨出，不需要在目标机器开放 dsh 入站端口。
+每台机器的 relay 仍需按其监听地址、防火墙和 TLS 配置保护，不能把“connector 拨出”理解为整台机器没有攻击面。
 
-### 1.1 dsh Web 没有认证
+## 2. 认证
 
-`docs/subsystems/web-server.md` L41 原文：
+### 设备
 
-> there is no TLS, auth, or origin policy, so a non-loopback bind exposes the server to that network.
+- connector 生成 Ed25519 密钥，私钥存于 dsh-remote home 的 device.key，POSIX 0600，Windows 收紧 ACL。
+- 管理员签发一次性注册令牌，固定 5 分钟有效，数据库只保存哈希。
+- 首次注册提交令牌、公钥和机器名；之后使用随机挑战签名认证。
+- 管理页“停止 X 并移除”会立即断开该机器；connector 致命退出，launcher 关闭整套进程。
+- 独立 CLI 修改数据库不负责断开已建立连接；需要即时断开时使用运行中 relay 的管理页。
 
-`packages/client/connection/README.md`：
+### 浏览器
 
-> The fence is a reachability policy, not authentication.
-
-dsh 0.1.2 另外给自己加了一层浏览器认证（启动 token 换 `dsh-auth-*` cookie，见
-[02-dsh-facts.md](02-dsh-facts.md) §4.6）。**它不是本项目的防线**：它只能证明“浏览器拿到过那个
-token”，而 token 是 relay 在用户登录成功后主动递给浏览器的。真正把关的仍是 relay 的认证。
-
-### 1.2 只有模式 A，模式 B 已删除
-
-dsh 0.1.1 及以前把 15 个方法钉死在 loopback（即使声明 `trustedHosts` 也够不到），
-模式 B（把 Host 改写成 loopback）存在的唯一理由就是解锁它们。
-**dsh 0.1.2 删掉了这份名单**（`PRIVILEGED_METHODS` 已不存在），所以：
-
-- 模式 A 下设置页、凭据页、模型发现直接可用，不再需要任何开关
-- 保留模式 B 只剩下“关掉 dsh 自带的 rebinding 防御”一个效果 → `unlockPrivileged` 已从代码与文档中删除
-
-**不要高估 fence 的保护。** dsh 源码注释自己写了：
-
-> the deployment's own default already carries `bash` and the filesystem tools, so **any caller that may start a session at all can already run commands as this process. Pinning the switch would be a fence beside an open gate.**
-
-即：任何能创建会话的人都能跑 `bash`，照样能 `cat` 出凭据文件。
-**「relay 认证被突破」就等于完全失守**，dsh 那层只是多一步。
-
-选模式 A 的真正理由是工程性的，不是安全性的：
-1. 它是官方支持路径，将来 dsh 若加 socket 层校验不会把你打死
-2. relay 不用改写头，少一类出错可能
-3. 日常需求（看进度 + 发指令 + 批准）完全不受影响
-
-### 1.3 connector 是拨出的，所以被控机没有攻击面
-
-connector 主动连 relay，被控机不监听任何公网端口，不需要端口映射。
-**这消除了「家里电脑被扫描」这一整类风险** —— 攻击者只能攻击 relay。
-
-## 2. 认证设计（三层）
-
-### 第 1 层：机器接入（connector → relay），用公钥
-
-**不要用共享密码。** 一台机器泄露会导致全线沦陷，且无法单独把某一台停掉。
-
-```
-1. connector 首次启动生成 Ed25519 密钥对
-   私钥存 ~/.dsh-remote/device.key，文件权限 600（Windows 上用 ACL 限制到当前用户）
-2. 管理员在管理页 `/_admin` 生成注册令牌：
-   一次性，固定 **5 分钟**有效（像短信验证码，不可配置）；库里只存哈希，
-   用掉 / 吊销时整行删除，过期的在下次签发时清掉
-3. connector 首次连接时携带该令牌 + 公钥 + 期望的 slug，完成注册
-4. 之后每次连接走签名挑战：relay 发 nonce → connector 用私钥签名 → relay 用已存公钥验签
-```
-
-实现：`node:crypto` 内置 Ed25519，无需第三方。
-
-```ts
-const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519')
-const sig = crypto.sign(null, nonceBuffer, privateKey)
-const ok  = crypto.verify(null, nonceBuffer, publicKey, sig)
-```
-
-好处：无长期共享密钥；机器丢失可单独把那一台停止并移除（删掉它的公钥）；审计日志能区分机器。
-
-### 第 2 层：人类登录（浏览器 → relay）
-
-**v1：密码 + TOTP + 短期 JWT**
-
-| 项 | 方案 |
+| 项目 | 当前实现 |
 |---|---|
-| 密码哈希 | `@node-rs/argon2`，argon2id |
-| 密码策略 | **至少 6 个字符，且大写 / 小写 / 数字 / 其他字符四类里至少占三类**（用户拍板，从“至少 12 个字符、不限组成”改来）。显式接受的风险见 §6 |
-| 二次因子 | `otplib` TOTP，首次登录扫码绑定 |
-| 会话 | `jose` 签发 JWT，**15 分钟**有效；配 httpOnly + Secure + SameSite=Lax 的 refresh cookie（30 天，可吊销） |
-| Cookie 作用域 | `Domain=.dsh.example.com`（要跨子域名共享会话） |
-| 限流 | `rate-limiter-flexible`，登录接口 5 次失败锁 15 分钟，按 IP + 按账号双维度 |
-| 注册 | **关闭开放注册**。`dsh-remote-relay init` 创建唯一管理员；多用户靠邀请令牌 |
+| 管理员 | 单管理员，关闭开放注册 |
+| 密码 | 至少 6 字符，大写、小写、数字、其他字符四类中至少三类 |
+| 密码哈希 | Node 内置 scrypt，参数由 password.ts 定义 |
+| 二次验证 | TOTP，首次使用完成绑定 |
+| 会话 | 15 分钟 JWT；30 天可吊销 refresh cookie |
+| Cookie | HttpOnly、SameSite=Lax；HTTPS 使用 Secure 和 __Secure- 前缀 |
+| 限流 | 按 IP 与账号双维度，5 次失败锁定 15 分钟 |
+| 账号恢复 | 有数据库访问权的操作者可重置密码或 TOTP，现有会话随之吊销 |
 
-⚠️ Cookie 必须设 `Domain=.dsh.example.com` 才能在 `pc1.dsh.example.com` 上生效。
-配套：**必须开 `__Host-` 前缀做不到（它禁止 Domain），改用 `__Secure-` 前缀 + 严格的 CSRF 防护。**
+实现见 [password.ts](../packages/relay/src/auth/password.ts)、[session.ts](../packages/relay/src/auth/session.ts)、
+[cookies.ts](../packages/relay/src/auth/cookies.ts)。
 
-CSRF：relay 自己的管理接口用 double-submit token；转发给 dsh 的请求不需要额外 CSRF（dsh 的 Origin 检查在重写后仍然生效，且 Origin 被强制改成 loopback，等于关掉了这层 —— 所以 **relay 侧必须自己校验原始 Origin**，见 §3）。
+### Loopback 豁免
 
-**后续可选**：OIDC/GitHub OAuth（`openid-client`）、Passkey/WebAuthn（`@simplewebauthn/server`）。接口抽象好，加它们不用改数据模型。
+只有 TCP socket 来源是 loopback，且原始 Host 的 hostname 也是 loopback 时免登录。
+不信任 X-Forwarded-For 来决定豁免。局域网 IP、反代后的域名请求都必须登录。
+首次设置向导还要求数据库中尚无管理员，非 loopback 访问不能抢先初始化。
 
-### 第 3 层：人 ↔ 机器绑定
+IP 模式使用 host-only cookie；域名模式可配置 Cookie Domain 共享子域登录态。
+cookie 不区分端口，同一主机的机器端口共享登录。Domain cookie 不能使用 __Host- 前缀。
 
-- relay 存 `user_machines` 关联表
-- 管理页显示「我的机器」列表 + 在线状态
-- 一个用户没绑定的 machine slug，即使猜到子域名也返回 404（不泄露机器是否存在）
+## 3. 请求检查
 
-### 2.1 本机免登录与统一的非本机认证（D15）
+顺序固定为：认证 → 原始 Host/Origin 与 sec-fetch-site 校验 → 隧道转发。
+WebSocket upgrade 遵守同样的顺序。
 
-IP 单机模式和域名多机模式不使用两套认证。relay 只在以下两个条件**同时成立**时允许免登录：
+- Host 必须属于已配置的管理入口或有效机器路由。
+- 带 Origin 的请求必须与原始目标 authority 匹配；cross-site 请求拒绝。
+- 管理接口采用 CSRF 防护；转发请求同时保留 relay 和 dsh 的信任检查。
+- relay 不重写 Host/Origin；目标 dsh 通过 trustedHosts 声明信任。
 
-1. TCP socket 的实际来源是 loopback；
-2. 原始 `Host` 的 hostname 也是 loopback（`localhost` / `127.0.0.0/8` / `::1`）。
+### dsh Token
 
-这意味着：
+仅在浏览器已通过 relay 认证且 dsh 对 GET 首页返回 401 时，发送一次 token 重定向。
+已有 token 参数时不重定向；API 401 原样透传。响应使用 no-referrer 与 no-store。
+token 只保存在当前控制信道的内存状态中，不写数据库或日志。
+协议依据见 [传输事实](dsh/transport.md)。
 
-- 本机 `http://127.0.0.1:<port>` 可作为开发便利入口；
-- 局域网 `http://192.168.x.x:<port>` 必须登录；
-- 未来 Caddy 从 loopback 转发域名请求时，虽然 socket 是 loopback，但原始 Host 不是，因此仍必须登录；
-- 不信任 `X-Forwarded-For` 来决定免登录，避免反代配置错误造成绕过；
-- 不提供 `allowInsecureLan`。
+### 公开静态资源
 
-IP 联调时 session cookie 是 host-only；域名部署时配置 `Domain=.dsh.example.com` 供子域共享。登录、TOTP、JWT/refresh、吊销和限流逻辑不变。
+除登录与首次设置等认证入口外，以下固定资源不要求登录：
 
-⚠️ `http://<LAN-IP>` 没有 TLS，登录密码和 session cookie 可能被同网段监听。它只能作为显式的开发联调模式：使用普通的 host-only 非 Secure cookie并在启动时打印高危警告。生产域名必须切回 `__Secure-` 前缀 + `Secure`；这是传输/cookie 配置变化，不是另一套认证。
-
-## 3. relay 必须自己做的检查
-
-下列检查必须在 relay 做，因为路由判断本来就在 relay，且不能依赖隔着隧道的 dsh：
-
-| 检查 | 做法 |
+| 路径 | 内容 |
 |---|---|
-| 原始 `Host` 校验 | 必须是已知的 slug 子域名或管理域，否则 404 |
-| 原始 `Origin` 校验 | 若请求带 `Origin`，必须等于 `https://<slug>.dsh.example.com`，否则 403 |
-| `sec-fetch-site` | `cross-site` 直接拒（与 dsh 原策略一致） |
-| WebSocket 升级 | 同样做上述三项检查后才允许升级 |
+| /manifest.webmanifest | 构建期固定 manifest |
+| /_icon/dsh-remote.svg、.ico、.png | 构建期固定图标 |
 
-**顺序不能错：会话认证 → relay 侧安全检查 → 入隧道（头原样转发）。**
-
-### 3.0 dsh 登录 token 的处理
-
-relay 会在“dsh 对首页回 401”时给浏览器一个 303 `…/?token=<dsh token>`（见 02 文档 §4.6）。约束：
-
-| 项 | 做法 |
-|---|---|
-| 时机 | **先过 relay 自己的认证**，才可能看到 401，才会发 token；未登录的浏览器拿不到 |
-| 范围 | 只对 `GET /` 与 `/index.html` 重定向；`/api` 的 401 原样透传（那是页面自己要处理的） |
-| 防循环 | 已带 `token` 参数的请求不再重定向 |
-| 防泄露 | 重定向响应带 `referrer-policy: no-referrer` 与 `cache-control: no-store`；dsh 自己的 303 同样如此 |
-| 存储 | token 只存在 relay 内存里（挂在当前控制信道上），**不写数据库、不进日志** |
-
-### 3.1 认证之前就回答的公开路径
-
-只有两类，都是**构建期固定字节**，不读数据库、不反射任何机器状态，也不进隧道：
-
-| 路径 | 为什么不能要求登录 |
-|---|---|
-| `/manifest.webmanifest` | 浏览器按规范**不带凭据**取它；重定向到 HTML 登录页只会让它解析失败 |
-| `/_icon/dsh-remote.{svg,ico,png}` | 同上，而且**登录页自己就要显示图标** —— 登录前拿不到就没图标 |
-
-图标故意放在 `/_icon/` 而不是 `/favicon.ico`：后者是隧道对面 dsh 前端的路径，
-relay 不去遮盖它（铁律 2）。新增公开路径前先问一句：它的字节会因机器、用户或配置而变吗？
-会变就不能公开。
-
-> 模式 A 下 dsh 会再校验一次 Host/Origin，并且还要求它自己的 cookie，属于纵深防御；
-> 但 relay 不能因此省掉自己的检查，因为路由判断本来就在 relay。
+这些资源不读数据库、不反射机器状态、不进隧道。图标不占用 dsh 的 favicon 路径。
+新增公开资源前必须确认内容不会因用户、机器或配置变化。
 
 ## 4. 部署要求
 
-| 项 | 要求 |
-|---|---|
-| TLS | 必须。泛域名证书 `*.dsh.example.com`。推荐 Caddy 自动 DNS-01 |
-| HSTS | `max-age=31536000; includeSubDomains` |
-| 端口 | relay 只监听 `127.0.0.1:<port>`，由 Caddy/nginx 反代。不要直接暴露 |
-| 系统加固 | relay 进程用非 root 专用用户运行；systemd 加 `ProtectSystem=strict` 等 |
-| 备份 | SQLite 文件（含设备公钥、用户、绑定关系）定期备份 |
+- 公网必须 HTTPS/WSS。relay 监听 loopback，由 Caddy/nginx 终结 TLS并保留原始 Host。
+- 泛域名证书使用 DNS-01；配置 HSTS：max-age=31536000、includeSubDomains。
+- 用非 root 专用用户运行，限制可写目录；systemd 配置见 [部署说明](../deploy/README.md)。
+- 定期备份 relay 数据库、设备密钥及 dsh home；SQLite WAL 模式要求数据库目录可写。
+- 明文局域网 HTTP 仅用于显式开发联调，会使用非 Secure cookie并打印高风险警告。
+  同网段监听者可能取得密码与会话，不应作为公网部署方式。
+- 发行包排除 pnpm 的 .modules.yaml 与 .pnpm/lock.yaml 等 registry 账本，避免泄露内网镜像地址。
+  更换镜像或打包方式后，检查解压产物中的内部域名。
 
-## 4.1 发行包不能带出内网痕迹
+## 5. 审计
 
-绿色包是 `pnpm deploy` 出来的一整棵 `node_modules`，里面有两个**运行时用不到、但会记下当时解析用的 registry** 的
-pnpm 账本文件：
+relay 的安全事件写入两处：SQLite audit_log 表与带 audit:true 的 pino JSON 日志。
+事件包括管理员初始化、密码/TOTP 变更、登录成败、退出、设备注册与认证、停止并移除、远程入口关系变化。
+完整词表见 [events.ts](../packages/relay/src/audit/events.ts)。
 
-| 文件 | 泄露内容 |
-|---|---|
-| `node_modules/.modules.yaml` | 一行 `default: <registry>` |
-| `node_modules/.pnpm/lock.yaml` | 每个包一条 `tarball: <registry>/...`（几百条） |
+audit_log 不自动过期；清理属于显式运维动作。没有审计页面，查询方式见 relay-audit skill。
+禁止记录密码、TOTP secret、私钥及 bearer token。
 
-在公司内网镜像后面打的包，等于把内部 Artifactory 地址随发行包发出去。`scripts/pack.mjs` 的
-`isPnpmBookkeeping` 在进 zip 时把这两个文件挡掉（Node 的模块解析从不读它们，真正的包目录与
-符号链接都在 `.pnpm/<name>@<ver>/` 下，照旧保留）。
-
-`.npmrc` 的 `lockfile-include-tarball-url=false` 管的是仓库里那份 `pnpm-lock.yaml`，管不到
-deploy 产物——两道口子要分别堵。**换镜像源或换打包方式后，用「解开 zip 搜一遍公司域名」验一次。**
-
-## 5. 审计日志（必做）
-
-每条记录时间、用户、机器、动作、源 IP：
-
-- 登录成功 / 失败
-- 设备注册 / 停止并移除
-- 隧道建立 / 断开
-- **审批请求与结果**（M5 之后）
-
-写两处，一次调用写完（`packages/relay/src/audit/recorder.ts`）：
-
-| sink | 用途 |
-|---|---|
-| SQLite `audit_log` 表（`relay.db`） | 权威副本，可查询，**永不自动过期**（清理是显式运维动作） |
-| `pino` JSON 行（带 `audit: true`） | 跟流量日志在同一条流里，用来对时间线 |
-
-**不给它做页面**（用户拍板）：审计记录是写给事后排查的人（或 AI）看的，不是日常用户
-在手机上翻的东西。控制台曾经有过 `/_admin/audit` 和机器页预览，已删除。
-怎么查、怎么判风险见 skill `relay-audit`（`.agents/skills/relay-audit/SKILL.md`）。
+dsh 的 approval/asked、approval/decided 等审批事件属于 dsh 会话日志，
+不属于 relay 的 audit_log；relay 不解析会话业务协议。
 
 ## 6. 显式接受的风险
 
-| 风险 | 决定 |
+| 风险 | 边界与缓解 |
 |---|---|
-| relay 被攻破 → 被控机完全沦陷 | 接受。bash 即 RCE；缓解靠强认证 + TOTP + 限流 + 审计 |
-| 密码下限从 12 位降到 6 位（改用“四类字符取三类”补偿） | 接受（用户拍板）。代价是单密码的猜解空间明显变小；守住的东西变成 **TOTP 必开 + 5 次失败锁 15 分钟（IP 与账号双维度）**，且 relay 不得裸暴在公网 HTTP 上。副作用：纯小写的长口令短语（如 `correct horse battery staple`）也会被拒，因为组成规则无条件生效 |
-| 已登录用户可以访问设置/凭据页 | 接受。服务端本就不按 loopback 区分；客户端那道 gate 由 `remote-privileged` 插件主动解除（D17）——反正能开会话就能跑 shell |
-| 插件把 `ownsHost` 写死为 true，没有开关 | 接受（用户拍板）。它只在已认证的页面里生效，不碰 fence、不改头；代价是「在被控机上用系统程序打开文件」这类动作也会被放出来，远程点了等于无声失败 |
-| dsh 登录 token 会出现在浏览器 URL 里 | 接受。同源重定向 + `no-referrer`，且只发给已登录会话；dsh 马上把它换成 HttpOnly cookie 并跳回干净 URL |
-| 无 E2E 加密 | 接受（v1）。relay 是用户自己的服务器；且 UI 由 relay 下发，E2EE 在此架构下防护有限 |
-| 隧道内明文 HTTP | 接受。外层 WSS 已加密，内层是 relay ↔ 本机 loopback |
-| dsh 自身的沙箱能力有限（Windows 上尤其） | 接受。这是 dsh 的问题，不是本项目的 |
-| 常驻服务跑在沙箱之外，且活过会话与 dsh 进程 | 接受，**但加了一道门**。`packages/plugins/services` 用 `node:child_process` 直接 spawn，绕过 web profile 那个真会约束的 `pwsh-sandbox`（Windows 上是 ACL 受限令牌）。这不引入新的风险**类别**（§6 第一行已接受「bash 即 RCE」），但会让「用户选了 `read-only` / `workspace-write` 预设」变得名不副实，所以 `service_start` / `service_restart` 读会话解析出的沙箱模式：`danger-full-access` 不问（`bash` 本来就给了同样能力，再弹一次只是仪式），**任何受限模式都走 `ctx.approval` 征求人工批准、只有 `allowed-once` 放行**，受限但没有批准服务 / 没有归属会话一律 fail closed。面板上**刻意没有「启动」按钮** —— 「页面上一个能在沙箱外跑任意命令的输入框」和「一个能停掉你已经看得见的东西的按钮」性质不同，创建只能走带批准门的工具。配置项 `approvalInConfinedSandbox` 可以关掉这道门，关掉等于明确接受服务静默逃逸 |
-| 页面上有一个能往真 shell 里打任意文本的输入框 | 接受，**边界写死在通道上**。`packages/plugins/terminal` 的面板输入框等同于远程执行任意命令，但它**不引入新的风险类别**（§6 第一行已接受「bash 即 RCE」），也**不绕过沙箱**——与 `services` 不同，本插件自己不 spawn：`terminal-bash` 在 `danger-full-access` 以外的每种模式下都先 `ctx.sandbox.confine()` 再启动 shell，所以受限预设下开出来的终端与 dsh 自己的 `bash` / `pwsh` 工具受同一套约束（docs/02 §14.7），因此**不需要再加一道批准门**。真正划的那条线是**面板不能创建能力**：通道只有 `list` / `read` / `send` / `interrupt`，**没有 `open` / `close`** —— 造一个 shell 只能走 turn 里的 `terminal_open`，那里有转录记录也有审批栈。冒烟脚本里有两条专门锁死通道上不存在 `open` / `close` |
+| relay 账号或服务器失守 | 等价于目标机器用户权限下的 shell；依靠登录、TOTP、限流、TLS 与审计 |
+| 6 字符密码下限 | 组成规则不等同于长密码强度；TOTP 必开、公网 TLS、双维度限流；不复用密码 |
+| 固定 YOLO | 自动允许合法权限请求，模型误判、注入、删除、覆盖、安装或读取凭据不会被权限卡拦下 |
+| ownsHost 固定为 true | 允许已认证用户编辑设置，也开放在目标机器桌面打开文件的能力 |
+| dsh token 出现在 URL | 同源交换、no-referrer、HttpOnly cookie；仅向已登录用户发放 |
+| relay 可见明文业务流量 | relay 属于可信部署组件，TLS 在其前端终结；控制与数据隧道使用 WSS |
+| 常驻服务独立于会话和 dsh | 服务直接 spawn，受限沙箱模式下 start/restart 必须获得 allowed-once；面板不能创建服务 |
+| 交互终端可以输入 shell 文本 | 仅模型能通过 interactive_terminal/start 创建终端；网页通道只有 list/read/send/interrupt，沿用 dsh 沙箱 |
+| 文件浏览读取边界 | files 插件不再自行读取文件；原生 workspaceFiles 负责目录/文件授权、分页和 HTML iframe 隔离，项目插件只通过认证 dsh 通道读取 Git snapshot；右键菜单不提供写入 |
+| alpha 依赖 | 只对明确选择的 dsh 族及 workspace 配置列明的依赖豁免 release-age；保留固定版本和完整性校验 |
 
-## 7. 给使用者的安全须知（要写进最终 README）
+固定 YOLO 详情见 [插件说明](../packages/plugins/yolo-mode/README.md)。停用并重启后才恢复原生权限服务，
+已有会话仍保留策略历史，需重新选择原生权限预设。
+常驻服务的 approvalInConfinedSandbox 配置可以关闭受限模式批准门，意味着显式接受该服务的沙箱逃逸。
+默认 YOLO 下使用 danger-full-access，服务无需人工批准。
 
-> 通过本工具，任何拿到你 relay 账号的人都能在你的机器上执行任意命令、读写任意文件、读取你配置在 dsh 里的所有 API Key。
-> - 必须开启 TOTP 二次验证
-> - 密码不要与其他站点复用
-> - 公用设备上用完立即登出
-> - 定期检查「我的机器」列表；怀疑出事时到跑 relay 的机器上查安全记录（日志 + `relay.db`）
-> - 不用的机器及时停止并移除
+## 7. 使用须知
+
+开启 TOTP、不复用密码、公用设备用完退出登录；及时停止并移除不用的机器。
+怀疑异常时到运行 relay 的机器上查询日志和 relay.db，而不是依赖页面状态判断安全。

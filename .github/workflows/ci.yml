@@ -19,8 +19,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # pnpm 版本取自根 package.json 的 packageManager 字段
+      # 本地不强制 pnpm 版本；CI 固定版本以保持依赖安装可复现。
       - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.0
 
       - uses: actions/setup-node@v4
         with:

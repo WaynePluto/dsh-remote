@@ -25,7 +25,7 @@ import {
 } from './helpers.js'
 
 const JWT_SECRET = new Uint8Array(32).fill(0x39)
-/** Only ever sent in the Host header; every socket still goes to loopback. */
+/** 只会发送到 Host header；每个 socket 仍连接 loopback。 */
 const LAN_IP = '10.1.2.87'
 const HUB_SLUG = 'hub'
 const HUB_MACHINE = 'machine-hub'
@@ -51,7 +51,7 @@ interface Fixture {
 
 const fixtures: Fixture[] = []
 
-/** A stand-in for one machine's dsh: it answers with the name of that machine. */
+/** 一台机器 dsh 的替身：用该机器的名称响应。 */
 async function startUpstream(machine: string): Promise<Upstream> {
   const server = http.createServer((req, res) => {
     const body = JSON.stringify({ machine, host: req.headers.host, path: req.url })
@@ -116,7 +116,7 @@ async function startFixture(): Promise<Fixture> {
     }),
   ]
   await Promise.all(connectors.map(async connector => connector.ready()))
-  // Enrollment opens the port in the background; wait for that queued work.
+  // 注册会在后台打开端口；等待排队的工作完成。
   const memberPort = await relay.memberPorts.ensure(MEMBER_MACHINE)
   if (memberPort === undefined) throw new Error('the member machine did not get a browser port')
 
@@ -134,7 +134,7 @@ async function startFixture(): Promise<Fixture> {
   return fixture
 }
 
-/** Load the console to obtain the double-submit CSRF cookie it issues. */
+/** 加载控制台，以获取它签发的双提交 CSRF cookie。 */
 async function openConsole(fixture: Fixture): Promise<{ csrf: string; csrfPair: string }> {
   const page = await httpRequest({
     port: fixture.mainPort,
@@ -181,7 +181,7 @@ describe('D16 member ports', () => {
     expect(member.status, member.body).toBe(200)
     expect(JSON.parse(member.body)).toMatchObject({
       machine: MEMBER_SLUG,
-      // Mode A forwards the browser's own authority untouched.
+      // 模式 A 原样转发浏览器自己的 authority。
       host: `${LAN_IP}:${String(fixture.memberPort)}`,
       path: '/api/session.list',
     })
@@ -194,7 +194,7 @@ describe('D16 member ports', () => {
     expect(hub.status, hub.body).toBe(200)
     expect(JSON.parse(hub.body)).toMatchObject({ machine: HUB_SLUG })
 
-    // The hub answers on the main port, so it must not also hold a member port.
+    // hub 在主端口响应，因此不能同时占用成员端口。
     expect(fixture.relay.memberPorts.portOf(HUB_MACHINE)).toBeUndefined()
     expect(fixture.store.getDeviceByMachineId(HUB_MACHINE)?.browserPort).toBeNull()
     expect(fixture.store.getDeviceByBrowserPort(fixture.memberPort)?.machineId).toBe(MEMBER_MACHINE)
@@ -220,8 +220,8 @@ describe('D16 member ports', () => {
     })
     expect(api.status).toBe(401)
 
-    // The login page itself is served on the member port, so that redirect ends
-    // somewhere useful instead of a dead end.
+    // 登录页本身在成员端口提供，因此该重定向会落到
+    // 有用的位置，而不是死路。
     const login = await httpRequest({
       port: fixture.memberPort,
       path: '/_auth/login',
@@ -243,7 +243,7 @@ describe('D16 member ports', () => {
     expect(consolePage.headers.location)
       .toBe(`http://${LAN_IP}:${String(fixture.mainPort)}${ADMIN_PATH_PREFIX}`)
 
-    // Connectors keep dialing the main port; a member port is browser-only.
+    // connector 始终拨号主端口；成员端口只供浏览器使用。
     const tunnel = await httpRequest({
       port: fixture.memberPort,
       path: TUNNEL_CONTROL_PATH,
@@ -252,11 +252,11 @@ describe('D16 member ports', () => {
     expect(tunnel.status).toBe(404)
   })
 
-  // M2 acceptance: an authenticated caller asking for a slug this hub does not
-  // serve must get a bare 404. Anything richer (403, or a different body for a
-  // known-but-offline machine) would turn the hub into an oracle for which
-  // machines exist. Unauthenticated callers never get this far: they are
-  // redirected to the login page before routing is resolved.
+  // M2 验收：已认证调用方请求此 hub 不提供的 slug 时，
+  // 必须得到裸 404。更丰富的响应（403，或已知但
+  // 离线机器的不同响应体）会把 hub 变成查询哪些机器
+  // 存在的 oracle。未认证调用方不会走到这里：它们会
+  // 在解析路由前重定向到登录页。
   it('answers 404 for a slug this hub does not serve, without revealing existence', async () => {
     const fixture = await startFixture()
 
@@ -272,7 +272,7 @@ describe('D16 member ports', () => {
     })
 
     expect(unknown.status).toBe(404)
-    // A registered machine must be indistinguishable from one that never existed.
+    // 已注册机器必须与从未存在过的机器无法区分。
     expect(known.status).toBe(404)
     expect(known.body).toBe(unknown.body)
   })
@@ -296,9 +296,9 @@ describe('D16 member ports', () => {
     })
     expect(issued.status, issued.body).toBe(200)
 
-    // Without a public domain the browser reaches pc3 at this very host on a
-    // port allocated later, and dsh matches a port-less entry against any port —
-    // which is what lets the command be printed before that port exists.
+    // 没有公网域名时，浏览器会在当前主机上通过
+    // 日后分配的端口访问 pc3，而 dsh 会将不带端口的条目匹配到任意端口——
+    // 因此端口尚不存在时也能打印命令。
     expect(issued.body).toContain(`--relay ws://${host} --slug pc3 --enroll-token `)
     expect(issued.body).toContain(`--hub-authority ${LAN_IP}<`)
   })
@@ -329,7 +329,7 @@ describe('D16 member ports', () => {
     })
     expect(revoked.status).toBe(303)
 
-    // Revocation closes the listener in the background; wait for that queued work.
+    // 吊销会在后台关闭 listener；等待排队的工作完成。
     await fixture.relay.memberPorts.release(MEMBER_MACHINE)
     expect(fixture.relay.memberPorts.portOf(MEMBER_MACHINE)).toBeUndefined()
     await expect(httpRequest({
@@ -358,7 +358,7 @@ describe('D16 member ports', () => {
     fixture.connectors.push(reconnected)
     await reconnected.ready()
 
-    // A bookmark must survive re-enrollment, so the reserved port is reused.
+    // 书签必须在重新注册后仍然有效，因此复用预留端口。
     expect(await fixture.relay.memberPorts.ensure(MEMBER_MACHINE)).toBe(original)
     const member = await httpRequest({
       port: original,

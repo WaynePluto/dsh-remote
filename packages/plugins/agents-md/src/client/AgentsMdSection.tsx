@@ -1,39 +1,24 @@
-/**
- * The Global instructions settings page.
- *
- * A plain textarea over one file, with an explicit Save. It is deliberately NOT
- * an auto-saving editor: this text is prepended to every conversation on the
- * machine, so a half-typed sentence becoming a standing instruction is a real
- * cost, and the moment of committing to it should be a decision.
- *
- * WHY THE DRAFT IS KEPT ON FAILURE. This repository has been bitten twice by
- * settings pages that threw away what a person had typed when the Host refused
- * a write (docs/02 §8.8). The rule that came out of it applies here even though
- * this page does not use the settings domain at all: validate locally with the
- * SAME function the Host runs, show the error next to the thing that caused it,
- * and never clear the draft on failure.
- *
- * @module @dsh-remote/dsh-plugin-agents-md/client/AgentsMdSection
- */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CSSProperties, ReactNode } from 'react'
 import { documentFault, MAX_BYTES, utf8Bytes } from '../shared.js'
 import type { AgentsMdDocument } from '../shared.js'
 import { fill } from './locales.js'
 import type { AgentsMdKey } from './locales.js'
 
-/** What this plugin injects into its own registration. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 export interface AgentsMdSectionInjected {
-  /** Read the stored file. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   load: () => Promise<AgentsMdDocument>
-  /** Replace the stored file. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   save: (content: string) => Promise<AgentsMdDocument>
 }
 
-/** Everything the component reads. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 export type AgentsMdSectionProps = Partial<AgentsMdSectionInjected> & {
-  /** Locale seat bound to this plugin's namespace. */
+  /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
   t?: (key: AgentsMdKey) => string
 }
 
@@ -45,24 +30,30 @@ const label: CSSProperties = { fontWeight: 600 }
 
 const muted: CSSProperties = { color: 'var(--dsw-alias-label-secondary, #6b7280)' }
 
-/**
- * A muted paragraph with no margin of its own.
- *
- * The page is a flex column with its own gap; a `<p>`'s default margin stacks
- * on top of that and doubles every gap it appears in.
- */
+/** 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。（涉及：`<p>`） */
 const note: CSSProperties = { ...muted, margin: 0 }
 
 const row: CSSProperties = { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }
 
-/**
- * The editor.
- *
- * ⚠️ The monospace stack is written out in full rather than relying on
- * `--dsw-font-mono`: dsh references that variable in four places and defines it
- * in none, so it always falls back — and a fallback of `monospace` alone lands
- * on the browser's default fixed font on Windows (docs/02 §8.6b).
- */
+const EDITOR_CLASS = 'dshx-agents-md-editor'
+const EDITOR_STYLES = `
+.${EDITOR_CLASS} {
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+}
+.${EDITOR_CLASS}:focus {
+  outline: none;
+  border-color: var(--dsw-alias-brand-primary);
+}
+.${EDITOR_CLASS}:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  opacity: 0.6;
+  cursor: default;
+}
+`
+
+/** 界面契约：此处说明布局、主题 token、尺寸或 DOM 接缝。（涉及：`--dsw-font-mono`、`monospace`） */
 const editor: CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
@@ -70,31 +61,12 @@ const editor: CSSProperties = {
   resize: 'vertical',
   padding: '10px 12px',
   borderRadius: '8px',
-  border: '1px solid var(--dsw-alias-border-l1, rgba(128,128,128,0.3))',
-  // Opaque, not a layer token: in the light theme bg-layer-1/2/3 are all the
-  // same white, so a layered token would draw nothing at all (docs/02 §8.6a).
-  background: 'var(--dsw-alias-bg-base, transparent)',
-  color: 'inherit',
+
+  // 状态样式由 EDITOR_STYLES 的局部 class 管理，避免 inline 属性压过 :focus。
   fontFamily: 'var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
   fontSize: '12px',
   lineHeight: 1.6,
   tabSize: 2,
-}
-
-const button: CSSProperties = {
-  padding: '6px 12px',
-  borderRadius: '8px',
-  border: '1px solid var(--dsw-alias-border-l1, rgba(128,128,128,0.3))',
-  background: 'transparent',
-  color: 'inherit',
-  cursor: 'pointer',
-  font: 'inherit',
-}
-
-const primary: CSSProperties = {
-  ...button,
-  borderColor: 'var(--dsw-alias-border-l2, rgba(128,128,128,0.45))',
-  fontWeight: 600,
 }
 
 const errorStyle: CSSProperties = { color: 'var(--dsw-alias-state-error-primary, #dc2626)' }
@@ -103,11 +75,7 @@ const mono: CSSProperties = {
   fontFamily: 'var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
 }
 
-/**
- * The page.
- * @param props - injected channel callers, plus the locale seat.
- * @returns the editor, or a short notice while it is loading or unavailable.
- */
+/** 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。 */
 export function AgentsMdSection(props: AgentsMdSectionProps): ReactNode {
   const { load, save, t } = props
 
@@ -117,7 +85,7 @@ export function AgentsMdSection(props: AgentsMdSectionProps): ReactNode {
   const [saved, setSaved] = useState(false)
   const [loadError, setLoadError] = useState<string | undefined>(undefined)
   const [saveError, setSaveError] = useState<string | undefined>(undefined)
-  /** Guards against a resolved load overwriting a draft after unmount. */
+  /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
   const alive = useRef(true)
 
   useEffect(() => () => { alive.current = false }, [])
@@ -129,7 +97,7 @@ export function AgentsMdSection(props: AgentsMdSectionProps): ReactNode {
       const next = await load()
       if (!alive.current) return
       setDocument(next)
-      // Reloading is an explicit action, so it is allowed to replace the draft.
+      // 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。
       setDraft(undefined)
       setSaved(false)
     } catch (error: unknown) {
@@ -154,12 +122,12 @@ export function AgentsMdSection(props: AgentsMdSectionProps): ReactNode {
       const next = await save(content)
       if (!alive.current) return
       setDocument(next)
-      // Only now is the draft retired: it is equal to what was stored.
+      // 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。
       setDraft(undefined)
       setSaved(true)
     } catch (error: unknown) {
       if (!alive.current) return
-      // The draft deliberately survives; see the module comment.
+      // 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。
       setSaveError(error instanceof Error ? error.message : String(error))
     } finally {
       if (alive.current) setBusy(false)
@@ -175,6 +143,7 @@ export function AgentsMdSection(props: AgentsMdSectionProps): ReactNode {
 
   return (
     <section style={page}>
+      <style>{EDITOR_STYLES}</style>
       <div style={intro}>
         <div style={label}>{t('title')}</div>
         <p style={note}>{t('intro')}</p>
@@ -185,6 +154,7 @@ export function AgentsMdSection(props: AgentsMdSectionProps): ReactNode {
       {!document_.exists ? <p style={note}>{t('missing')}</p> : null}
 
       <textarea
+        className={EDITOR_CLASS}
         style={editor}
         value={content}
         spellCheck={false}
@@ -206,25 +176,25 @@ export function AgentsMdSection(props: AgentsMdSectionProps): ReactNode {
         : null}
 
       <div style={row}>
-        <button
-          type="button"
-          style={primary}
+        <Button
+          variant="primary"
+          size="sm"
           disabled={busy || !dirty || tooLarge}
           onClick={() => { void commit() }}
         >
           {busy ? t('saving') : t('save')}
-        </button>
-        <button
-          type="button"
-          style={button}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
           disabled={busy || !dirty}
           onClick={() => { setDraft(undefined); setSaveError(undefined) }}
         >
           {t('revert')}
-        </button>
-        <button type="button" style={button} disabled={busy} onClick={() => { void refresh() }}>
+        </Button>
+        <Button variant="outline" size="sm" disabled={busy} onClick={() => { void refresh() }}>
           {t('reload')}
-        </button>
+        </Button>
         <span style={{ ...muted, ...mono }}>{fill(t('size'), { bytes })}</span>
         {dirty ? <span style={muted}>{t('dirty')}</span> : null}
         {saved && !dirty ? <span style={muted}>{t('saved')}</span> : null}

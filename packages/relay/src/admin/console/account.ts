@@ -10,28 +10,24 @@ import {
 } from './shell.js'
 
 /**
- * A freshly staged authenticator, rendered once in the very response that
- * created it and never again — same rule as the enrollment token panel.
+ * 刚暂存的验证器，只在创建它的响应中渲染一次，此后不再显示——规则与注册令牌面板相同。
  */
 export interface EnrollmentView {
   readonly secret: string
   readonly qrSvg: string
   /**
-   * Whether the confirm field can actually be submitted. `resetAdminTotp`
-   * revokes every session, so a browser that was logged in remotely is signed
-   * out by the reset itself and has to log in again — and that login confirms
-   * the new secret on its own. Only the D15 loopback exemption, which needs no
-   * session, survives the revoke and can post the code from this page.
+   * 确认字段是否确实可以提交。`resetAdminTotp` 会吊销所有会话，因此远程登录的浏览器会被重置操作
+   * 本身退出，并必须重新登录——该登录会自行确认新 secret。只有无需会话的 D15 loopback 豁免
+   * 能在吊销后保留，并可从此页面提交动态码。
    */
   readonly confirmable: boolean
 }
 
 /**
- * The account page: change the password, reset the authenticator.
- * @param options The CSRF token its forms carry, the account being acted on,
- * the signed-in user for the footer, the appearance to render in, a notice or
- * error from the last submit, and a freshly staged authenticator to show once.
- * @returns A complete HTML document.
+ * 账号页面：修改密码、重置验证器。
+ * @param options 表单携带的 CSRF token、要操作的账号、页脚显示的登录用户、
+ * 要渲染的外观、上次提交的提示或错误，以及要显示一次的刚暂存验证器。
+ * @returns 完整的 HTML 文档。
  */
 export function accountPage(options: {
   csrf: string
@@ -91,11 +87,9 @@ ${enrollment.confirmable
 }
 
 /**
- * The page shown when no single administrator can be resolved, so neither form
- * has an account to act on.
- * @param options This machine's name, the signed-in user and the appearance,
- * for the chrome.
- * @returns A complete HTML document.
+ * 无法解析唯一管理员时显示的页面，因此两个表单都没有可操作的账号。
+ * @param options 这台机器的名称、登录用户和外观，用于页面外壳。
+ * @returns 完整的 HTML 文档。
  */
 export function accountUnavailablePage(options: {
   machine: string

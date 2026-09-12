@@ -6,6 +6,10 @@
  *   - 确保自有 dsh profile 存在（D14），spawn 内嵌的 dsh（D13）
  *   - spawn 本机 relay：每台机器都既能当入口又能被打开（D16），本机控制台也是
  *     给本机设置远程入口的唯一地方，所以它不可关闭
+ */
+
+/**
+ * 其余职责：
  *   - spawn connector；挂到哪台入口机器上由 membership.json 决定（D16）
  *   - 首次运行不在终端问密码：管理员由 relay 的浏览器设置向导创建（只对 127.0.0.1
  *     开放），launcher 只负责在没有管理员时把那个地址显眼地打出来
@@ -32,7 +36,7 @@ import { LauncherError } from './errors.js'
 import { JWT_SECRET_ENV_NAME, jwtSecretFilePath, loadOrCreateJwtSecret } from './jwt-secret.js'
 import { membershipFilePath, readMembership } from './membership.js'
 import { assertSupportedNodeVersion } from './node-version.js'
-import { ensureProfile, profileDirectory, resolveDshHome } from './profile.js'
+import { CONCISE_MODE_BUNDLE, ensureProfile, profileDirectory, resolveDshHome } from './profile.js'
 import { relayArguments, resolveRelayEntry } from './relay.js'
 import { relayAdminInitialized } from './relay-admin.js'
 import { createSupervisor, type ChildExit } from './supervisor.js'
@@ -58,8 +62,8 @@ function reportFailure(error: unknown): void {
 function reportChildExit(exit: ChildExit): void {
   const how = exit.signal === null ? `退出码 ${String(exit.code ?? '未知')}` : `收到信号 ${exit.signal}`
   console.error(`\n[dsh-remote] ${exit.name} 意外退出（${how}），正在停止 dsh-remote。`)
-  // A child that dies during start-up is almost always misconfigured, and its
-  // own message says exactly what was wrong; a launcher summary never does.
+  // 启动期间退出的子进程几乎总是配置错误，而且它自己的
+  // 消息会准确说明问题；launcher 摘要从来不会。
   if (exit.recent.length === 0) {
     console.error(`[dsh-remote] ${exit.name} 没有输出任何日志，上面也就没有更多线索。`)
     console.error('')
@@ -71,10 +75,10 @@ function reportChildExit(exit: ChildExit): void {
 }
 
 /**
- * Start dsh, this machine's relay and the connector, print the address block,
- * and stay up until the user interrupts or a child dies.
- * @param argv - command line arguments without the node/script prefix.
- * @returns The process exit code.
+ * 启动 dsh、这台机器的 relay 和 connector，打印地址块，
+ * 并持续运行到用户中断或某个子进程退出。
+ * @param argv - 不含 node/脚本前缀的命令行参数。
+ * @returns 进程退出码。
  */
 export async function run(argv: readonly string[]): Promise<number> {
   const program = new Command()
@@ -96,13 +100,19 @@ export async function run(argv: readonly string[]): Promise<number> {
   const hub = membership?.hub
 
   const dshHome = resolveDshHome()
-  const bootstrap = ensureProfile({ home: dshHome, profile: config.dsh.profile })
+  const bootstrap = ensureProfile({
+    home: dshHome,
+    profile: config.dsh.profile,
+    ...config.dsh.profile === 'dsh-remote-web' ? { managedBundles: [CONCISE_MODE_BUNDLE] } : {},
+  })
   say(bootstrap === 'created'
     ? `已创建 dsh profile ${profileDirectory(dshHome, config.dsh.profile)}`
-    : `使用已有的 dsh profile ${profileDirectory(dshHome, config.dsh.profile)}`)
+    : bootstrap === 'updated'
+      ? `已更新 dsh profile ${profileDirectory(dshHome, config.dsh.profile)}`
+      : `使用已有的 dsh profile ${profileDirectory(dshHome, config.dsh.profile)}`)
 
-  // Mode A: the relay forwards the browser's original Host, so dsh has to trust
-  // every authority a browser may use to reach this machine (铁律 7).
+  // Mode A：relay 原样转发浏览器的 Host，因此 dsh 必须信任
+  // 浏览器可能用来访问这台机器的每个 authority（铁律 7）。
   const lan = lanAddress()
   const trustedHosts = trustedHostsFor({
     lanAddress: lan,
@@ -110,15 +120,15 @@ export async function run(argv: readonly string[]): Promise<number> {
   })
   say(`dsh 信任的地址：${trustedHosts.join('、')}`)
 
-  // All four are resolved before anything is spawned: an incomplete package
-  // must be reported while there is still nothing running to clean up.
+  // 所有四项都在启动任何子进程前解析：不完整的包
+  // 必须在尚无运行中进程可清理时报告。
   const dshBin = resolveDshBin()
   const dshPatchFiles = resolveDshPluginOverlays()
   const relayEntry = resolveRelayEntry()
   const connectorEntry = resolveConnectorEntry()
   say(`dsh 插件：${DSH_PLUGIN_PACKAGE_NAMES.join('、')}`)
 
-  // Never logged: this secret signs every console session.
+  // 从不写入日志：此密钥会签名每个控制台会话。
   const jwtSecret = loadOrCreateJwtSecret(
     jwtSecretFilePath(config.home),
     message => console.warn(`[dsh-remote] ${message}`),
@@ -126,8 +136,8 @@ export async function run(argv: readonly string[]): Promise<number> {
   const relayEnv: NodeJS.ProcessEnv = { ...process.env, [JWT_SECRET_ENV_NAME]: jwtSecret }
 
   let shuttingDown = false
-  // Assigned synchronously by the executor below; optional only because the
-  // compiler cannot see that.
+  // 由下面的 executor 同步赋值；之所以可选只是因为
+  // 编译器看不出来这一点。
   let settle: ((code: number) => void) | undefined
   const finished = new Promise<number>((resolvePromise) => { settle = resolvePromise })
   const supervisor = createSupervisor({
@@ -139,22 +149,22 @@ export async function run(argv: readonly string[]): Promise<number> {
   const shutdown = async (code: number): Promise<void> => {
     if (shuttingDown) return
     shuttingDown = true
-    // Reverse start order, so the connector stops dialing before the relay it
-    // dials goes away, and dsh outlives both of its clients.
+    // 按反向启动顺序停止，使 connector 在它
+    // 拨号的 relay 消失前停止拨号，并使 dsh 比两个客户端都晚退出。
     await supervisor.stopAll()
     settle?.(code)
   }
 
-  // Registered before the first child exists: a Ctrl+C during start-up must
-  // still take the children down rather than orphan them.
+  // 在第一个子进程存在前就注册：启动期间的 Ctrl+C 也必须
+  // 停止子进程，而不是让它们成为孤儿。
   const onSignal = (): void => { void shutdown(0) }
   process.once('SIGINT', onSignal)
   process.once('SIGTERM', onSignal)
 
-  // dsh 0.1.2 authenticates browsers itself: it prints a per-process login
-  // token, and every /api request without the cookie that token buys is a 401.
-  // The connector reports it to the relays, which send an already-authenticated
-  // browser through dsh's own exchange once.
+  // dsh 0.1.2 自己认证浏览器：它打印每进程登录
+  // token，没有该 token 换取的 cookie 的每个 /api 请求都是 401。
+  // connector 将它报告给 relay，relay 通过 dsh 自己的交换流程将已经认证的
+  // 浏览器送入一次。
   let noteDshToken: ((token: string) => void) | undefined
   const dshToken = new Promise<string | undefined>((resolvePromise) => {
     noteDshToken = resolvePromise
@@ -207,9 +217,9 @@ export async function run(argv: readonly string[]): Promise<number> {
     env: relayEnv,
   })
 
-  // The port answers before the tree has settled, and the token line comes
-  // after; a machine whose token never arrives still serves everything except
-  // dsh's own login exchange, so this waits but does not fail.
+  // 端口会在插件树稳定前响应，而 token 行稍后才出现；
+  // 如果 token 始终没到，机器仍提供除
+  // dsh 自己的登录交换外的所有服务，因此这里等待但不失败。
   const token = await Promise.race([
     dshToken,
     new Promise<undefined>((resolvePromise) => {
@@ -230,13 +240,13 @@ export async function run(argv: readonly string[]): Promise<number> {
     ...token === undefined ? {} : { env: { ...process.env, [DSH_TOKEN_ENV_NAME]: token } },
   })
 
-  // A relay that refuses its configuration dies within milliseconds; printing
-  // the banner on top of that error would bury the only useful line.
+  // 拒绝配置的 relay 会在几毫秒内退出；此时打印
+  // banner 会把唯一有用的错误行埋掉。
   if (!shuttingDown) {
-    // Asked here rather than at start-up: on a fresh machine the relay creates
-    // this database itself, so any earlier answer would say "no administrator"
-    // for a file that does not exist yet. An unreadable database means the same
-    // thing as a missing one — setup is still to be done in the browser.
+    // 在这里询问而不是启动时询问：新机器上 relay 会自己创建
+    // 数据库，因此更早的回答会对一个尚不存在的文件说“没有管理员”。
+    // 不可读数据库与缺失数据库含义相同：
+    // 仍需在浏览器中完成设置。
     const adminReady = relayAdminInitialized(config.relay.data)
     console.log(renderBanner({
       dshPort: config.dsh.port,
@@ -251,9 +261,9 @@ export async function run(argv: readonly string[]): Promise<number> {
   return finished
 }
 
-// The version gate runs before anything spawns a child or opens a database:
-// on an old Node those failures surface as errors that say nothing about the
-// real cause.
+// 版本门禁在启动子进程或打开数据库前运行：
+// 在旧 Node 上，这些失败会显示完全没有说明
+// 真正原因的错误。
 try {
   assertSupportedNodeVersion()
 } catch (error) {

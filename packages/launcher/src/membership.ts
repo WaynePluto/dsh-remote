@@ -5,37 +5,32 @@ import { MEMBERSHIP_FILE_NAME, parseMembership, type Membership } from '@dsh-rem
 import { LauncherError } from './errors.js'
 
 /**
- * The dsh-remote state directory of the current OS user.
+ * 当前 OS 用户的 dsh-remote 状态目录。
  *
- * Defaulted exactly like the connector's and the relay's, because all three
- * processes of one machine have to agree on where `device.key` and
- * `membership.json` live without being told.
- * @returns An absolute path, `~/.dsh-remote`.
+ * 默认值与 connector 和 relay 完全相同，因为同一机器的三个
+ * 进程必须对 `device.key` 和
+ * `membership.json` 所在位置达成一致，无需额外告知。
+ * @returns 绝对路径 `~/.dsh-remote`。
  */
 export function defaultDshRemoteHome(): string {
   return join(homedir(), '.dsh-remote')
 }
 
 /**
- * @param home - the dsh-remote home directory.
- * @returns Absolute path of this machine's membership file.
+ * @param home - dsh-remote home 目录。
+ * @returns 这台机器 membership 文件的绝对路径。
  */
 export function membershipFilePath(home: string): string {
   return join(home, MEMBERSHIP_FILE_NAME)
 }
 
 /**
- * Read this machine's hub membership.
- *
- * The launcher only reads it: joining and leaving are decided in an admin
- * console (D16). It needs the hub to know which authority a browser will send,
- * so dsh can be told to trust it.
- * @param path - absolute path of the membership file.
- * @returns The parsed membership, or undefined when this machine has not joined
- * a hub — the normal state of a fresh install.
- * @throws LauncherError When the file exists but cannot be read or parsed.
- * Treating that as "not joined" would silently start dsh without the hub's
- * `--trusted-host`, and every remote request would then 403 for no visible reason.
+ * 读取这台机器的 hub membership。
+ * launcher 只读取它：加入和离开由管理控制台决定（D16）。launcher 需要 hub 知道浏览器会发送的 authority，
+ * 以便告诉 dsh 信任它；将不可读文件视为“尚未加入”会遗漏 `--trusted-host`，使远程请求无明显原因地得到 403。
+ * @param path - membership 文件的绝对路径。
+ * @returns 解析后的 membership；这台机器尚未加入 hub 时为 undefined——这是新安装的正常状态。
+ * @throws LauncherError 文件存在但无法读取或解析时抛出。
  */
 export function readMembership(path: string): Membership | undefined {
   let raw: string

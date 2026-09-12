@@ -144,7 +144,7 @@ function validateMigrations(migrations: readonly StoreMigration[]): void {
   }
 }
 
-/** Apply each pending migration in its own transaction and advance user_version atomically. */
+/** 在各自事务中应用每个待处理迁移，并原子推进 user_version。 */
 export function applyStoreMigrations(
   database: DatabaseSync,
   migrations: readonly StoreMigration[] = STORE_MIGRATIONS,

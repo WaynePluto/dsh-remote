@@ -187,7 +187,7 @@ describe('login service and rate limiting', () => {
         { username: 'admin', password: PASSWORD, totpToken: '000000', sourceIp: '10.0.0.3' },
       ]
       for (const attempt of attempts) {
-        // eslint-disable-next-line no-await-in-loop -- independent assertions share one initialized store
+        // eslint-disable-next-line no-await-in-loop -- 独立断言共用同一个已初始化的 store
         await expect(auth.login({ ...attempt, now: NOW })).rejects.toMatchObject({
           name: 'InvalidCredentialsError',
           message: 'username, password, or one-time code is invalid',
@@ -202,7 +202,7 @@ describe('login service and rate limiting', () => {
   it('locks independently after five account failures or five source-IP failures', async () => {
     const accountLimiter = new LoginRateLimiter()
     for (let index = 0; index < 5; index += 1) {
-      // eslint-disable-next-line no-await-in-loop -- the limiter state must advance in order
+      // eslint-disable-next-line no-await-in-loop -- 限流器状态必须按顺序推进
       await accountLimiter.recordFailure('admin', `10.0.0.${String(index)}`)
     }
     await expect(accountLimiter.assertAllowed('admin', '10.0.1.1'))
@@ -210,7 +210,7 @@ describe('login service and rate limiting', () => {
 
     const ipLimiter = new LoginRateLimiter()
     for (let index = 0; index < 5; index += 1) {
-      // eslint-disable-next-line no-await-in-loop -- the limiter state must advance in order
+      // eslint-disable-next-line no-await-in-loop -- 限流器状态必须按顺序推进
       await ipLimiter.recordFailure(`username-${String(index)}`, '10.0.0.1')
     }
     await expect(ipLimiter.assertAllowed('different-user', '10.0.0.1'))

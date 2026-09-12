@@ -4,8 +4,8 @@ import type { AuditRecord } from '../store/types.js'
 import { auditLogLevel, type AuditEvent } from './events.js'
 
 /**
- * Metadata is the free-form part of an audit row. It must stay JSON
- * serializable (the store persists it as JSON) and must never carry a secret.
+ * metadata 是审计行中的自由格式部分，必须保持 JSON
+ * 可序列化（store 会将其持久化为 JSON），且绝不能携带 secret。
  */
 export type AuditMetadata = Readonly<Record<string, unknown>>
 
@@ -20,9 +20,9 @@ export interface RecordAuditInput {
   readonly metadata?: AuditMetadata
 }
 
-/** Metadata carried a key that looks like credential material. */
+/** metadata 携带了看起来像凭据材料的键。 */
 export class AuditSecretLeakError extends Error {
-  /** Dotted path of the offending key, e.g. `metadata.device.totpSecret`. */
+  /** 出问题的键的点号路径，例如 `metadata.device.totpSecret`。 */
   readonly path: string
 
   constructor(path: string) {
@@ -36,11 +36,11 @@ export class AuditSecretLeakError extends Error {
 }
 
 /**
- * Key names that are credential material by definition.
+ * 按定义属于凭据材料的键名。
  *
- * Matching is exact (case-insensitive) plus a suffix check, never a substring
- * check: `tokenId` and `enrollTokenProvided` are references to a secret, not the
- * secret, and existing call sites depend on being able to record them.
+ * 匹配采用精确匹配（不区分大小写）和后缀检查，绝不使用子串
+ * 检查：`tokenId` 和 `enrollTokenProvided` 是 secret 的引用，不是
+ * secret，而现有调用处依赖记录它们。
  */
 const SECRET_KEY_NAMES: ReadonlySet<string> = new Set([
   'token',
@@ -55,7 +55,7 @@ const SECRET_KEY_NAMES: ReadonlySet<string> = new Set([
   'cookie',
 ])
 
-/** `sessionToken`, `apiSecret`, `adminPassword` and friends are caught here. */
+/** `sessionToken`、`apiSecret`、`adminPassword` 等键会在此处被捕获。 */
 const SECRET_KEY_SUFFIXES: readonly string[] = ['token', 'secret', 'password', 'cookie', 'csrf']
 
 function looksSecret(key: string): boolean {
@@ -65,15 +65,12 @@ function looksSecret(key: string): boolean {
 }
 
 /**
- * Reject secret-looking keys anywhere in the metadata tree.
- *
- * This throws instead of redacting on purpose. A silent redaction would let the
- * mistake ship and only show up as a hole in the trail; failing loudly makes it
- * a five-minute fix during development.
- * @param value The metadata value being inspected.
- * @param path Dotted path of `value`, used in the error message.
- * @param seen Cycle guard for the recursive walk.
- * @throws AuditSecretLeakError on the first secret-looking key found.
+ * 拒绝 metadata 树中任何看起来像 secret 的键。
+ * 静默脱敏会让错误进入发布版本并在审计轨迹中留下缺口，因此这里直接抛错。
+ * @param value 正在检查的 metadata 值。
+ * @param path `value` 的点号路径，用于错误消息。
+ * @param seen 递归遍历的循环保护集合。
+ * @throws AuditSecretLeakError 找到第一个看起来像 secret 的键时抛出。
  */
 function assertNoSecretKeys(value: unknown, path: string, seen: Set<object>): void {
   if (value === null || typeof value !== 'object') return
@@ -93,23 +90,17 @@ function assertNoSecretKeys(value: unknown, path: string, seen: Set<object>): vo
 
 let sharedLogger: Logger | undefined
 
-/** Fallback sink for entry points that have no logger of their own. */
+/** 没有自己的 logger 的入口使用的后备出口。 */
 function defaultAuditLogger(): Logger {
   sharedLogger ??= pino({ level: process.env.LOG_LEVEL ?? 'info' })
   return sharedLogger
 }
 
 /**
- * The one way the relay records an audit event.
+ * relay 记录审计事件的唯一入口。
  *
- * A single call writes both sinks: the row in SQLite's `audit_log`, which is
- * the queryable copy nobody can lose to log rotation, and a structured pino
- * line for whatever ships the logs. Every line carries `audit: true`, so
- * ordinary traffic logs can be filtered out with `jq 'select(.audit)'` and
- * nothing else needs to know the event vocabulary.
- *
- * Neither sink has a UI: the console deliberately does not browse the trail
- * (see the skill `relay-audit` for how it is read).
+ * 正常记录时写入 SQLite `audit_log` 和结构化 pino 日志；两者都带 `audit: true`，
+ * 可用 `jq 'select(.audit)'` 过滤。控制台不展示审计轨迹（读取方式见 skill `relay-audit`）。
  */
 export class AuditRecorder {
   readonly #store: RelayStore
@@ -121,12 +112,12 @@ export class AuditRecorder {
   }
 
   /**
-   * Persist one audit event and emit its log line.
-   * @param input The event, its outcome, and whatever context identifies it.
-   * @returns The stored row, including the id the pino line reports as `auditId`.
-   * @throws AuditSecretLeakError when metadata carries credential material.
-   * @throws Whatever the store threw, after logging it at `error`: a security
-   * event that could not be persisted must never be swallowed.
+   * 持久化一个审计事件并输出对应日志行。
+   * @param input 事件、结果以及用于标识它的上下文。
+   * @returns 已存储的行，包括 pino 日志行作为 `auditId` 报出的 id。
+   * @throws AuditSecretLeakError metadata 携带凭据材料时抛出。
+   * @throws store 抛出的原始错误（先按 `error` 记录）：无法持久化的安全
+   * 事件绝不能被吞掉。
    */
   record(input: RecordAuditInput): AuditRecord {
     assertNoSecretKeys(input.metadata, 'metadata', new Set())
@@ -152,7 +143,7 @@ export class AuditRecorder {
       sourceIp: record.sourceIp,
       ...record.metadata === null ? {} : { metadata: record.metadata },
     }
-    // Branching instead of indexing by level keeps pino's own typed signatures.
+    // 使用分支而不是按级别索引，以保留 pino 自身的类型签名。
     if (auditLogLevel(input.event, input.success) === 'warn') this.#logger.warn(fields, record.event)
     else this.#logger.info(fields, record.event)
     return record
@@ -160,11 +151,11 @@ export class AuditRecorder {
 }
 
 /**
- * Build a recorder for one store.
- * @param options The open store, plus the logger to mirror events into. Without
- * a logger the process-wide default sink is used, so a CLI entry point still
- * ships its events.
- * @returns The recorder.
+ * 为一个 store 构建 recorder。
+ * @param options 已打开的 store，以及用于镜像事件的 logger。没有
+ * logger 时使用进程级默认出口，因此 CLI 入口仍会
+ * 输出其事件。
+ * @returns recorder。
  */
 export function createAuditRecorder(
   options: { store: RelayStore; logger?: Logger | undefined },

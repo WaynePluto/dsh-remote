@@ -1,8 +1,4 @@
-/**
- * Host tests for the durable projection, RPC guards, and post-turn retry notice.
- * The queue cases are load-bearing: a refused retry must not call followup(),
- * mutate the inbox, or wake an older queued user message.
- */
+/** 会话与投影契约：此处说明持久事件、投影状态或历史回放边界。 */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
@@ -13,12 +9,12 @@ import {
 } from '../src/index.js'
 import type { FailedTurnView, StoppedTurnView, TurnRetryState } from '../src/shared.js'
 
-/** A pending failure, as the projection would report it. */
+/** 会话与投影契约：此处说明持久事件、投影状态或历史回放边界。 */
 const PENDING: FailedTurnView = {
   kind: 'failed', turn: 2, code: 'TIMEOUT', message: 'connect ETIMEDOUT', retryable: true,
 }
 
-/** A turn the user stopped, as the projection would report it. */
+/** 会话与投影契约：此处说明持久事件、投影状态或历史回放边界。 */
 const STOPPED: StoppedTurnView = { kind: 'stopped', turn: 5, cause: 'user' }
 
 interface FakeInboxMessage { id: string; source: { kind: string } }
@@ -30,7 +26,7 @@ interface FakeAgent {
   followup: ReturnType<typeof vi.fn>
 }
 
-/** Build one agent whose turns this plugin may drive. */
+/** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 function fakeAgent(overrides: Partial<FakeAgent> = {}): FakeAgent {
   return {
     id: 's1',
@@ -44,13 +40,13 @@ function fakeAgent(overrides: Partial<FakeAgent> = {}): FakeAgent {
 
 interface CtxOptions {
   agent?: FakeAgent
-  /** Agents `roots()` reports; defaults to the single agent. */
+  /** 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`roots()`） */
   roots?: FakeAgent[]
   projection?: TurnRetryState
   sessionController?: (id: string) => Promise<{ agent: FakeAgent } | { error: { message: string } }>
 }
 
-/** The projection definition, with only the fields the assertions read. */
+/** 会话与投影契约：此处说明持久事件、投影状态或历史回放边界。 */
 interface RegisteredProjection {
   key: string
   stateVersion: number
@@ -58,7 +54,7 @@ interface RegisteredProjection {
   wire?: unknown
 }
 
-/** What a built context exposes to the assertions. */
+/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 interface Built {
   ctx: Context
   listeners: Map<string, (payload: unknown, next: () => Promise<unknown>) => Promise<unknown>>
@@ -66,7 +62,7 @@ interface Built {
   handled: Map<string, (endpoint: string, payload: unknown) => Promise<unknown>>
 }
 
-/** A context carrying just the service surface this plugin reads. */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 function fakeCtx(options: CtxOptions = {}): Built {
   const agent = options.agent ?? fakeAgent()
   const roots = options.roots ?? [agent]
@@ -120,7 +116,7 @@ describe('apply', () => {
     apply(built.ctx)
     expect(built.registered).toHaveLength(1)
     expect(built.registered[0]).toMatchObject({ key: 'turnRetry', stateVersion: 2 })
-    // Without a `wire` the value never reaches the page and the banner is dead.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`wire`）
     expect(built.registered[0]?.wire).toBeDefined()
   })
 
@@ -131,9 +127,9 @@ describe('apply', () => {
   })
 
   it.each([[PENDING], [STOPPED], [null]])('publishes %j through its own schema', (state) => {
-    // The registry parses the state and the wire view with this schema. A
-    // variant it does not accept is not a missing banner but a throw on the
-    // publication path, and only a real session would ever hit it.
+    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const built = fakeCtx()
     apply(built.ctx)
     expect(built.registered[0]?.stateSchema?.parse(state)).toEqual(state)
@@ -157,8 +153,8 @@ describe('retrySession', () => {
       source: { kind: string; plugin: string; form: string; summary: string }
     }
     expect(message.source).toMatchObject({ kind: 'plugin', plugin: SELF_NAMESPACE, form: 'notice' })
-    // The original prompt is already in the log; repeating it would show the
-    // model the same instruction twice.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。
     expect(message.content[0]?.text).toBe(retryNoticeText(PENDING))
   })
 
@@ -170,7 +166,7 @@ describe('retrySession', () => {
       content: { type: string; text: string }[]
       source: { summary: string }
     }
-    // Nothing failed here, so the notice must not tell the model a request did.
+    // 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。
     expect(message.content[0]?.text).toContain('the user pressed stop')
     expect(message.content[0]?.text).not.toContain('failed model request')
     expect(message.source.summary).toBe(retryNoticeSummary(STOPPED))
@@ -263,9 +259,9 @@ describe('retrySession', () => {
 
 describe('retryNoticeText', () => {
   it('keeps the model-facing notice short even when the provider was not', () => {
-    // The banner can scroll; the context window cannot. Past the first line a
-    // provider's error body says nothing more about what to do next, and this
-    // notice is paid for on every subsequent request of the session.
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    // 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
     const text = retryNoticeText({ ...PENDING, message: 'x'.repeat(NOTICE_MESSAGE_LIMIT * 4) })
     expect(text.length).toBeLessThan(NOTICE_MESSAGE_LIMIT * 2)
     expect(text).toContain('…')

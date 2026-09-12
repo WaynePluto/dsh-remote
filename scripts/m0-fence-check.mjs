@@ -1,21 +1,10 @@
 #!/usr/bin/env node
 /**
- * 本机等价验证：直接构造 Host / Origin / sec-fetch-site / Cookie 打本机 dsh，
- * 判定 dsh 两道门的实际行为 —— `/api` browser-trust fence 与 dsh 自己的浏览器认证。
- *
- * 依据 dsh 源码（0.1.2-alpha.2）：
- *   - packages/client/connection/src/api-request-trust.ts：fence 只读 headers，
- *     不看 socket.remoteAddress，所以本机构造头与真实公网链路等价。
- *   - packages/client/connection/src/rpc-host.ts：先 fence（403），再浏览器认证（401）。
- *   - packages/client/connection/src/browser-auth.ts：`GET /?token=` 换 authority 绑定的
- *     `dsh-auth-*` cookie；没有 loopback 豁免。
- *   - 特权方法名单（旧 PRIVILEGED_METHODS）在 0.1.2 已删除，本脚本据此断言。
- *
- * 用法：
- *   node scripts/m0-fence-check.mjs --token <dsh 启动时打印的 token> [--port 3080] [--fake-host pc1.dsh.example.com]
- *
- * token 来自 dsh 启动输出的这一行：
- *   dsh web: http://127.0.0.1:3080/?token=<token>
+ * 本机等价验证：构造 Host / Origin / sec-fetch-site / Cookie 请求本机 dsh，判定 `/api` browser-trust fence 与浏览器认证两道门。
+ * 依据 dsh 0.1.2-alpha.2：`packages/client/connection/src/api-request-trust.ts` 只读 headers、不看 socket.remoteAddress；`packages/client/connection/src/rpc-host.ts` 先 fence（403）后认证（401）；`packages/client/connection/src/browser-auth.ts` 用 `GET /?token=` 换绑定 authority 的 `dsh-auth-*` cookie，且无 loopback 豁免。
+ * 旧 `PRIVILEGED_METHODS` 在 0.1.2 已删除，本脚本据此断言。
+ * 用法：`node scripts/m0-fence-check.mjs --token <dsh 启动时打印的 token> [--port 3080] [--fake-host pc1.dsh.example.com]`。
+ * token 来自：`dsh web: http://127.0.0.1:3080/?token=<token>`。
  */
 
 import http from 'node:http'

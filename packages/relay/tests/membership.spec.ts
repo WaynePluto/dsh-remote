@@ -2,24 +2,22 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
-import pino from 'pino'
 import { afterEach, describe, expect, it } from 'vitest'
 import { MEMBERSHIP_FILE_NAME, parseMembership, type MembershipHub } from '@dsh-remote/protocol'
-import {
-  BrowserCookiePolicy,
-  createAuthenticationService,
-  createRelayServer,
-  openRelayStore,
-  readCookie,
-  type RelayServer,
-  type RelayStore,
-} from '../src/index.js'
 import {
   ADMIN_MEMBERSHIP_JOIN_PATH,
   ADMIN_MEMBERSHIP_LEAVE_PATH,
   ADMIN_HUB_PATH,
 } from '../src/admin/console-app.js'
-import { cookieHeader, httpRequest, setCookieArray, type HttpResult } from './helpers.js'
+import {
+  closeFixtures,
+  openAuthenticatedPage,
+  openCsrfPage,
+  postCsrfForm,
+  startAuthenticatedRelayFixture,
+  type AuthenticatedRelayTestFixture,
+  type HttpResult,
+} from './helpers.js'
 
 const JWT_SECRET = new Uint8Array(32).fill(0x77)
 const HOST = 'pc1.dsh.test'
@@ -27,75 +25,51 @@ const ORIGIN = 'https://pc1.dsh.test'
 const HUB_URL = 'wss://hub.dsh.test:30809'
 const HUB_SLUG = 'pc2'
 const HUB_AUTHORITY = '10.1.2.87:30810'
-/** Long enough for `membershipSchema`, distinctive enough to grep the page for. */
+/** 对 `membershipSchema` 来说足够长，也足够独特，便于在页面中 grep。 */
 const ENROLL_TOKEN = 'jointoken-4f2b9c7e1a5d8306'
-/** Exactly the shape the entry machine's console prints. */
+/** 与入口机器控制台打印的形状完全一致。 */
 const HUB_COMMAND = `dsh-remote-connector --relay ${HUB_URL} --slug ${HUB_SLUG} --enroll-token ${ENROLL_TOKEN} --hub-authority ${HUB_AUTHORITY}`
 
-interface Fixture {
-  relay: RelayServer
-  port: number
-  store: RelayStore
-  home: string
-  membershipPath: string
-  userId: string
-  sessionCookie: string
+interface Fixture extends AuthenticatedRelayTestFixture {
+  readonly home: string
+  readonly membershipPath: string
 }
 
 const fixtures: Fixture[] = []
 
 async function startFixture(): Promise<Fixture> {
   const home = mkdtempSync(join(tmpdir(), 'dsh-remote-membership-'))
-  const store = openRelayStore({ path: ':memory:' })
-  const user = store.createUser({
-    id: 'membership-test-user',
-    username: 'admin',
-    passwordHash: 'test-password-hash',
-    totpSecret: 'test-totp-secret',
-    totpEnabled: true,
+  const base = await startAuthenticatedRelayFixture({
+    jwtSecret: JWT_SECRET,
+    account: {
+      kind: 'existing-user',
+      input: {
+        id: 'membership-test-user',
+        username: 'admin',
+        passwordHash: 'test-password-hash',
+        totpSecret: 'test-totp-secret',
+        totpEnabled: true,
+      },
+    },
+    relay: { home },
   })
-  const authentication = await createAuthenticationService({ store, jwtSecret: JWT_SECRET })
-  const tokens = await authentication.sessions.issue({ user, sourceIp: '127.0.0.1' })
-  const sessionCookie = cookieHeader(
-    new BrowserCookiePolicy({ mode: 'domain-https', domain: 'dsh.test' }).sessionHeaders(tokens),
-  )
-
-  const relay = createRelayServer({
-    host: '127.0.0.1',
-    port: 0,
-    home,
-    publicDomain: 'dsh.test',
-    publicScheme: 'https',
-    browserAuth: { cookieMode: 'domain-https' },
-  }, { authentication, logger: pino({ level: process.env.RELAY_TEST_LOG ?? 'silent' }), store })
-  const address = await relay.listen()
-
   const fixture: Fixture = {
-    relay,
-    port: address.port,
-    store,
+    ...base,
     home,
     membershipPath: join(home, MEMBERSHIP_FILE_NAME),
-    userId: user.id,
-    sessionCookie,
   }
   fixtures.push(fixture)
   return fixture
 }
 
-async function openConsole(fixture: Fixture): Promise<{ body: string; csrf: string; csrfPair: string }> {
-  const page = await httpRequest({
-    port: fixture.port,
+async function openConsole(fixture: Fixture) {
+  const page = await openCsrfPage(fixture, {
     path: ADMIN_HUB_PATH,
-    headers: { host: HOST, accept: 'text/html', cookie: fixture.sessionCookie },
+    host: HOST,
+    label: 'console',
   })
   expect(page.status, page.body).toBe(200)
-  const setCookie = setCookieArray(page.headers).find(header => header.includes('dsh_csrf='))
-  if (setCookie === undefined) throw new Error('console did not issue a CSRF cookie')
-  const csrfPair = setCookie.split(';', 1)[0] ?? ''
-  const csrf = readCookie(csrfPair, '__Secure-dsh_csrf')
-  if (csrf === undefined) throw new Error('could not parse the CSRF cookie')
-  return { body: page.body, csrf, csrfPair }
+  return page
 }
 
 function post(fixture: Fixture, path: string, options: {
@@ -103,17 +77,13 @@ function post(fixture: Fixture, path: string, options: {
   csrfPair: string
   fields?: Record<string, string>
 }): Promise<HttpResult> {
-  return httpRequest({
-    port: fixture.port,
+  return postCsrfForm(fixture, {
     path,
-    method: 'POST',
-    headers: {
-      host: HOST,
-      origin: ORIGIN,
-      cookie: `${fixture.sessionCookie}; ${options.csrfPair}`,
-      'content-type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({ csrf: options.csrf, ...options.fields }).toString(),
+    host: HOST,
+    origin: ORIGIN,
+    sessionCookie: fixture.sessionCookie,
+    csrfPair: options.csrfPair,
+    fields: { csrf: options.csrf, ...options.fields },
   })
 }
 
@@ -125,7 +95,7 @@ function joinHub(fixture: Fixture, options: {
   return post(fixture, ADMIN_MEMBERSHIP_JOIN_PATH, options)
 }
 
-/** The membership exactly as the connector on this machine would read it. */
+/** connector 在这台机器上实际会读取的 membership。 */
 function storedHub(fixture: Fixture): MembershipHub | undefined {
   return parseMembership(readFileSync(fixture.membershipPath, 'utf8'))?.hub
 }
@@ -135,11 +105,9 @@ function membershipFileExists(fixture: Fixture): boolean {
 }
 
 afterEach(async () => {
-  await Promise.all(fixtures.splice(0).map(async (fixture) => {
-    await fixture.relay.close()
-    fixture.store.close()
-    rmSync(fixture.home, { recursive: true, force: true })
-  }))
+  await closeFixtures(fixtures, {
+    afterStoreClose: fixture => rmSync(fixture.home, { recursive: true, force: true }),
+  })
 })
 
 describe('D16 membership: this machine joining a hub', () => {
@@ -149,8 +117,8 @@ describe('D16 membership: this machine joining a hub', () => {
     const { body } = await openConsole(fixture)
     expect(body).toContain('的远程入口')
     expect(body).toContain('还没有远程入口')
-    // The two directions must not be confusable: revoking a machine that hangs
-    // off this one is not the same as clearing this one's own remote entry.
+    // 两个方向不能混淆：吊销挂在这台机器上的机器
+    // 不等于清除这台机器自己的远程入口。
     expect(body).toContain('别的机器挂在')
     expect(body).toContain('取消只影响')
     expect(membershipFileExists(fixture)).toBe(false)
@@ -177,7 +145,7 @@ describe('D16 membership: this machine joining a hub', () => {
       browserAuthority: HUB_AUTHORITY,
     })
     expect(hub?.joinedAt).toBeGreaterThanOrEqual(before)
-    // The rename must leave the directory holding the final file and nothing else.
+    // rename 后目录中只能留下最终文件，不能有其他内容。
     expect(readdirSync(fixture.home)).toEqual([MEMBERSHIP_FILE_NAME])
 
     if (process.platform !== 'win32') {
@@ -206,11 +174,11 @@ describe('D16 membership: this machine joining a hub', () => {
     const commands = [
       `dsh-remote-connector --relay https://hub.dsh.test --slug ${HUB_SLUG} --enroll-token ${ENROLL_TOKEN}`,
       `dsh-remote-connector --relay hub.dsh.test:30809 --slug ${HUB_SLUG} --enroll-token ${ENROLL_TOKEN}`,
-      // Not a connector command at all: nothing to read a relay out of.
+      // 根本不是 connector 命令：没有可读取的 relay。
       'rm -rf /',
     ]
     for (const command of commands) {
-      // eslint-disable-next-line no-await-in-loop -- each attempt asserts on the same untouched file
+      // eslint-disable-next-line no-await-in-loop -- 每次尝试都断言同一个未改动的文件
       const rejected = await joinHub(fixture, { csrf, csrfPair, fields: { command } })
       expect(rejected.status, command).toBe(400)
       expect(rejected.body).toContain('--relay')
@@ -232,7 +200,7 @@ describe('D16 membership: this machine joining a hub', () => {
     expect(rejected.status).toBe(400)
     expect(rejected.body).toContain('DNS 标签')
     expect(membershipFileExists(fixture)).toBe(false)
-    // A rejected page must never hand the pasted secret back to the browser.
+    // 被拒绝的页面绝不能把粘贴的 secret 交还给浏览器。
     expect(rejected.body).not.toContain(ENROLL_TOKEN)
   })
 
@@ -276,7 +244,7 @@ describe('D16 membership: this machine joining a hub', () => {
     expect(response.status, response.body).toBe(303)
     expect(storedHub(fixture)?.browserAuthority).toBeUndefined()
 
-    // Remote access cannot work without it, so the page must not stay silent.
+    // 没有它远程访问无法工作，因此页面不能保持沉默。
     const { body } = await openConsole(fixture)
     expect(body).toContain('命令里没带')
   })
@@ -292,22 +260,18 @@ describe('D16 membership: this machine joining a hub', () => {
 
     const reloaded = await openConsole(fixture)
     expect(reloaded.body).toContain('挂在一台入口机器上')
-    // Leaving goes through the confirmation page, not a one-click submit.
+    // 离开要经过确认页面，而不是一键提交。
     expect(reloaded.body).toContain(`href="${ADMIN_MEMBERSHIP_LEAVE_PATH}"`)
-    const confirm = await httpRequest({
-      port: fixture.port,
+    const confirm = await openAuthenticatedPage(fixture, {
       path: ADMIN_MEMBERSHIP_LEAVE_PATH,
-      headers: {
-        host: HOST,
-        accept: 'text/html',
-        cookie: `${fixture.sessionCookie}; ${reloaded.csrfPair}`,
-      },
+      host: HOST,
+      cookie: `${fixture.sessionCookie}; ${reloaded.csrfPair}`,
     })
     expect(confirm.status, confirm.body).toBe(200)
     expect(confirm.body).toContain('的远程入口？')
     expect(confirm.body).toContain(HUB_URL)
     expect(confirm.body).not.toContain(ENROLL_TOKEN)
-    // Rendering it leaves the membership exactly as it was.
+    // 渲染它不会改变 membership。
     expect(storedHub(fixture)).toMatchObject({ relayUrl: HUB_URL, slug: HUB_SLUG })
 
     const response = await post(fixture, ADMIN_MEMBERSHIP_LEAVE_PATH, {
@@ -316,7 +280,7 @@ describe('D16 membership: this machine joining a hub', () => {
     })
     expect(response.status, response.body).toBe(303)
     expect(response.headers.location).toBe(ADMIN_HUB_PATH)
-    // The file stays, hub-less: the connector must read a definite "not a member".
+    // 文件会保留但不带 hub：connector 必须读取明确的“not a member”。
     expect(membershipFileExists(fixture)).toBe(true)
     expect(storedHub(fixture)).toBeUndefined()
 
@@ -338,7 +302,7 @@ describe('D16 membership: this machine joining a hub', () => {
     const reloaded = await openConsole(fixture)
     expect(reloaded.body).toContain('注册令牌 已保存')
     expect(reloaded.body).not.toContain(ENROLL_TOKEN)
-    // Only the file the connector reads may hold the secret.
+    // 只有 connector 读取的文件可以保存 secret。
     expect(readFileSync(fixture.membershipPath, 'utf8')).toContain(ENROLL_TOKEN)
 
     const audit = fixture.store.listAudit().find(record => record.event === 'membership.joined')

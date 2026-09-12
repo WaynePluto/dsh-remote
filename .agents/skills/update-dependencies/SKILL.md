@@ -34,7 +34,6 @@ npm view @deepseek-ai/dsh versions --json
 判定口径：
 - **以 npm 上实际发布的版本为准，`latest` / `next` / `alpha` 通道都可采纳**。
   只要能从 npm 安装（不需要从源码构建、不需要 GitHub 依赖），就是候选版本。
-  历史上排除 alpha 的原因是「alpha 常常没发布到 npm」，该原因不成立时不再排除。
 - **alpha 视为高风险升级**：alpha 随时破坏 API，第 2 步的影响评估**逐条做完**再动手，
   并在改版本号前把评估结论告诉用户、由用户确认是否升级（rc 可直接推进）。
 - 若无新版本：告知用户「dsh 已是最新」，确认第 0 步的固定版本检查通过后**结束，不再检查其他依赖**。
@@ -44,17 +43,17 @@ npm view @deepseek-ai/dsh versions --json
 
 dsh 是 0.1.x developer preview，**每个 rc / alpha 都可能有破坏性变更**（alpha 尤甚）。先做功课再改版本号：
 
-1. 读 `docs/05-roadmap.md` 末尾的「dsh <版本> 升级影响评估」小节——上一轮调查的结论都在那里。
+1. 读 `docs/02-dsh-facts.md` 的当前基线、检查表和 `docs/dsh/` 对应主题。
 2. 加载 skill `dsh-source`（`.agents/skills/dsh-source/SKILL.md`），把本地 dsh checkout 切到对应
    tag，核对下面这些**本项目真正依赖的行为**，逐条给出「变 / 没变」而不是凭记忆：
    - `--trusted-host` CLI 参数是否还在、格式是否还是裸 `host` / `host:port`（铁律 7、写错是启动即失败）
    - `/api` 的 Host/Origin 校验逻辑（`packages/client/connection/src/api-request-trust.ts` 一类）
-   - 特权方法是否仍按方法名钉死 loopback（影响 `docs/02-dsh-facts.md` §4.2 与相关测试断言）
-   - dsh 是否新增了自己的浏览器认证（cookie / URL token），会不会让 relay 登录后仍吃 401
-     （0.1.2 已新增，现有实现见 docs/02 §4.6；token 行格式或认证范围变了要同步改 launcher/relay）
+   - ownsHost 与远程设置持久化、浏览器信任围栏是否变化（见 `docs/dsh/transport.md`）
+   - 浏览器认证的 token 输出格式、cookie 与认证范围是否变化，会不会让 relay 登录后仍吃 401
+     （见 `docs/dsh/transport.md`；契约变化时同步改 launcher/relay）
    - 下行 WebSocket 路径与插件 combo 路由是否变化（现为 `/api/remote.mux`、`/plugins/??…`）
    - 插件 / profile 机制（`dsh-remote-web` profile 的加载方式，铁律 10）
-3. 把结论回写到 `docs/05-roadmap.md` 的升级影响评估小节，再动手。
+3. 将结论更新到 `docs/dsh/` 对应主题，标清目标版本与尚未验证项；升级完成后更新基线与路线图进度，不追加升级流水账。
 
 **不要因为升级去改 dsh 源码或 fork（铁律 1）**；不要基于本地源码构建 dsh。
 
@@ -133,11 +132,11 @@ rg -n "<旧版本号>" README.md docs
 
 - `README.md` 的环境表「dsh 版本」一行
 - `docs/02-dsh-facts.md` 开头的「结论基于 dsh 版本 / git 提交」声明（同时更新 git 短哈希与 tag）
-- `docs/05-roadmap.md` 中提到具体 dsh 版本的条目与升级影响评估小节
+- `docs/dsh/` 中受影响的现行契约与检查入口
+- `docs/05-roadmap.md` 中的当前版本与进度
 - `.agents/skills/dsh-source/SKILL.md` 中记录的核实版本
 
-判定口径：**只更新描述「当前版本」的文案**。历史记录与版本相对的事实陈述
-（`docs/reference/m0-report.md` 这类实测存档、「自 X 版本起」的说明）保持原样。
+判定口径：文档只保留现行行为与明确待办，失效方案直接删除。没有完成的实机验收不能随版本号一起勾选。
 
 ### 6. 验证（必做）
 
@@ -164,19 +163,19 @@ pnpm dev                             # 起 relay + connector + dsh，浏览器�
 `/api/remote.mux` 是否 101、`/plugins/??…` combo bundle 是否 200、审批卡片能否点。
 
 ⚠️ **`proxy-check.mjs` 还盯着一条 dsh 行为**：`SettingsScope.mutate` 在宿主拒绝时是 **resolve
-不是 reject**（docs/02 §8.8）。哪天 dsh 改成 reject（或给 snapshot 加上 error 字段），
+不是 reject**（见 `docs/dsh/plugins.md`）。哪天 dsh 改成 reject（或给 snapshot 加上 error 字段），
 代理页里那段「写完再核对是否落地」的代码就可以简化 —— 但**在确认之前不要删**，
 它现在是页面唯一能知道「被拒了」的途径。
 
 **插件侧额外要复核的四件事**（后三条由两个 check 脚本覆盖，它们报错就是其中一条变了）：
 
-1. `remote-privileged` 的逃生门 `__DSH_TRANSPORT__.ownsHost` 还在（docs/02 §4.7）；
+1. `remote-privileged` 的 `__DSH_TRANSPORT__.ownsHost` 还在（见 `docs/dsh/transport.md`）；
 2. `copilot-auth` 依赖的模型页扩展槽 `settings.models.provider-card`、客户端 bundle 工件格式
-   （`window.__ModuleLoader__.load`）与模块表（react / react/jsx-runtime）还在（docs/02 §7.3、§7.4）；
+  （`window.__ModuleLoader__.load`）与模块表（react / react/jsx-runtime）还在（见 `docs/dsh/plugins.md`）；
 3. 凭据记录仍是 `llm-pi-ai/github-copilot` + `{kind:'grant', payload:<pi-ai 凭据>}`，且 pi-ai 内置目录里
-   还有 `github-copilot`（docs/02 §7.1）。同时把 `packages/plugins/copilot-auth` 的 `@earendil-works/pi-ai`
+  还有 `github-copilot`（见 `docs/dsh/models.md`）。同时把 `packages/plugins/copilot-auth` 的 `@earendil-works/pi-ai`
    版本跟 dsh 依赖的那个对齐。
-4. `turn-retry` 依赖的几样东西还在（docs/02 §10）：`TurnEndReasonMap` 的失败/停止分支、
+4. `turn-retry` 依赖的几样东西还在（见 `docs/dsh/conversation.md`）：`TurnEndReasonMap` 的失败/停止分支、
    `ctx.sessionProjections.register` 的 `wire` 契约、`Agent.inbox.nextTurn`、
    `followup()` 的追加与唤醒语义，以及槽 `conversation.input.dock`。升级后必须重跑排队消息回归：
    存在 `nextTurn` 排队消息时，`pending-input` 不得调用 `followup()`，也不得改写 inbox。
@@ -188,7 +187,7 @@ pnpm dev                             # 起 relay + connector + dsh，浏览器�
 
 - 是否新增了对远程 / 多端访问有用的能力（可能让本项目的某层变薄）
 - 插件与 profile 机制的变化（影响铁律 10 的接入方式）
-- 审批 / 权限模型变化（`ApprovalPolicy` 的取值与内置预设表，见 `docs/02-dsh-facts.md` §6.1）
+- 审批 / 权限模型变化（`ApprovalPolicy` 的取值与内置预设表，见 `docs/dsh/runtime.md`）
 - 是否出现了可以直接删掉的本仓库兼容代码
 
 整理成推荐列表（能力名、dsh 提供了什么、本仓库需要改多少）报告给用户，

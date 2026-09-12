@@ -1,6 +1,6 @@
 # Release：推 v* 标签时打出三个平台的绿色包并附到 GitHub Release。
 #
-#   git tag v0.0.1 && git push origin v0.0.1
+#   示例：git tag v0.0.1 && git push origin v0.0.1
 #
 # pack.mjs 在一台机器上就能交叉打全平台（Go 交叉编译 + supportedArchitectures），
 # 所以只需要一个 ubuntu runner。也支持 workflow_dispatch 手动触发（只上传

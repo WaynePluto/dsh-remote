@@ -1,11 +1,51 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-
 const source = readFileSync(new URL('../src/client/RetryDock.tsx', import.meta.url), 'utf8')
-
 describe('retry banner structure', () => {
-  it('renders exactly one action button and no dismissal state', () => {
-    expect(source.match(/<button\b/gu)).toHaveLength(1)
+  it('renders a retry action plus a details dialog trigger', () => {
+    expect(source.match(/<Button\b/gu)).toHaveLength(2)
+    expect(source).toContain('<Modal')
+    expect(source).toContain('reasonOpen')
+    expect(source).toContain('overflowX')
+    expect(source).toContain('REASON_DIALOG_HEIGHT')
     expect(source).not.toContain('dismissedTurn')
+  })
+  it('keeps eight non-button handles inside the modal contract', () => {
+    const resizeSource = readFileSync(new URL('../src/client/dialog-resize.tsx', import.meta.url), 'utf8')
+    expect(source).toContain('data-dsh-turn-retry-reason-body')
+    expect(source).toContain('ReasonResizeHandle')
+    expect(source).toMatch(/\['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'\]/u)
+    expect(resizeSource).toMatch(/touchAction: 'none'/u)
+    expect(resizeSource).toContain('setPointerCapture')
+    expect(resizeSource).toContain('HANDLE_SIZE_PX = 12')
+    expect(resizeSource).toContain('HANDLE_CORNER_SIZE_PX = 14')
+    expect(resizeSource.match(/direction ===/gu)).toHaveLength(7)
+  })
+})
+describe('dialog move structure', () => {
+  const resizeSource = readFileSync(new URL('../src/client/dialog-resize.tsx', import.meta.url), 'utf8')
+  it('renders a transparent non-button move handle below resize handles', () => {
+    expect(source).toContain('ReasonMoveHandle')
+    expect(resizeSource).toContain('data-dsh-turn-retry-move-handle')
+    expect(resizeSource).toContain('aria-hidden={true}')
+    expect(resizeSource).toContain('zIndex: 3')
+    expect(resizeSource).toContain('zIndex: 2')
+    expect(resizeSource).toContain('top: 12')
+    expect(resizeSource).toContain('left: 16')
+    // 实现说明：此处记录相关接口、边界和生命周期约束。
+    expect(resizeSource).toContain('right: 52')
+    expect(resizeSource).toContain('height: 50')
+    expect(resizeSource).toMatch(/background: 'transparent'/u)
+    expect(resizeSource).toMatch(/touchAction: 'none'/u)
+    expect(resizeSource).not.toContain('linear-gradient')
+    expect(resizeSource).not.toMatch(/opacity\s*:/u)
+  })
+  it('keeps move and resize on the guarded pointer lifecycle', () => {
+    expect(resizeSource).toContain('event.button !== 0')
+    expect(resizeSource).toContain('setPointerCapture')
+    expect(resizeSource).toContain('pointerId !== active.pointerId')
+    expect(resizeSource).toContain('requestAnimationFrame')
+    expect(resizeSource).toMatch(/removeEventListener\('pointermove'/u)
+    expect(resizeSource).toMatch(/removeEventListener\('lostpointercapture'/u)
   })
 })

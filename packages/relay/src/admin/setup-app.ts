@@ -51,9 +51,8 @@ ${TOTP_PANEL_STYLE}
 `.trim()
 
 /**
- * How far the sole v1 administrator has got. `pending-totp` is a real resting
- * state: `initializeAdmin` stages the secret but leaves TOTP disabled, and the
- * relay may be restarted between the two wizard steps.
+ * 唯一 v1 管理员完成到哪一步。`pending-totp` 是真实的稳定状态：
+ * `initializeAdmin` 暂存 secret 但保持 TOTP 禁用，relay 可以在向导两步之间重启。
  */
 type SetupState =
   | { readonly kind: 'uninitialized' }
@@ -76,20 +75,18 @@ function alertMarkup(error: string | undefined): string {
 }
 
 /**
- * The wizard is loopback-only, and the relay never terminates TLS itself, so a
- * browser reaching it over loopback always reports an `http:` Origin — even
- * when the deployment's public scheme is https behind a reverse proxy.
+ * 向导仅限 loopback，且 relay 从不自行终止 TLS，因此浏览器通过 loopback 访问时
+ * 始终报告 `http:` Origin——即使反向代理后的部署公网 scheme 是 https。
  */
 function originOk(request: Request): boolean {
   return sameOrigin(request, 'http')
 }
 
 /**
- * Both halves of the D15 loopback test, re-checked inside every handler.
+ * D15 loopback 检查的两半，在每个 handler 内再次检查。
  *
- * The server applies it before routing here; this is defence in depth, because
- * a caller that forgot it would hand the administrator account to whoever on
- * the LAN asks first.
+ * server 会在路由到这里前执行检查；这里是纵深防御，因为忘记检查的调用方
+ * 会把管理员账号交给局域网中最先提出请求的人。
  */
 function reachable(incoming: IncomingMessage): boolean {
   return isLoopbackBrowserRequest(incoming)
@@ -144,17 +141,11 @@ ${enrollmentPanel({
 }
 
 /**
- * The 503 body a browser gets when it asks an uninitialized relay for anything
- * from somewhere other than the machine itself.
- *
- * It deliberately does not offer a login form: there is no account yet, so any
- * form shown here would be one the visitor could never satisfy. Naming the
- * loopback URL is the only actionable instruction that exists.
- * @param loopbackUrl The `http://127.0.0.1:<port>/_setup` address to open on
- * the relay's own machine.
- * @param appearance The appearance to render in; its return path is the URL
- * the browser is already on, so switching the theme redraws this same page.
- * @returns A standalone HTML document.
+ * 未初始化 relay 被机器外的浏览器请求任意内容时返回 503 HTML；账号尚不存在，
+ * 因此不提供访问者无法完成的登录表单，只给出在 relay 机器上打开 loopback URL 的唯一指引。
+ * @param loopbackUrl relay 机器上的 `http://127.0.0.1:<port>/_setup` 地址。
+ * @param appearance 要渲染的外观；返回路径是浏览器当前所在的 URL，切换外观会重渲染同一页面。
+ * @returns 独立的 HTML 文档。
  */
 export function renderSetupRequiredPage(
   loopbackUrl: string,
@@ -178,17 +169,13 @@ export function renderSetupRequiredPage(
 }
 
 /**
- * Build the `/_setup` first-run wizard listener.
+ * 构建 `/_setup` 初始设置向导 listener。
  *
- * The caller must have established that the request satisfies both halves of
- * the D15 loopback test before routing here; every handler re-checks it anyway,
- * because a caller that forgets would otherwise hand the administrator account
- * to whoever on the LAN asks first.
- * @param options CSRF cookie policy, the relay store, the browser authenticator
- * used to log the operator in once setup completes (absent in the loopback-only
- * development mode), and the logger the audit trail is mirrored into.
- * @returns A Node request listener for `/_setup` and, while no account exists,
- * for every other browser path.
+ * 调用方必须在路由到这里前确认请求通过 D15 loopback 检查的两半；每个 handler
+ * 仍会再次检查，因为遗漏检查会把管理员账号交给局域网中最先请求的人。
+ * @param options CSRF cookie 策略、relay store、设置完成后用于登录操作员的浏览器
+ * authenticator（loopback-only 开发模式中不存在），以及审计轨迹镜像到的 logger。
+ * @returns `/_setup` 的 Node request listener；账号不存在时也处理其他浏览器路径。
  */
 export function createSetupRequestListener(options: {
   cookies: BrowserCookiePolicy
@@ -204,11 +191,10 @@ export function createSetupRequestListener(options: {
     new Response(body, { status, headers: htmlHeaders([cookies.csrfHeader(csrf)]) })
 
   /**
-   * The appearance a wizard page renders in. Both steps are served by the same
-   * GET, so that is where the switcher returns to and the wizard picks up
-   * wherever it left off.
-   * @param context The request being answered.
-   * @returns The appearance to hand the renderer.
+   * 向导页面渲染所用的外观。两步都由同一个 GET 提供，因此切换器返回这里，
+   * 向导也会从上次停下的位置继续。
+   * @param context 正在响应的请求。
+   * @returns 交给渲染器的外观。
    */
   const appearanceOf = (
     context: { req: { header: (name: string) => string | undefined } },
@@ -241,8 +227,8 @@ export function createSetupRequestListener(options: {
   app.get(SETUP_PATH_PREFIX, async (context) => {
     if (!reachable(context.env.incoming)) return emptyResponse(403)
     const state = setupState(store)
-    // Setup is a one-way door: once an account exists the wizard is gone, and
-    // the operator belongs on the console (which applies the normal auth check).
+    // 设置是单向门：账号一旦存在，向导就消失，
+    // 操作员应进入控制台（那里会执行普通认证检查）。
     if (state.kind === 'complete') return redirectResponse(ADMIN_PATH_PREFIX, [])
     if (state.kind === 'pending-totp') {
       return enrollmentResponse({
@@ -300,14 +286,13 @@ export function createSetupRequestListener(options: {
         logger,
       })
     } catch (error) {
-      // Two tabs racing on the same empty store: the loser just follows the
-      // winner instead of reporting an error nobody can act on.
+      // 两个标签页同时操作同一个空 store：失败者跟随成功者，
+      // 而不是报告一个无人能处理的错误。
       if (!(error instanceof AdminAlreadyInitializedError)) throw error
       return redirectResponse(SETUP_PATH_PREFIX, [])
     }
-    // Rendered rather than redirected so the secret exists in exactly one
-    // response; a reload lands on the GET above, which re-draws it from the
-    // staged secret instead of minting a new one.
+    // 直接渲染而不是重定向，使 secret 只存在于一个响应中；刷新会到达上面的 GET，
+    // 从暂存 secret 重新绘制，而不是签发新的 secret。
     return enrollmentResponse({
       secret: created.enrollment.secret,
       username: created.user.username,
@@ -343,7 +328,7 @@ export function createSetupRequestListener(options: {
       })
     }
 
-    // Re-read: the session may only be issued once TOTP is actually enabled.
+    // 重新读取：只有 TOTP 确实启用后才能签发会话。
     const user = store.getUserById(state.user.id)
     if (authenticator === undefined || user === undefined) {
       return redirectResponse(ADMIN_PATH_PREFIX, [])
@@ -362,8 +347,8 @@ export function createSetupRequestListener(options: {
   app.all(`${SETUP_PATH_PREFIX}/*`, () => emptyResponse(404))
   app.all(SETUP_PATH_PREFIX, () => emptyResponse(405))
 
-  // Everything else only reaches this listener while the relay has no account
-  // at all, in which case no page on it can work yet.
+  // 其余内容只有在 relay 完全没有账号时才会到达此 listener，
+  // 此时其中任何页面都还无法工作。
   app.all('*', (context) => {
     if (!reachable(context.env.incoming) || setupState(store).kind === 'complete') {
       return emptyResponse(404)

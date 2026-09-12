@@ -21,6 +21,7 @@ function entry(name: string, calls: number): ToolEntry {
   return {
     name,
     description: `${name} does things`,
+    fullDescription: `${name} does things`,
     status: calls > 0 ? 'used' : 'unused',
     calls,
     failures: 0,
@@ -194,6 +195,7 @@ describe('project', () => {
     expect(snapshot.totalCalls).toBe(2)
     expect(snapshot.entries.map(item => item.name)).toEqual(['read', 'ralph'])
     expect(snapshot.entries[0]).toMatchObject({ status: 'used', calls: 2, failures: 1, required: ['p'] })
+    expect(snapshot.entries[0]?.fullDescription).toBe('Read a file')
     expect(snapshot.entries[1]).toMatchObject({ status: 'unused', calls: 0, params: [] })
   })
 
