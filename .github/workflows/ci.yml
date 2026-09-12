@@ -1,4 +1,4 @@
-# CI：每次 push / PR 跑 lint、typecheck、build、test、依赖版本检查。
+# CI：每次 push / PR 跑 lint、build、typecheck、test、依赖版本检查。
 # 双平台矩阵：项目面向 Windows 被控机开发（托盘、taskkill、路径处理），
 # 但 relay 部署在 Linux 上，两边都得绿。
 
@@ -33,7 +33,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm lint
-      - run: pnpm typecheck
+      # plugin-ui 根导出的类型指向 dist/index.d.ts，services 等依赖包
+      # 要先有构建产物才能解析到类型，所以 build 必须在 typecheck 之前
       - run: pnpm build
+      - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm check:dependencies

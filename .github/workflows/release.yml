@@ -25,7 +25,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 与 ci.yml 一致固定版本：项目刻意不在 package.json 写 packageManager，
+      # action-setup 没有这个输入就不知道装哪个 pnpm
       - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.0
 
       - uses: actions/setup-node@v4
         with:
@@ -51,7 +55,8 @@ jobs:
             exit 1
           fi
 
-      # pack.mjs 不自动 build（缺 dist 会拦一道），所以先显式构建
+      # pack.mjs 自带构建（--skip-build 可跳过）；先显式构建一次，
+      # 让构建失败和打包失败在日志里分开
       - run: pnpm build
       - run: pnpm release
 
