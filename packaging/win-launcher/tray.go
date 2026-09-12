@@ -30,8 +30,8 @@ const (
 // 菜单命令标识符。TrackPopupMenu 直接返回它们
 //（TPM_RETURNCMD），所以后面不需要处理 WM_COMMAND。
 const (
-	idOpenConsole uintptr = iota + 1
-	idOpenDsh
+	idOpenDsh uintptr = iota + 1
+	idOpenAdmin
 	idStart
 	idStop
 	idRestart
@@ -85,9 +85,9 @@ func wndProc(hwnd syscall.Handle, message uint32, wParam uintptr, lParam uintptr
 		case wmRButtonUp, wmContextMenu:
 			app.showMenu()
 		case wmLButtonDblClk:
-			app.openConsole()
+			app.openDsh()
 		case ninBalloonUserClick:
-			app.openConsole()
+			app.openDsh()
 		}
 		return 0
 	case wmStateChanged:
@@ -185,7 +185,7 @@ func (a *application) baseIconData() notifyIconData {
 }
 
 func (a *application) tooltip() string {
-	return fmt.Sprintf("dsh-remote（%s）— 控制台 %s", stateLabel(a.stack.currentState()), a.settings.consoleURL())
+	return fmt.Sprintf("dsh-remote（%s）— dsh 界面 %s", stateLabel(a.stack.currentState()), a.settings.dshWebURL())
 }
 
 func (a *application) addIcon() {
@@ -223,7 +223,7 @@ func (a *application) showSetupBalloon() {
 	data.uFlags = nifInfo
 	data.dwInfoFlags = niifInfo
 	setUTF16(data.szInfoTitle[:], "dsh-remote 还没有设置完成")
-	setUTF16(data.szInfo[:], "还没有管理员账号，控制台暂时不能登录。点这条通知，在本机浏览器里完成设置。")
+	setUTF16(data.szInfo[:], "还没有管理员账号，管理界面暂时不能登录。点这条通知，在本机浏览器里完成设置。")
 	procShellNotifyIconW.Call(uintptr(nimModify), uintptr(unsafe.Pointer(&data)))
 }
 
@@ -269,7 +269,7 @@ func appendSeparator(menu uintptr) {
 //
 // 初始化、重置密码、重置 TOTP 刻意不提供：都需要文本输入，
 // Win32 没有内置输入对话框，而 relay 已在
-// 浏览器里提供这三项。打开控制台即可进入。
+// 浏览器里提供这三项。打开管理界面即可进入。
 func (a *application) showMenu() {
 	menu, _, _ := procCreatePopupMenu.Call()
 	if menu == 0 {
@@ -278,8 +278,8 @@ func (a *application) showMenu() {
 	defer procDestroyMenu.Call(menu)
 
 	state := a.stack.currentState()
-	appendItem(menu, idOpenConsole, "打开控制台", true)
 	appendItem(menu, idOpenDsh, "打开 dsh 界面", true)
+	appendItem(menu, idOpenAdmin, "打开管理界面", true)
 	appendSeparator(menu)
 	appendItem(menu, idStart, "启动", state == stackStopped)
 	appendItem(menu, idStop, "停止", state == stackRunning || state == stackStarting)
@@ -290,7 +290,7 @@ func (a *application) showMenu() {
 	appendSeparator(menu)
 	appendItem(menu, idExit, "退出", true)
 	// 加粗；双击图标也执行此命令。
-	procSetMenuDefaultItem.Call(menu, idOpenConsole, 0)
+	procSetMenuDefaultItem.Call(menu, idOpenDsh, 0)
 
 	// 没有这一点，点击其他位置后菜单仍会留在屏幕上：Windows
 	// 只会关闭由前台窗口拥有的跟踪菜单。
@@ -317,10 +317,10 @@ func (a *application) showMenu() {
 // 菜单也无法再次打开。
 func (a *application) invoke(command uintptr) {
 	switch command {
-	case idOpenConsole:
-		a.openConsole()
 	case idOpenDsh:
-		a.open(a.settings.dshURL())
+		a.openDsh()
+	case idOpenAdmin:
+		a.openAdmin()
 	case idStart:
 		a.stack.start()
 	case idStop:
@@ -336,8 +336,12 @@ func (a *application) invoke(command uintptr) {
 	}
 }
 
-func (a *application) openConsole() {
-	a.open(a.settings.consoleURL())
+func (a *application) openDsh() {
+	a.open(a.settings.dshWebURL())
+}
+
+func (a *application) openAdmin() {
+	a.open(a.settings.adminURL())
 }
 
 func (a *application) open(target string) {

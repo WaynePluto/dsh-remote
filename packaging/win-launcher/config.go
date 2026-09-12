@@ -16,7 +16,6 @@ const (
 	// 默认值复制自 packages/launcher/src/config.ts。刚解压的
 	// 软件包可能完全没有配置文件，而两个打开
 	// 浏览器的菜单项仍必须指向正确的端口。
-	defaultDshPort   = 3080
 	defaultRelayPort = 30809
 	homeDirName      = ".dsh-remote"
 
@@ -26,10 +25,11 @@ const (
 	loopbackHost = "127.0.0.1"
 )
 
-// settings 是 tray 需要的 launcher 配置子集：两个
-// URL 的端口，以及日志文件所在的 home 目录。
+// settings 是 tray 需要的 launcher 配置子集：两个菜单
+// URL 共用的 relay 端口，以及日志文件所在的 home 目录。
+// dsh 自己的端口不在这里：菜单不直连 dsh，直连只
+// 认 launcher 从 dsh 输出截获的 token 交换结果。
 type settings struct {
-	dshPort   int
 	relayPort int
 	home      string
 	// 已读取的配置文件；使用内置默认值时为空。
@@ -40,21 +40,23 @@ type settings struct {
 // 整个文档并拒绝任何不合规内容，因此
 // 这里再实现一个更严格的读取器只会与它产生分歧。
 type rawConfig struct {
-	Dsh *struct {
-		Port *int `json:"port"`
-	} `json:"dsh"`
 	Relay *struct {
 		Port *int `json:"port"`
 	} `json:"relay"`
 	Home *string `json:"home"`
 }
 
-func (s settings) consoleURL() string {
+// dshWebURL 打开的是 dsh 界面。relay 只把 /_admin、/auth、setup
+// 等自有路径留给自己，其余请求（包括 /）全部隧道转发给 dsh，
+// 并在 dsh 首页 401 时用它截获的 token 完成一次交换；直连 dsh
+// 端口没有这次交换，只会看到 "dsh web authentication required"。
+func (s settings) dshWebURL() string {
 	return fmt.Sprintf("http://%s:%d", loopbackHost, s.relayPort)
 }
 
-func (s settings) dshURL() string {
-	return fmt.Sprintf("http://%s:%d", loopbackHost, s.dshPort)
+// adminURL 是 relay 自己的管理控制台（设备、审计、远程入口）。
+func (s settings) adminURL() string {
+	return fmt.Sprintf("http://%s:%d/_admin", loopbackHost, s.relayPort)
 }
 
 func (s settings) logPath() string {
@@ -68,7 +70,7 @@ func (s settings) logPath() string {
 // 如果因此拒绝显示托盘图标，用户就没有办法读取
 // 这条消息。
 func loadSettings(root string, arguments []string) settings {
-	resolved := settings{dshPort: defaultDshPort, relayPort: defaultRelayPort, home: defaultHome(root)}
+	resolved := settings{relayPort: defaultRelayPort, home: defaultHome(root)}
 	path := configPath(root, arguments)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -78,9 +80,6 @@ func loadSettings(root string, arguments []string) settings {
 	var raw rawConfig
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return resolved
-	}
-	if raw.Dsh != nil && raw.Dsh.Port != nil && validPort(*raw.Dsh.Port) {
-		resolved.dshPort = *raw.Dsh.Port
 	}
 	if raw.Relay != nil && raw.Relay.Port != nil && validPort(*raw.Relay.Port) {
 		resolved.relayPort = *raw.Relay.Port

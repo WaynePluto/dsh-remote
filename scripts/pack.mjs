@@ -1,4 +1,4 @@
-/** 打绿色包，输出 release/dsh-remote-<version>-<platform>-<arch>.zip。
+/** 打绿色包，输出 release/dsh-remote-<version>-<zipTag>.zip；条目直接放在 zip 根目录，没有版本目录层。
  *
  * 支持 --target=<目标>（可重复或逗号分隔）、all、--skip-build 和 --skip-exe。
  * 目标共用 staging，按命令顺序串行部署；跨平台目标在裁剪前、本机目标在裁剪后冒烟。
@@ -215,10 +215,10 @@ async function buildTarget(key) {
   const treeBytes = directorySize(context.packageDir)
   say(`打包前目录大小 ${formatSize(treeBytes)}`)
 
-  const output = join(context.release, `${prefix}-${key}.zip`)
+  const output = join(context.release, `${prefix}-${target.zipTag}.zip`)
   rmSync(output, { force: true })
   say(`写入 ${output}`)
-  const zipBytes = await createZip(context, prefix, output, target.files, withExecutable)
+  const zipBytes = await createZip(context, output, target.files, withExecutable)
   rmSync(context.staging, { recursive: true, force: true })
 
   const entryHint = target.platform === 'win32'
@@ -246,7 +246,7 @@ console.log(`
 for (const item of built) {
   console.log(`       ${item.key}（${item.label}） ${formatSize(item.zipBytes)}
          文件: ${item.output}
-         解压后: ${prefix}/ ，${item.entryHint}`)
+         解压后: ${item.entryHint}`)
 }
 if (skipped.length !== 0) {
   console.log(`       跳过: ${skipped.join('、')}（本机没有这些平台的原生二进制）

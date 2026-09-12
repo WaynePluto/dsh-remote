@@ -114,9 +114,9 @@ func runTray() int {
 	defer log.close()
 	log.printf("dsh-remote 托盘启动，程序 %s", executable)
 	if resolved.path == "" {
-		log.printf("没有找到配置文件，按默认值推断地址：控制台 %s，dsh %s", resolved.consoleURL(), resolved.dshURL())
+		log.printf("没有找到配置文件，按默认值推断地址：dsh 界面 %s，管理界面 %s", resolved.dshWebURL(), resolved.adminURL())
 	} else {
-		log.printf("已读取配置 %s：控制台 %s，dsh %s", resolved.path, resolved.consoleURL(), resolved.dshURL())
+		log.printf("已读取配置 %s：dsh 界面 %s，管理界面 %s", resolved.path, resolved.dshWebURL(), resolved.adminURL())
 	}
 
 	app = &application{executable: executable, root: root, settings: resolved, log: log}
@@ -171,8 +171,8 @@ func runSelfCheck() int {
 		return 1
 	}
 	resolved := loadSettings(root, nil)
-	fmt.Fprintf(os.Stdout, "root=%s\nnode=%s\nentry=%s\nlog=%s\nconsole=%s\ndsh=%s\n",
-		root, node, entry, resolved.logPath(), resolved.consoleURL(), resolved.dshURL())
+	fmt.Fprintf(os.Stdout, "root=%s\nnode=%s\nentry=%s\nlog=%s\ndsh=%s\nadmin=%s\n",
+		root, node, entry, resolved.logPath(), resolved.dshWebURL(), resolved.adminURL())
 	return 0
 }
 

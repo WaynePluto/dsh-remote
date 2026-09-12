@@ -32,7 +32,7 @@ supportedArchitectures 是 os × cpu × libc 笛卡尔积，不能直接声明�
 ## 2. 产物结构
 
 ```text
-dsh-remote-<version>/
+（zip 根目录，解压即用，无版本目录层）
 ├─ dsh-remote.exe / start.ps1 / start.sh
 ├─ README.txt
 ├─ dsh-remote.config.example.json
@@ -66,8 +66,9 @@ Windows 进程树通过 taskkill /T /F 清理；只调用 child.kill() 不足以
 
 ### Windows 托盘
 
-Go 标准库调用 Win32 API，无 cgo 或 Go 模块依赖。菜单提供打开控制台、打开 dsh、启动/停止/重启、
-查看日志、开机自启动和退出。账号初始化与恢复在浏览器控制台完成。
+Go 标准库调用 Win32 API，无 cgo 或 Go 模块依赖。菜单提供打开 dsh 界面（relay 根路径，双击同此）、
+打开管理界面（`/_admin`）、启动/停止/重启、查看日志、开机自启动和退出。两个入口都经 relay，
+由它完成 dsh 的 token 交换；账号初始化与恢复在管理界面完成。
 
 - 工作目录由 exe 自身路径确定，发行目录可移动。
 - 命名互斥量保证单实例；Win32 Job Object 负责托盘退出后的子进程清理。
@@ -141,7 +142,8 @@ release 支持 `--skip-build` 复用 dist、`--skip-exe` 跳过 Windows exe；�
 4. 复制平台入口、说明与配置；Windows 额外编译托盘 exe。
 5. 校验插件产物，并按目标裁剪平台依赖。
 6. 运行入口冒烟检查；当前平台在裁剪后运行，其他平台在裁剪前验证 JS 依赖图。
-7. 排除 pnpm registry 账本，输出 release/dsh-remote-<version>-<platform>-<arch>.zip。
+7. 排除 pnpm registry 账本，输出 release/dsh-remote-<version>-<zipTag>.zip（Windows 为 win-x64）；
+   条目直接放在 zip 根目录，没有版本目录层。
 
 各包依赖保持真实嵌套关系，不手动拍平。任一必要工件或冒烟检查失败时不产出该包。
 

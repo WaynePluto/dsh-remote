@@ -28,11 +28,13 @@ export const ALL_PACKAGING_FILES = [
 ]
 
 /** sentinel 是按目标安装的 sharp 包，用于提前确认依赖树确实含有目标二进制。 */
+/** zipTag 是产物文件名里的平台段；win32 对外叫 win，三元组 key 保持不变。 */
 export const TARGETS = {
   'win32-x64': {
     platform: 'win32',
     arch: 'x64',
     label: 'Windows x64',
+    zipTag: 'win-x64',
     files: [...COMMON_PACKAGING_FILES, ...WINDOWS_PACKAGING_FILES],
     sentinel: '@img/sharp-win32-x64',
   },
@@ -40,6 +42,7 @@ export const TARGETS = {
     platform: 'linux',
     arch: 'x64',
     label: 'Linux x64',
+    zipTag: 'linux-x64',
     files: [...COMMON_PACKAGING_FILES, ...POSIX_PACKAGING_FILES],
     sentinel: '@img/sharp-linux-x64',
   },
@@ -47,6 +50,7 @@ export const TARGETS = {
     platform: 'darwin',
     arch: 'arm64',
     label: 'macOS Apple Silicon',
+    zipTag: 'darwin-arm64',
     files: [...COMMON_PACKAGING_FILES, ...POSIX_PACKAGING_FILES],
     sentinel: '@img/sharp-darwin-arm64',
   },

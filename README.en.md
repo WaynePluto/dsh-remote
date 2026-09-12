@@ -62,26 +62,25 @@ Download the zip for **your platform** from [Releases](../../releases) and unpac
 
 > Packages are per-platform because dsh's dependencies ship prebuilt platform binaries; dsh-remote's own code has zero native modules.
 
-From source (identical functionality):
+Or build the exact same package from source:
 
 ```bash
 git clone <this-repo-url> dsh-remote
 cd dsh-remote
 pnpm install
-pnpm build
+pnpm release
 ```
 
-> Source development requires pnpm >=10. The project does not force a local pnpm version; it uses the version you have installed. CI pins pnpm 10.17.0 for reproducible installs.
+`pnpm release` builds first (skip with `--skip-build`), targets the host platform by default (`--target=all` for all), and writes the zip to `release/` — unpack and start it as above. Packing requires pnpm >=10 (the project does not force a local pnpm version; CI pins 10.17.0 for reproducibility). The Windows `dsh-remote.exe` is compiled with [Go](https://go.dev/dl/); without Go, add `--skip-exe` and that package starts via `start.ps1` only.
 
 ## First start
 
-On the machine you want as the **entry machine**:
+Unpack and start on the machine you want as the **entry machine** (double-click `dsh-remote.exe` on Windows, run `./start.sh` on Linux / macOS). The first start has no admin account yet, and the program hands you the setup address:
 
-```bash
-pnpm start
-```
+- **Windows**: the tray pops up a "setup not finished" notification — clicking it opens the setup page; started via `start.ps1`, the terminal prints the same address
+- **Linux / macOS**: the `./start.sh` terminal prints an address like `http://127.0.0.1:30809`
 
-The terminal will report that no admin account exists and print an address. Open it **on that machine** (e.g. `http://127.0.0.1:30809`):
+Open it **on that machine** in a browser:
 
 1. Pick the account name (pre-filled `admin`; letters, digits and `. _ -`) and set the admin password (at least 6 characters, mixing at least 3 of: upper case, lower case, digits, symbols)
 2. Scan the QR code with an authenticator app (Microsoft / Google Authenticator, 1Password, …)
@@ -89,9 +88,9 @@ The terminal will report that no admin account exists and print an address. Open
 
 From then on, access from your phone or any other computer uses **that account name** plus the password and the TOTP code (the console's "Account" page shows the name if you forget it).
 
-> 🔒 The setup wizard is **loopback-only** (`127.0.0.1`); anyone else on the LAN only sees "finish setup on that machine" and cannot hijack the admin account.
+> 🔒 The setup wizard is **loopback-only** (`127.0.0.1`); anyone else on the LAN only sees "finish setup on that machine" and cannot hijack the admin account. On a headless server the wizard is out of reach — see "Emergency" below.
 
-Restart, and the terminal prints every access address:
+Restart once and every access address is printed — in the terminal if you started it there, otherwise in the log shown by the tray menu's "View log":
 
 ```
   ✓ Node v22.19.0
@@ -105,7 +104,7 @@ Restart, and the terminal prints every access address:
   └────────────────────────────────────────────────────┘
 ```
 
-On the machine itself, `http://127.0.0.1:30809` is **login-free** (loopback only). dsh's own address is never advertised — always go through the console, which handles the token exchange dsh has required since 0.1.2. `Ctrl+C` shuts down all three processes together.
+On the machine itself, `http://127.0.0.1:30809` is **login-free** (loopback only). dsh's own address is never advertised — always go through the console, which handles the token exchange dsh has required since 0.1.2. Exit via the tray menu's "Quit" or `Ctrl+C` in the terminal; all three processes shut down together.
 
 ## Attaching a second machine
 
@@ -151,7 +150,17 @@ node dist/relay.js passwd        # reset the admin password
 node dist/relay.js totp reset    # reset the authenticator, re-scan
 ```
 
-> These commands **do not ask for the old password** — anyone who can run commands on that machine can already read the database file directly. What you must guard is login to the machine itself. On a VPS the setup wizard is loopback-only, so use `init` to create the admin.
+> Run these inside the **unpacked package directory**; when working in the source repo the equivalents are `pnpm relay:init` / `pnpm relay:passwd` / `pnpm relay:totp-reset`.
+>
+> These commands **do not ask for the old password** — anyone who can run commands on that machine can already read the database file directly. What you must guard is login to the machine itself. On a VPS the setup wizard is loopback-only and unreachable from your local browser — create the admin with `init`, or borrow the wizard over SSH port forwarding (below).
+
+For the first deployment you can skip `init`: open an SSH tunnel from your own computer —
+
+```bash
+ssh -L 30809:127.0.0.1:30809 user@server
+```
+
+While the tunnel is up, open `http://127.0.0.1:30809` in your local browser. The request lands on the server's loopback interface, so the wizard admits it and you can scan the QR code as usual. Always open that exact `127.0.0.1:30809` address — the Host header must stay loopback to remain login-free. The wizard is a one-time thing: disconnect the tunnel once setup is done and use the server's public address day to day.
 
 ## Security
 
@@ -172,6 +181,17 @@ This tool hands your dev machine to a browser. Read this once:
 | Works locally, not from the LAN | Firewall. Windows: `New-NetFirewallRule -DisplayName "dsh-remote" -Direction Inbound -LocalPort 30809 -Protocol TCP -Action Allow` |
 | Correct password rejected | Check the startup log for a "pre-scrypt password hash" warning; if present, reset the password once on the local admin page |
 | 403 on an attached machine's page | Its dsh doesn't trust the entry machine's address yet — restart dsh-remote on that machine |
+
+## Local development and debugging (for developers)
+
+`pnpm dev` / `pnpm start` in the repo are a **dev/debug stack**, not an installation: they run the repo's source or built artifacts, keep the relay database and device key in the repo's `.dev/` directory, and use the fixed machine name `pc1` — fully separate from a real install's `~/.dsh-remote`, so don't use it as your daily instance.
+
+```bash
+pnpm dev       # run the TypeScript source directly via tsx
+pnpm start     # run the dist artifacts produced by pnpm build
+```
+
+Development conventions and the usual checks (lint / typecheck / build / test) live in [AGENTS.md](AGENTS.md) (Chinese).
 
 ## Docs (for developers, in Chinese)
 
