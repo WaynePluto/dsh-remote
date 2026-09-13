@@ -58,9 +58,12 @@ sudo install -d -o root -g root -m 0755 /etc/dsh-remote
 
 ## 步骤 2 · 解压绿色包
 
+zip 条目直接放在压缩包根目录、没有版本目录层，所以先建好目标目录再往里解压
+（文件名里的 `linux-x64` 是平台段，别下错平台的包）：
+
 ```bash
-sudo unzip dsh-remote-<版本>.zip -d /opt
-sudo mv /opt/dsh-remote-<版本> /opt/dsh-remote
+sudo mkdir -p /opt/dsh-remote
+sudo unzip dsh-remote-<版本>-linux-x64.zip -d /opt/dsh-remote
 sudo chown -R root:root /opt/dsh-remote      # 程序目录保持只读
 
 ls /opt/dsh-remote/dist                      # 应该能看到 index.js 和 relay.js
@@ -258,8 +261,9 @@ sudo ufw status
   `relay-jwt.secret` 丢了不致命，只是所有浏览器要重新登录一次。
 - `relay.db` 是 WAL 模式，运行中直接 `cp` 单个文件可能拿到不一致的快照。要么先停服务，
   要么用 `sqlite3 /var/lib/dsh-remote/relay.db ".backup '/备份路径/relay.db'"`。
-- 升级：`sudo systemctl stop dsh-remote` → 换掉 `/opt/dsh-remote` 里的 `dist/` 和
-  `node_modules/` → `sudo systemctl start dsh-remote`。
+- 升级：`sudo systemctl stop dsh-remote` → 解压新版 zip 到 `/opt/dsh-remote` 覆盖旧文件，
+  再 `sudo chown -R root:root /opt/dsh-remote` → `sudo systemctl start dsh-remote`。
+  别只换 `dist/` 和 `node_modules/`：zip 根目录还有 `start.sh`、`package.json` 等文件。
   配置和数据都在 `/etc/dsh-remote` 与 `/var/lib/dsh-remote`，不受影响。
 
 ## 相关文档
