@@ -13,7 +13,8 @@
 #   /etc/dsh-remote/dsh-remote.config.json   launcher 配置文件
 #   /var/lib/dsh-remote            dsh-remote home：relay.db、relay-jwt.secret、membership.json、device.key
 #   /var/lib/dsh-remote/dsh        DSH_HOME：dsh 的 profiles / settings / credentials / sessions
-#   /srv/dsh-remote/workspace      给 dsh 干活的目录（agent 要往这里写文件）
+#   /srv/dsh-remote/workspace      给 dsh 干活的目录（agent 要往这里写文件），
+#                                  也是下面的 WorkingDirectory、dsh 新会话的起始目录
 #   /usr/bin/node                Node 22.19+ 的绝对路径，用 `command -v node` 确认
 
 [Unit]
@@ -26,8 +27,14 @@ Type=simple
 User=DshRemote
 Group=DshRemote
 
-# 工作目录只用来解析相对路径；配置文件用 --config 显式指定，避免依赖当前目录。
-WorkingDirectory=/opt/dsh-remote
+# 工作目录同时是 dsh 新会话的起始目录：dsh 拿自己的进程 cwd 当默认会话 cwd
+#（dsh 的 packages/api/session-controller/src/commands.ts 里 create 不带 cwd 时用
+# defaultCwd，即 dsh 进程的 cwd），三个子进程又都继承 launcher 的 cwd，
+# 所以必须指到可写的干活目录，不能指只读的程序目录 /opt/dsh-remote，
+# 否则 agent 建会话就落在只读目录里，一个文件都写不了。
+# launcher 自身不依赖当前目录：配置用 --config 显式指定，
+# dsh / relay / connector 的入口都按 launcher 的安装位置解析。
+WorkingDirectory=/srv/dsh-remote/workspace
 # 绿色包里的启动器入口是 dist/index.js（源码仓库里是 packages/launcher/dist/index.js）。
 # 解压后用 `ls /opt/dsh-remote/dist` 确认一次再填。
 ExecStart=/usr/bin/node /opt/dsh-remote/dist/index.js --config /etc/dsh-remote/dsh-remote.config.json

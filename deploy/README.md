@@ -47,7 +47,7 @@ sudo useradd --system --create-home --home-dir /var/lib/dsh-remote \
 sudo install -d -o DshRemote -g DshRemote -m 0700 /var/lib/dsh-remote
 # DSH_HOME：dsh 的 profiles / settings / credentials / sessions
 sudo install -d -o DshRemote -g DshRemote -m 0700 /var/lib/dsh-remote/dsh
-# 给 dsh 里的 agent 干活的目录
+# 给 dsh 里的 agent 干活的目录；unit 的工作目录指到这里，dsh 新会话从这里开始
 sudo install -d -o DshRemote -g DshRemote -m 0755 /srv/dsh-remote/workspace
 # 配置文件目录
 sudo install -d -o root -g root -m 0755 /etc/dsh-remote
@@ -145,7 +145,7 @@ sudo -u DshRemote env DSH_REMOTE_ADMIN_PASSWORD='<至少12位的密码>' \
 
 ## 步骤 5 · 装上 unit
 
-先按 `dsh-remote.service` 顶部的注释把占位符改掉（用户名、三个目录、node 的绝对路径），
+先按 `dsh-remote.service` 顶部的注释把占位符改掉（用户名、五个路径、node 的绝对路径），
 `command -v node` 能告诉你最后一个。
 
 ```bash
@@ -197,7 +197,7 @@ journalctl -u dsh-remote -n 50 --no-pager
 # 3. 本机控制台（loopback socket + loopback Host 免登录）→ 200
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:30809/_admin
 
-# 4. 经 Caddy 的 TLS 入口，未登录 → 302 跳转到 /_auth/login
+# 4. 经 Caddy 的 TLS 入口 —— 拿到任何 HTTP 码即说明 TLS 与反代链路通了
 curl -sS -o /dev/null -w '%{http_code}\n' https://dsh.example.com/_admin
 
 # 5. 证书是真的（不是 Caddy 的内部 CA）
@@ -207,7 +207,9 @@ curl -sS -I https://dsh.example.com/_admin | head -1
 sudo systemctl restart dsh-remote && sleep 5 && systemctl is-active dsh-remote
 ```
 
-第 3 条能通说明 relay 起来了；第 4 条能通说明 TLS 和反代链路是通的。
+第 3 条能通说明 relay 起来了；第 4 条拿到任何 HTTP 码（现在通常是 404 或 403）
+就说明 TLS 与反代链路是通的——域名 Host 还不被 relay 认识（见「现状与限制」），
+302 跳登录页要等启动器支持域名模式后才会出现。
 
 > ⚠️ 第 3 条同时说明：**任何能在这台机器上开 loopback 连接的人都免登录**，
 > 包括通过 `ssh -L 30809:127.0.0.1:30809` 转发出去的浏览器。
@@ -261,9 +263,19 @@ sudo ufw status
   `relay-jwt.secret` 丢了不致命，只是所有浏览器要重新登录一次。
 - `relay.db` 是 WAL 模式，运行中直接 `cp` 单个文件可能拿到不一致的快照。要么先停服务，
   要么用 `sqlite3 /var/lib/dsh-remote/relay.db ".backup '/备份路径/relay.db'"`。
-- 升级：`sudo systemctl stop dsh-remote` → 解压新版 zip 到 `/opt/dsh-remote` 覆盖旧文件，
-  再 `sudo chown -R root:root /opt/dsh-remote` → `sudo systemctl start dsh-remote`。
-  别只换 `dist/` 和 `node_modules/`：zip 根目录还有 `start.sh`、`package.json` 等文件。
+- 升级：停服务后把整个目录挪开留作回滚，再往新目录解压新版 zip：
+
+  ```bash
+  sudo systemctl stop dsh-remote
+  sudo mv /opt/dsh-remote /opt/dsh-remote-<旧版本>    # 出问题时改回名字即回滚
+  sudo mkdir -p /opt/dsh-remote
+  sudo unzip dsh-remote-<新版本>-linux-x64.zip -d /opt/dsh-remote
+  sudo chown -R root:root /opt/dsh-remote
+  sudo systemctl start dsh-remote
+  ```
+
+  不要在原目录里解压覆盖：不带 `-o` 的 unzip 会逐个文件询问要不要替换，
+  带了也会把上游已删除的旧文件留在 `node_modules` 里。
   配置和数据都在 `/etc/dsh-remote` 与 `/var/lib/dsh-remote`，不受影响。
 
 ## 相关文档
