@@ -151,6 +151,13 @@ release 支持 `--skip-build` 复用 dist、`--skip-exe` 跳过 Windows exe；�
 
 各包依赖保持真实嵌套关系，不手动拍平。任一必要工件或冒烟检查失败时不产出该包。
 
+### 发布说明
+
+每个版本发布前在 `docs/changelog/<版本>.md` 写一份用户视角的更新说明
+（新能力、安装运行变化、已知限制），并把版本加进根目录 [CHANGELOG.md](../CHANGELOG.md)
+的索引。推 tag 后 release 工作流会校验该文件存在并把它作为 GitHub Release 正文，
+版本号带 `-`（如 rc）自动标记为预发布。
+
 ## 6. 服务器部署
 
 见 [deploy/README.md](../deploy/README.md)、[Caddyfile](../deploy/Caddyfile) 与 [systemd unit](../deploy/dsh-remote.service)。

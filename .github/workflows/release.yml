@@ -8,6 +8,7 @@
 #
 # 前置条件：tag 必须与 packages/launcher/package.json 的 version 一致
 # （zip 文件名里的版本号取自那里，不一致等于发错货）。
+# 还要有 docs/changelog/<版本>.md（Release 正文取自它，见 CHANGELOG.md）。
 
 name: Release
 
@@ -71,9 +72,28 @@ jobs:
             release/checksums.txt
           if-no-files-found: error
 
+      - name: 准备 Release 说明
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          notes="docs/changelog/${tag}.md"
+          if [ ! -f "$notes" ]; then
+            echo "::error::缺少 docs/changelog/${tag}.md；发布前先写好该版本的更新说明并把版本加进 CHANGELOG.md"
+            exit 1
+          fi
+          {
+            cat "$notes"
+            printf '\n---\n完整更新历史: https://github.com/%s/blob/%s/CHANGELOG.md\n' \
+              "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
+          } > release-notes.md
+
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
+          body_path: release-notes.md
+          # 版本号带 '-'（如 0.1.0-rc.1）自动标记为预发布
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             release/*.zip
             release/checksums.txt

@@ -2,6 +2,15 @@
 
 基线见 [源码依据](../02-dsh-facts.md)。以下路径相对 dsh 仓库根，项目实现明确标注。
 
+## 会话起始目录
+
+出处：`packages/api/session-controller/src/index.ts`、`packages/api/session-controller/src/commands.ts`。
+
+session.create 不带 workspaceId / cwd 时，新会话的 cwd 取 controller 构造时的
+defaultCwd，即 dsh 进程的 `process.cwd()`。dsh-remote 的 launcher 不给 dsh 指定 cwd，
+因此新会话起始目录就是启动器（systemd 部署里即 unit 的 WorkingDirectory）的 cwd；
+服务器部署把 WorkingDirectory 指到可写的工作区目录。
+
 ## 失败与重试
 
 出处：`packages/core/agent-loop/src/agent.ts`、`packages/core/agent/src/runtime-types.ts`、
