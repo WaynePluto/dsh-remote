@@ -34,6 +34,12 @@ export const membershipSchema = z.strictObject({
      * `--trusted-host`，无需用户重新输入。
      */
     browserAuthority: z.string().min(1).max(255).optional(),
+    /**
+     * relay 维护的本机自挂条目（见 relay 的 `membership/self-join.ts`）：
+     * 它让本机与局域网地址能直达这台机器的 dsh，不是操作员设置的远程入口。
+     * 只有 relay 会写这个标记；控制台的加入表单不携带它。
+     */
+    selfManaged: z.literal(true).optional(),
     joinedAt: z.number().int().nonnegative(),
   }).optional(),
 })

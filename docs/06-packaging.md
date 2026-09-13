@@ -93,6 +93,10 @@ start.ps1 需要 PowerShell 7；start.sh 使用 POSIX sh，并在归档中保留
 向导只对“无管理员 + loopback socket + loopback Host”开放。
 无桌面服务器使用 [部署说明](../deploy/README.md) 中的 CLI 初始化流程。
 
+relay 每次启动都会把本机挂到它自己身上（membership.json 中带 `selfManaged` 标记的自挂
+条目，附一次性注册令牌），connector 随即拨 loopback 注册。没有这一步，控制台根路径与
+局域网地址会因为「机器离线」打不开 dsh；机器控制台的「机器」页也会列出这台本机。
+
 ## 4. 配置
 
 可选配置文件 dsh-remote.config.json，通过 `--config <path>` 指定。

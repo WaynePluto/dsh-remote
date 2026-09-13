@@ -34,7 +34,7 @@ import {
 import { DSH_PLUGIN_PACKAGE_NAMES, resolveDshPluginOverlays } from './dsh-plugins.js'
 import { LauncherError } from './errors.js'
 import { JWT_SECRET_ENV_NAME, jwtSecretFilePath, loadOrCreateJwtSecret } from './jwt-secret.js'
-import { membershipFilePath, readMembership } from './membership.js'
+import { isSelfHub, membershipFilePath, readMembership } from './membership.js'
 import { assertSupportedNodeVersion } from './node-version.js'
 import { CONCISE_MODE_BUNDLE, ensureProfile, profileDirectory, resolveDshHome } from './profile.js'
 import { relayArguments, resolveRelayEntry } from './relay.js'
@@ -97,7 +97,10 @@ export async function run(argv: readonly string[]): Promise<number> {
   say(configPath === undefined ? '没有找到配置文件，使用默认配置。' : `已读取配置 ${configPath}`)
 
   const membership = readMembership(membershipFilePath(config.home))
-  const hub = membership?.hub
+  // relay 启动时会把本机挂到它自己身上（自动维护的自挂条目），
+  // 它支撑本机与局域网地址直达 dsh，但不是操作员设置的远程入口：
+  // banner 与 trusted hosts 都按「没有远程入口」处理。
+  const hub = isSelfHub(membership?.hub) ? undefined : membership?.hub
 
   const dshHome = resolveDshHome()
   const bootstrap = ensureProfile({

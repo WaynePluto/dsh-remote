@@ -15,11 +15,13 @@ export const MIN_ENROLL_TOKEN_LENGTH = 16
  * 这台机器的远程入口（如果有）。
  *
  * D16 最多允许一个：机器可以通过自己的地址以及最多一个其他机器的地址访问，
- * 不能形成链。
+ * 不能形成链。`self` 是 relay 维护的自挂条目（见 `membership/self-join.ts`），
+ * 它让本机与局域网地址能打开这台机器的 dsh，不是操作员设置的远程入口。
  */
 export type MembershipView =
   | { readonly kind: 'none' }
   | { readonly kind: 'joined'; readonly hub: MembershipHub }
+  | { readonly kind: 'self'; readonly hub: MembershipHub }
   | { readonly kind: 'unreadable'; readonly message: string }
 
 /** 仅支持 ws/wss：connector 向外拨号，从不通过 HTTP 获取。 */
@@ -54,6 +56,12 @@ function entryCard(view: MembershipView, machine: string): string {
   }
   if (view.kind === 'none') {
     return `<p class="empty">${name} 还没有远程入口，只能从它自己的地址打开（127.0.0.1 和局域网 IP）。用下面的表单设置一个——这不影响「机器」那一页里已经挂在 ${name} 上的机器。</p>`
+  }
+  if (view.kind === 'self') {
+    return `<div class="hub">
+<h3>${name} 已挂在自己身上（系统维护）</h3>
+<p class="meta">这是 dsh-remote 自动维护的条目：没有它，本机和局域网地址就打不开 ${name} 的 dsh。<br>它在每次启动时自动重建，不需要也不能在这里取消。下面仍可粘贴别的机器的命令，把 ${name} 的远程入口改到那台机器上。</p>
+</div>`
   }
   const { hub } = view
   const authority = hub.browserAuthority === undefined

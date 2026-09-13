@@ -4,6 +4,7 @@ import type { AuditRecorder } from '../../audit/index.js'
 import type { BrowserCookiePolicy } from '../../auth/cookies.js'
 import type { RelayConfig } from '../../config.js'
 import {
+  isSelfHub,
   MembershipFileError,
   readMembershipFile,
 } from '../../membership/index.js'
@@ -152,7 +153,9 @@ export function createAdminConsoleRequestContext(options: {
       }
     }
     const hub = membership?.hub
-    return hub === undefined ? { kind: 'none' } : { kind: 'joined', hub }
+    if (hub === undefined) return { kind: 'none' }
+    // 自挂条目由 relay 维护，页面对它的说明和操作都不同。
+    return isSelfHub(hub) ? { kind: 'self', hub } : { kind: 'joined', hub }
   }
 
   const adminAccount = (session: AdminConsoleSession): UserRecord | undefined => {

@@ -11,6 +11,7 @@ import {
   parseConnectorCommand,
   readMembershipFile,
   writeMembershipFile,
+  writeSelfMembership,
 } from '../../membership/index.js'
 import {
   MIN_ENROLL_TOKEN_LENGTH,
@@ -34,7 +35,10 @@ import { htmlHeaders, redirectResponse, textField } from '../shared.js'
 /** 远程入口页面及 membership 文件操作相关的路由。 */
 export function registerHubRoutes(
   app: Hono<{ Bindings: HttpBindings }>,
-  dependencies: AdminConsoleRequestContext,
+  dependencies: AdminConsoleRequestContext & {
+    /** relay 主端口的实际监听端口；恢复自挂条目时写入它。 */
+    readonly mainListenPort?: (() => number) | undefined
+  },
 ): void {
   const {
     sessionOf,
@@ -46,6 +50,8 @@ export function registerHubRoutes(
     membershipPath,
     logger,
     audit,
+    store,
+    config,
   } = dependencies
 
   const renderHub = (context: {
@@ -77,6 +83,8 @@ export function registerHubRoutes(
     const view = membershipView()
     // 没有加入任何地方：无需确认离开。
     if (view.kind === 'none') return redirectResponse(ADMIN_HUB_PATH, session.setCookieHeaders)
+    // 自挂条目由 relay 维护，不是操作员设置的远程入口，没有可取消的内容。
+    if (view.kind === 'self') return redirectResponse(ADMIN_HUB_PATH, session.setCookieHeaders)
     const { csrf, setCookieHeaders } = dependencies.confirmCsrf(context.req.header('cookie'))
     // 无法读取的远程入口仍值得清除——这是能修复它的唯一操作——因此页面要说明将清除什么。
     const consequences = view.kind === 'joined'
@@ -84,10 +92,12 @@ export function registerHubRoutes(
           `${machine} 不再出现在 ${view.hub.relayUrl} 的机器列表里，也不能再从那个地址打开。`,
           `${machine} 保存的注册令牌会被清掉，重新挂上去需要再粘一次对方给的命令。`,
           `挂在 ${machine} 上的那些机器不受影响，一台都不会掉线。`,
+          `本机和局域网地址不受影响，仍然可以打开 ${machine} 的 dsh。`,
         ]
       : [
           `读不出的 ${MEMBERSHIP_FILE_NAME} 会被清空，${machine} 回到没有远程入口的状态。`,
           `挂在 ${machine} 上的那些机器不受影响，一台都不会掉线。`,
+          `本机和局域网地址不受影响，仍然可以打开 ${machine} 的 dsh。`,
         ]
     return new Response(confirmPage({
       title: '取消远程入口',
@@ -182,6 +192,10 @@ export function registerHubRoutes(
     const body = await context.req.parseBody()
     const forged = rejectForgedSubmit(context, body)
     if (forged !== undefined) return forged
+    // 自挂条目不能被取消：它支撑本机与局域网地址，relay 下次启动也会重建。
+    if (membershipView().kind === 'self') {
+      return redirectResponse(ADMIN_HUB_PATH, session.setCookieHeaders)
+    }
     let previous: MembershipHub | undefined
     try {
       previous = readMembershipFile(membershipPath)?.hub
@@ -191,7 +205,21 @@ export function registerHubRoutes(
     }
     const now = Date.now()
     try {
-      clearMembershipFile(membershipPath)
+      // 取消后机器回到“只能从自己的地址打开”，而这条链路由
+      // 自挂条目支撑；没有 directSlug 的部署保持清空行为。
+      if (config.directSlug === undefined) {
+        clearMembershipFile(membershipPath)
+      } else {
+        writeSelfMembership({
+          store,
+          home: config.home,
+          slug: config.directSlug,
+          // 实际端口可能与配置不同（配置端口为 0 时）；控制台请求
+          // 走主端口，它就是自挂条目该拨的端口。
+          relayPort: dependencies.mainListenPort?.() ?? config.port,
+          logger,
+        })
+      }
     } catch (error) {
       logger.error({ err: error, path: membershipPath }, 'could not clear the membership file')
       return renderHub({

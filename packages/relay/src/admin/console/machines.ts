@@ -78,20 +78,25 @@ function machineItem(options: {
 }): string {
   const { device, online, config, hostname } = options
   const revoked = device.revokedAt !== null
+  // 本机（directSlug）就是运行这个控制台的机器：停止并移除它会
+  // 杀掉它自己的 dsh-remote，这个操作没有意义，也不提供入口。
+  const self = device.slug === config.directSlug
   const badge = revoked
     ? '<span class="badge gone">已停止并移除</span>'
     : online
-      ? '<span class="badge on">在线</span>'
-      : '<span class="badge off">离线</span>'
+      ? `<span class="badge on">在线</span>${self ? '<span class="badge">本机</span>' : ''}`
+      : `<span class="badge off">离线</span>${self ? '<span class="badge">本机</span>' : ''}`
   const entry = revoked ? undefined : machineEntryUrl({ device, config, hostname })
   const link = entry === undefined || !online
     ? ''
     : `<a class="open" href="${escapeHtml(entry)}">打开 ${escapeHtml(device.slug)} 的 dsh →</a>`
   // 使用链接而不是提交按钮：吊销无法从它所影响的机器上撤销，
   // 因此要经过同一路径在 GET 上提供的确认页面。
-  const action = revoked
-    ? '<span class="off">已停止并移除，重新挂上来需要新的注册令牌。</span>'
-    : `<a class="danger-link" href="${ADMIN_REVOKE_PATH}?machineId=${encodeURIComponent(device.machineId)}">停止 ${escapeHtml(device.slug)} 并移除…</a>`
+  const action = self
+    ? '<span class="hint">本机运行着这个控制台，从这里打开即可。</span>'
+    : revoked
+      ? '<span class="off">已停止并移除，重新挂上来需要新的注册令牌。</span>'
+      : `<a class="danger-link" href="${ADMIN_REVOKE_PATH}?machineId=${encodeURIComponent(device.machineId)}">停止 ${escapeHtml(device.slug)} 并移除…</a>`
   const address = revoked || entry === undefined || entry === '/'
     ? ''
     : `<br>访问地址 ${escapeHtml(entry)}`

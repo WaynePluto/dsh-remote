@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { MEMBERSHIP_FILE_NAME, parseMembership, type Membership } from '@dsh-remote/protocol'
+import { MEMBERSHIP_FILE_NAME, parseMembership, type Membership, type MembershipHub } from '@dsh-remote/protocol'
 import { LauncherError } from './errors.js'
 
 /**
@@ -52,4 +52,18 @@ export function readMembership(path: string): Membership | undefined {
       { hint: '到本机控制台的「远程入口」页重新设一次，或删掉这个文件按「没有远程入口」启动。', cause: error },
     )
   }
+}
+
+/**
+ * membership 中的 hub 是否是 relay 维护的本机自挂条目。
+ *
+ * relay 启动时会把机器挂到它自己身上（见 relay 的 `membership/self-join.ts`），
+ * 使本机与局域网地址能直达 dsh。它不是操作员设置的远程入口：banner 与
+ * `--trusted-host` 都要按「没有远程入口」处理，本机地址已另行信任。
+ * 依据 `selfManaged` 标记判断，与 relay 侧的 `isSelfHub` 一致。
+ * @param hub membership 记录的 hub。
+ * @returns 是自挂条目时为 true。
+ */
+export function isSelfHub(hub: MembershipHub | undefined): boolean {
+  return hub?.selfManaged === true
 }

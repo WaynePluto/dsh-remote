@@ -10,6 +10,7 @@ import { DeviceAuthenticator } from './auth/device.js'
 import { isLegacyPasswordHash } from './auth/password.js'
 import type { AuthenticationService } from './auth/service.js'
 import { resolveRelayConfig, type RelayConfig, type RelayConfigInput } from './config.js'
+import { ensureSelfMembership } from './membership/index.js'
 import {
   createBrowserServer,
   MAIN_LISTENER,
@@ -112,6 +113,7 @@ export function createRelayServer(
         logger.error({ err: error, machineId }, 'failed to close the browser port of a revoked machine')
       })
     },
+    mainListenPort: () => mainListenPort,
   })
 
   const browserListenerOptions: BrowserListenerOptions = {
@@ -178,6 +180,25 @@ export function createRelayServer(
           resolve(listenAddress)
         })
       })
+      // 先于成员端口同步：directSlug 路由与本机地址都依赖 connector
+      // 注册，而 connector 要等 membership 里出现自挂条目才会拨号。
+      // 写不进文件只降级本机直达链路，控制台照常服务，因此记录后继续。
+      if (config.directSlug !== undefined) {
+        try {
+          ensureSelfMembership({
+            store: options.store,
+            home: config.home,
+            slug: config.directSlug,
+            relayPort: address.port,
+            logger,
+          })
+        } catch (error) {
+          logger.error(
+            { err: error, home: config.home, slug: config.directSlug },
+            'could not self-join this machine to its own relay; its own address will not open dsh until the file is writable',
+          )
+        }
+      }
       // 早期运行中注册的成员机器会在此恢复 listener，因此书签中的端口在 relay 重启后仍能工作。
       await members.syncFromStore()
       return address

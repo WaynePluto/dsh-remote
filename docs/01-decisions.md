@@ -56,6 +56,12 @@ launcher 随之停掉 dsh 与 relay；恢复需要重新签发注册令牌。
 relay 按以下顺序解析目标：子域名 → 持久化的每机器端口 → `directSlug`。
 子域名适合公网 HTTPS；每机器端口适合无域名的局域网；`directSlug` 指向入口机器自己的 dsh。
 
+`directSlug` 路由也经过 connector 控制信道，因此 relay 在 `serve` 启动时把本机挂到它自己
+身上：membership.json 中写入带 `selfManaged` 标记的自挂条目并附一次性注册令牌，connector
+拨 loopback 注册后，本机与局域网地址才能直达这台机器的 dsh。自挂条目由 relay 维护
+（每次启动刷新；「取消远程入口」后由 relay 重建而不是清空），不属于操作员设置的远程入口，
+launcher 的 banner 与 `--trusted-host` 都按「没有远程入口」处理它。
+
 端口不在 cookie 作用域内，因此同一主机不同端口共享登录态；配置 Cookie Domain 时子域也共享登录态。
 系统按同一管理员控制这些机器设计，不将端口当作用户隔离边界。
 

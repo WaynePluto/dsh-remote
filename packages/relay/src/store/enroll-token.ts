@@ -41,7 +41,8 @@ export function issueDeviceEnrollToken(options: {
   deviceName?: string | null
   createdByUserId?: string | null
   sourceIp?: string | null
-  via: 'cli' | 'admin-console'
+  /** `self-join`：relay 启动时给本机自挂签发（见 `membership/self-join.ts`）。 */
+  via: 'cli' | 'admin-console' | 'self-join'
   now?: number
   logger?: Logger
 }): IssuedEnrollToken {

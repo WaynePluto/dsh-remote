@@ -83,6 +83,10 @@ export function registerMachineRoutes(
     if (device === undefined || device.revokedAt !== null) {
       return redirectResponse(ADMIN_PATH_PREFIX, session.setCookieHeaders)
     }
+    // 本机（directSlug）就是运行这个控制台的机器，不能在这里停掉自己。
+    if (device.slug === config.directSlug) {
+      return redirectResponse(ADMIN_PATH_PREFIX, session.setCookieHeaders)
+    }
     const { csrf, setCookieHeaders } = dependencies.confirmCsrf(context.req.header('cookie'))
     return new Response(confirmPage({
       title: '停止并移除机器',
@@ -156,6 +160,10 @@ export function registerMachineRoutes(
     const machineId = textField(body.machineId)
     const device = machineId === '' ? undefined : store.getDeviceByMachineId(machineId)
     if (device === undefined) return emptyResponse(404, session.setCookieHeaders)
+    // 防御列表页之外的直接提交：停掉本机会当场杀死运行这个控制台的 dsh-remote。
+    if (device.slug === config.directSlug) {
+      return redirectResponse(ADMIN_PATH_PREFIX, session.setCookieHeaders)
+    }
 
     const now = Date.now()
     const revoked = store.revokeDevice(machineId, now)

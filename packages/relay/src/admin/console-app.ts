@@ -58,6 +58,8 @@ export function createAdminConsoleRequestListener(options: {
   memberPort?: (machineId: string) => number | undefined
   /** 成功吊销后调用，使机器端口停止监听。 */
   onDeviceRevoked?: (machineId: string) => void
+  /** relay 主端口的实际监听端口（配置端口为 0 时与 config.port 不同）。 */
+  mainListenPort?: () => number
 }): AdminConsoleRequestListener {
   const { cookies, store, registry, config, logger } = options
   const audit = createAuditRecorder({ store, logger })
@@ -91,7 +93,10 @@ export function createAdminConsoleRequestListener(options: {
     ...options.memberPort === undefined ? {} : { memberPort: options.memberPort },
     ...options.onDeviceRevoked === undefined ? {} : { onDeviceRevoked: options.onDeviceRevoked },
   })
-  registerHubRoutes(app, context)
+  registerHubRoutes(app, {
+    ...context,
+    ...options.mainListenPort === undefined ? {} : { mainListenPort: options.mainListenPort },
+  })
   registerAccountRoutes(app, context)
 
   app.all(ADMIN_PATH_PREFIX, () => emptyResponse(405))
