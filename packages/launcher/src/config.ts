@@ -26,6 +26,19 @@ export const DEFAULT_RELAY_PORT = 30_809
  */
 export const DEFAULT_RELAY_HOST = '0.0.0.0'
 
+/**
+ * 配置了公网域名时的监听地址。域名模式的公网流量由前置 TLS
+ * 反代（Caddy/nginx）终结后转发进来，relay 自己只接受本机连接；
+ * relay 也拒绝在 domain-https 认证下绑定非 loopback 地址
+ * （`packages/relay/src/config.ts`），在这里对齐。
+ */
+export const DOMAIN_MODE_RELAY_HOST = '127.0.0.1'
+
+/** 绑定地址是否 loopback。域名模式的 host 校验与地址框的局域网行共用。 */
+export function isLoopbackBindHost(host: string): boolean {
+  return host === '::1' || host === '0:0:0:0:0:0:0:1' || host.startsWith('127.')
+}
+
 /** dsh-remote home 中的 relay 数据库文件名。 */
 export const RELAY_DATABASE_FILE_NAME = 'relay.db'
 
@@ -62,6 +75,17 @@ const slugSchema = z.string().refine(
   'slug 只能是 1-63 个小写字母、数字或连字符，且不能以连字符开头或结尾',
 )
 
+/**
+ * 本机 relay 的公网域名（如 dsh.example.com）。设置后 relay 以域名模式
+ * 运行：浏览器通过 `https://<slug>.<域名>` 访问每台机器，会话 cookie
+ * 带 `__Secure-` 前缀并共享给整个域名。这与退役的 `relay.publicDomain`
+ * （hub 时代的远程入口地址）不是同一个概念。
+ */
+const publicDomainSchema = z.string().trim().min(1).max(253).transform(value => value.toLowerCase()).refine(
+  value => value.split('.').every(label => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/u.test(label)),
+  'domain 只能是点分隔的小写 DNS 标签（可含大写，会转为小写），例如 dsh.example.com；不要带 https:// 、端口或结尾的点',
+)
+
 const launcherConfigSchema = z.strictObject({
   dsh: z.strictObject({
     profile: profileSchema.default(DEFAULT_DSH_PROFILE),
@@ -80,9 +104,17 @@ const launcherConfigSchema = z.strictObject({
    */
   relay: z.strictObject({
     port: z.number().int().min(1).max(65_535).default(DEFAULT_RELAY_PORT),
-    host: bindHostSchema.default(DEFAULT_RELAY_HOST),
+    /**
+     * 绑定地址。不写时按模式决定：域名模式只监听 loopback（公网流量
+     * 走前置 TLS 反代），否则监听全部接口让局域网手机可以访问控制台。
+     */
+    host: bindHostSchema.optional(),
     /** 这台机器在自己控制台上的名称；默认为主机名。 */
     slug: slugSchema.default(() => defaultMachineSlug()),
+    /**
+     * 本机 relay 的公网域名；不设置时以认证的局域网 HTTP 模式运行。
+     */
+    domain: publicDomainSchema.optional(),
     /**
      * 保存管理员、会话、设备和审计日志的 SQLite 文件。
      * 在此设为可选，因为它的默认值依赖 `home`，而 zod 无法
@@ -100,6 +132,8 @@ const launcherConfigSchema = z.strictObject({
   ...value,
   relay: {
     ...value.relay,
+    host: value.relay.host
+      ?? (value.relay.domain === undefined ? DEFAULT_RELAY_HOST : DOMAIN_MODE_RELAY_HOST),
     data: value.relay.data ?? join(value.home, RELAY_DATABASE_FILE_NAME),
   },
 }))
@@ -129,9 +163,28 @@ function assertNoRetiredKeys(value: unknown, path: string): void {
   if (typeof relay !== 'object' || relay === null) return
   const retired = RETIRED_RELAY_KEYS.filter(key => key in relay)
   if (retired.length === 0) return
+  const domainHint = retired.includes('publicDomain')
+    ? '想让这台机器自己的控制台走公网域名的话，新键是 relay.domain。'
+    : ''
   throw new LauncherError(
     `${path} 的 relay 配置里还有 ${retired.join('、')}，但远程入口已经不在这个文件里配置了。`,
-    { hint: '本机挂在哪台入口机器上，由本机控制台的「远程入口」页写进 membership.json；删掉这几项，再到那一页设置。relay 这一段现在只描述本机自己的控制台（port / host / slug / data）。' },
+    { hint: `本机挂在哪台入口机器上，由本机控制台的「远程入口」页写进 membership.json；删掉这几项，再到那一页设置。relay 这一段现在描述本机自己的控制台（port / host / slug / domain / data）。${domainHint}` },
+  )
+}
+
+/**
+ * 域名模式只监听 loopback：公网流量必须先经过前置 TLS 反代，
+ * relay 在明文接口上服务 `__Secure-` 会话 cookie 会破坏其安全属性
+ * （relay 自己也会拒绝这种组合，见 `packages/relay/src/config.ts`）。
+ * @param config 已解析的配置。
+ * @throws LauncherError 配置了 domain 且显式绑定了非 loopback 地址时抛出。
+ */
+function assertDomainModeLoopback(config: LauncherConfig): void {
+  const { domain, host } = config.relay
+  if (domain === undefined || isLoopbackBindHost(host)) return
+  throw new LauncherError(
+    `relay.domain 是 ${domain}，但 relay.host 显式绑定在 ${host} 上；域名模式的 relay 只能监听 127.0.0.1。`,
+    { hint: '公网流量应先由 Caddy/nginx 终结 TLS 再转发到本机 relay；把 relay.host 改成 127.0.0.1，或删掉这一项让它自动使用。' },
   )
 }
 
@@ -154,7 +207,10 @@ export function parseLauncherConfig(raw: string, path: string): LauncherConfig {
   }
   assertNoRetiredKeys(document, path)
   const parsed = launcherConfigSchema.safeParse(document)
-  if (parsed.success) return parsed.data
+  if (parsed.success) {
+    assertDomainModeLoopback(parsed.data)
+    return parsed.data
+  }
   const details = parsed.error.issues
     .map(issue => `${issue.path.join('.') || '<根>'}: ${issue.message}`)
     .join('；')

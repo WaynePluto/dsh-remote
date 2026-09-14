@@ -17,6 +17,7 @@
     "@deepseek-ai/dsh": "0.1.5-rc.2",
     "@dsh-remote/connector": "workspace:*",
     "@dsh-remote/dsh-plugin-agents-md": "workspace:*",
+    "@dsh-remote/dsh-plugin-browser-compat": "workspace:*",
     "@dsh-remote/dsh-plugin-concise-mode": "workspace:*",
     "@dsh-remote/dsh-plugin-directory-picker-browse": "workspace:*",
     "@dsh-remote/dsh-plugin-copilot-auth": "workspace:*",

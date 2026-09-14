@@ -72,11 +72,17 @@ export function resolveRelayEntry(
 
 /** relay 子进程需要、但未由 dsh-remote 自己规则固定的全部内容。 */
 export interface RelayArgumentOptions {
-  /** 绑定地址；使用 `0.0.0.0` 使局域网手机可以访问控制台。 */
+  /** 绑定地址；域名模式固定 loopback（见 `config.ts` 的校验），局域网模式为 `0.0.0.0`。 */
   readonly host: string
   readonly port: number
   /** 这台机器的 slug，用作 relay 的 `--direct-slug` 路由。 */
   readonly slug: string
+  /**
+   * 本机 relay 的公网域名。提供时 relay 以域名模式运行（`--domain` +
+   * `--scheme https`）：子域名成为机器路由键，会话 cookie 是
+   * `__Secure-` 前缀加 `Domain=.<域名>`，成员机器不再分配端口。
+   */
+  readonly domain?: string | undefined
   /** 保存管理员、会话、设备和审计日志的 SQLite 文件。 */
   readonly data: string
   /** 这台机器与 connector 共享的 dsh-remote home。 */
@@ -85,9 +91,11 @@ export interface RelayArgumentOptions {
 
 /**
  * 构建 relay 子进程的 argv。
- * 结构遵循开发栈（`scripts/dev-stack.mjs`），该配置已实际验证局域网路径：普通 HTTP 配合 `--lan-http`，明确开启浏览器认证，因此每个非 loopback 请求仍必须登录（铁律 11）。
+ * 两种模式都以认证为前提（铁律 11）：局域网沿用开发栈验证过的
+ * `--scheme http --lan-http`（`scripts/dev-stack.mjs`）；域名模式把
+ * scheme、子域名路由和 cookie 策略全部交给 relay 的 `--domain`。
  * @param entry - 已解析的 relay 入口点。
- * @param options - 绑定地址、端口、slug、数据库和 home。
+ * @param options - 绑定地址、端口、slug、域名、数据库和 home。
  * @returns 要传给 `node` 的参数。
  */
 export function relayArguments(entry: RelayEntry, options: RelayArgumentOptions): string[] {
@@ -98,8 +106,9 @@ export function relayArguments(entry: RelayEntry, options: RelayArgumentOptions)
     '--host', options.host,
     '--port', String(options.port),
     '--direct-slug', options.slug,
-    '--scheme', 'http',
-    '--lan-http',
+    ...options.domain === undefined
+      ? ['--scheme', 'http', '--lan-http']
+      : ['--domain', options.domain, '--scheme', 'https'],
     '--data', options.data,
     '--home', options.home,
   ]

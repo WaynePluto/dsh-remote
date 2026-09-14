@@ -88,18 +88,23 @@ ls /opt/dsh-remote/dist                      # 应该能看到 index.js 和 rela
   "relay": {
     "host": "127.0.0.1",
     "port": 30809,
-    "slug": "hub"
+    "slug": "hub",
+    "domain": "dsh.example.com"
   }
 }
 ```
+
+这份示例配合下方 Caddyfile：机器地址形如 `https://hub.dsh.example.com`。
+把 `domain` 配成更上层的根域（如 `example.com`）也完全可以，机器地址就变成 `https://<机器名>.example.com`，证书与 DNS 记录按同样的层级准备即可。
 
 | 字段 | 说明 |
 |---|---|
 | `home` | dsh-remote home。`relay.db` 默认就落在它下面，unit 的 `ReadWritePaths` 必须覆盖它 |
 | `dsh.port` | dsh 的端口，**永远只 bind `127.0.0.1`**，不要放行到防火墙外 |
-| `relay.host` | `127.0.0.1` = 只让本机的 Caddy 连得到；填 `0.0.0.0` 则局域网也能直连（明文 HTTP，见下） |
+| `relay.host` | `127.0.0.1` = 只让本机的 Caddy/nginx 连得到；填 `0.0.0.0` 则局域网也能直连（明文 HTTP，见下）。配置了 `domain` 时必须留空或填 `127.0.0.1`，launcher 会拒绝其他值 |
 | `relay.port` | 控制台与隧道入口，默认 `30809` |
 | `relay.slug` | 这台机器在自己控制台上的名字，只能是小写字母、数字和连字符 |
+| `relay.domain` | **要用域名访问就得配**：公网根域（如 `example.com`）。设置后 relay 以域名模式运行，每台机器的地址是 `https://<机器名>.<域名>`——这台机器自己的地址由 `slug` 决定（想用 `dsh.example.com` 打开它，就配 `domain: "example.com"` + `slug: "dsh"`）。不设置则只有明文局域网 HTTP 模式，域名访问不可用 |
 
 配置里**没有**「远程入口是谁」这一项：那是本机控制台的「远程入口」页写进 `membership.json` 的，
 不在配置文件里配（D16）。
@@ -197,19 +202,18 @@ journalctl -u dsh-remote -n 50 --no-pager
 # 3. 本机控制台（loopback socket + loopback Host 免登录）→ 200
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:30809/_admin
 
-# 4. 经 Caddy 的 TLS 入口 —— 拿到任何 HTTP 码即说明 TLS 与反代链路通了
-curl -sS -o /dev/null -w '%{http_code}\n' https://dsh.example.com/_admin
+# 4. 经 TLS 入口的域名请求 → 302 到登录页（_auth/login）
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' https://hub.dsh.example.com/_admin
 
-# 5. 证书是真的（不是 Caddy 的内部 CA）
-curl -sS -I https://dsh.example.com/_admin | head -1
+# 5. 证书是真的（不是反代的内部 CA）
+curl -sS -I https://hub.dsh.example.com/_admin | head -1
 
 # 6. 重启一次，确认开机自启和数据都还在
 sudo systemctl restart dsh-remote && sleep 5 && systemctl is-active dsh-remote
 ```
 
-第 3 条能通说明 relay 起来了；第 4 条拿到任何 HTTP 码（现在通常是 404 或 403）
-就说明 TLS 与反代链路是通的——域名 Host 还不被 relay 认识（见「现状与限制」），
-302 跳登录页要等启动器支持域名模式后才会出现。
+第 3 条能通说明 relay 起来了；第 4 条拿到 302 说明 TLS、反代与域名模式三者接上了，
+浏览器打开 `https://hub.dsh.example.com/` 输入管理员密码和动态码即可进入。
 
 > ⚠️ 第 3 条同时说明：**任何能在这台机器上开 loopback 连接的人都免登录**，
 > 包括通过 `ssh -L 30809:127.0.0.1:30809` 转发出去的浏览器。
@@ -234,27 +238,26 @@ sudo ufw status
 
 ## 现状与限制
 
-**通过域名用浏览器打开被开放的机器，现在还不能用。** 原因值得写清楚：
+**通过域名用浏览器打开机器，要求配置文件里写了 `relay.domain` 且 TLS 反代原样保留 Host。**
+两件事都做对后整条链路可用：
 
-- relay 的域名模式由 `--domain <域名> --scheme https` 开启（`packages/relay/src/cli.ts`）。
-  只有这时子域名才是路由键，cookie 才带 `__Secure-` 前缀和 `Domain=.<域名>`。
-- 但启动器拉起本机 relay 时用的是固定参数
-  `--scheme http --lan-http --direct-slug <slug>`（`packages/launcher/src/relay.ts`），
-  还没把域名模式暴露成配置项。
-- 在这种模式下，一个域名 Host 会被判为「不认识的机器」返回 404
-  （`packages/relay/src/http/security.ts`），而 https 的 Origin 会被 CSRF 检查判为 403
-  （`packages/relay/src/admin/shared.ts` 的 `sameOrigin`）——连登录都过不去。
-
-所以现在这套文件的实际用法是：
+- launcher 读到 `relay.domain` 后，让 relay 以域名模式启动（`--domain <域名> --scheme https`，
+  `packages/launcher/src/relay.ts`）：子域名成为机器路由键，会话 cookie 是
+  `__Secure-` 前缀加 `Domain=.<域名>`，成员机器不再分配独立端口。
+- 同时 launcher 把 `<slug>.<域名>` 写进 dsh 的 `--trusted-host`，并把
+  `relay.host` 固定为 `127.0.0.1`（公网流量必须先过 TLS 反代；显式配置其他
+  地址会被拒绝）。
+- **没配 `relay.domain` 的机器**：relay 以明文局域网 HTTP 模式运行，域名 Host
+  会得到 404、https Origin 会得到 403——那台机器只能用 IP / localhost / VPN 直连访问。
 
 | 想做什么 | 现在怎么办 |
 |---|---|
 | 让入口机器长期在线、开机自启 | ✅ 用这里的 `dsh-remote.service` |
-| 让别的机器从外网拨进来 | ✅ 用这里的 `Caddyfile`：把注册命令里的 `--relay` 改成 `wss://dsh.example.com`（隧道的 `/_tunnel/*` 在任何 Host 校验之前处理，所以现在就能连上）<br>⚠️ 同一条命令里的 `--hub-authority` 要是你**实际用浏览器打开的那个地址**（例如 VPN 里的 `10.0.0.5`），它会变成那台 dsh 的 `--trusted-host` |
-| 用浏览器打开入口机器和挂在它上面的机器 | ⏳ 暂时走 VPN / 内网 IP 直连，或 `ssh -L 30809:127.0.0.1:30809` 之后开 `http://127.0.0.1:30809` |
-| 用 `https://<机器>.dsh.example.com` 访问 | ❌ 等启动器支持域名模式后即可，`Caddyfile` 不用改 |
+| 用 `https://<机器>.<域名>` 访问 | ✅ 配置 `relay.domain` + 泛域名 DNS/证书 + TLS 反代（见上文） |
+| 让别的机器从外网拨进来 | ✅ 注册命令里的 `--relay` 用 `wss://<域名>`；域名模式下签发的命令会自动带上正确的 `--hub-authority <机器>.<域名>`，粘到对方控制台即可 |
+| 没有域名 / 不想上 TLS | 内网或 VPN 直连：目标机器不配 `domain`，`relay.host` 用 `0.0.0.0`，放行 `30809` 和机器端口段 `30810-30873`（明文 HTTP，启动时会打印 `HIGH RISK` 告警，**只能在 VPN 或可信内网里用**），或 `ssh -L 30809:127.0.0.1:30809` 之后开 `http://127.0.0.1:30809` |
 
-顺带一提，域名模式一旦启用，被开放的机器就不再分配端口了（子域名成为唯一路由键），
+启用域名模式后，被开放的机器不再分配端口（子域名是唯一路由键），
 书签需要从 `http://<IP>:<端口>` 换成 `https://<机器>.<域名>`。
 
 ## 备份与升级

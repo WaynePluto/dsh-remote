@@ -23,12 +23,12 @@
 | 设置与模型插件（8） | `packages/plugins/{agents-md,proxy,copilot-auth,models-catalog,model-capabilities,favorite-models,subagent-depth,notify}` | 全局提示词、出网代理、模型登录/目录/能力/收藏、深度设置、桌面通知 | dsh 设置/连接/槽位；代理用 undici，模型目录用 pi-ai |
 | 会话插件（4） | `packages/plugins/{exec-process,turn-retry,chat-scroll,user-message-fork}` | 执行过程折叠、重试、滚动、用户消息分叉 | dsh 会话/投影/浏览器 UI；仅 turn-retry 有实质宿主业务 |
 | 工作区与工具插件（5） | `packages/plugins/{services,terminal,tools-inspector,skills-inspector,files}` | 常驻服务、交互终端、工具/技能历史、右侧 Sidebar 只读文件浏览 | dsh live Agent、工具、PTY、RPC、Sidebar slots；services 自有 Node 进程管理引擎 |
-| 环境与预设插件（4） | `packages/plugins/{remote-privileged,directory-picker-browse,yolo-mode,concise-mode}` | 远程设置、网页目录选择、固定 YOLO、精简预设 | dsh 插件组合；concise-mode 是 Bundle，其余是 overlay |
+| 环境与预设插件（5） | `packages/plugins/{remote-privileged,browser-compat,directory-picker-browse,yolo-mode,concise-mode}` | 远程设置、旧 WebKit Iterator 垫片、网页目录选择、固定 YOLO、精简预设 | dsh 插件组合；concise-mode 是 Bundle，其余是 overlay |
 | 开发与验证脚本 | `scripts/dev-stack.mjs`、`local-config.mjs`、`*-check.mjs` | 本地全链路、独立凭据目录、插件契约冒烟、依赖检查 | launcher/relay 源码模块、Node；脚本各自声明环境前提 |
 | 发行打包 | `scripts/pack.mjs`、`packaging/`、`.github/workflows/` | 分平台 deploy/归档、产物检查、启动脚本、图标、CI | archiver、pnpm、Go 工具链；不带 Node 二进制 |
 | Windows 托盘 | `packaging/win-launcher/*.go` | 菜单、单实例、自启动、日志轮转、Node launcher 生命周期 | Go 标准库、Win32 API；同一 `package main`，无第三方 Go 包 |
 
-21 个插件中 20 个普通 overlay，1 个 Profile Bundle；17 个有浏览器入口。`@dsh-remote/plugin-ui` 不是插件，不进入 overlay 清单或 launcher 插件顺序。
+22 个插件中 21 个普通 overlay，1 个 Profile Bundle；17 个有浏览器入口。`@dsh-remote/plugin-ui` 不是插件，不进入 overlay 清单或 launcher 插件顺序。
 具体功能及使用限制见 [插件索引](docs/plugins.md) 和各包 README。
 
 ## 3. 源码依赖关系图

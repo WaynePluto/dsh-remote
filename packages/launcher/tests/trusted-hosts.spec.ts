@@ -52,6 +52,21 @@ describe('trusted hosts', () => {
     expect(trustedHostsFor({ lanAddress: '10.1.2.90' })).toEqual(['127.0.0.1', 'localhost', '10.1.2.90'])
   })
 
+  it('trusts the public subdomain derived from relay.domain alongside everything else', () => {
+    expect(trustedHostsFor({ publicAuthority: 'hub.dsh.example.com' }))
+      .toEqual(['127.0.0.1', 'localhost', 'hub.dsh.example.com'])
+    expect(trustedHostsFor({
+      lanAddress: '10.1.2.90',
+      publicAuthority: 'hub.dsh.example.com',
+      hubAuthority: 'pc1.dsh.example.com',
+    })).toEqual(['127.0.0.1', 'localhost', '10.1.2.90', 'hub.dsh.example.com', 'pc1.dsh.example.com'])
+  })
+
+  it('refuses a public authority dsh would reject', () => {
+    expect(() => trustedHostsFor({ publicAuthority: 'https://hub.dsh.example.com' })).toThrow(LauncherError)
+    expect(() => trustedHostsFor({ publicAuthority: 'hub.dsh.example.com:' })).toThrow(/裸地址/)
+  })
+
   it('trusts the hub authority recorded in membership.json', () => {
     const home = newHome()
     const path = membershipFilePath(home)

@@ -50,6 +50,19 @@ launcher、开发栈和打包脚本必须同时检查宿主与浏览器产物。
 注册时 readFileSync 将 bundle 读成不可变快照，以 IMMUTABLE_CACHE 下发；只有 rebuilt() 会重读，
 该回调由 HMR watch 触发。dsh-remote-web 没有 HMR，任何插件改动都必须构建并重启 dsh。
 
+## index.html 注入
+
+出处：`packages/host/webserver/src/index.ts`（`webserver/index-inject` 事件）、`src/injections.ts`。
+
+宿主插件订阅 `webserver/index-inject`，向每次渲染重新收集的表追加结构化行；行是纯
+JSON 数据，serve 形态渲染进 index.html 文本，静态 worker 形态由 boot payload 的页面解释器
+按同一顺序执行。行类型：`global`（先于后续 script 行给 globalThis 赋值）、`script`
+（内联经典脚本，text 不得含 `</script`）、`script-src`/`script-preload`、`style`、`html`。
+
+head 位置的经典脚本 parser-blocking，先于页面 combo 模块求值。remote-privileged 用
+global 行注入 `__DSH_TRANSPORT__`；browser-compat 用 head script 行在旧 WebKit 上垫平
+Iterator helpers（函数体 toString 序列化，必须自包含、不引用模块作用域）。
+
 ## 设置写入
 
 出处：`packages/settings/settings/src/index.ts`、`packages/client/ui-settings/src/client/settings-scope.ts`。

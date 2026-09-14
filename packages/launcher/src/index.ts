@@ -117,8 +117,14 @@ export async function run(argv: readonly string[]): Promise<number> {
   // Mode A：relay 原样转发浏览器的 Host，因此 dsh 必须信任
   // 浏览器可能用来访问这台机器的每个 authority（铁律 7）。
   const lan = lanAddress()
+  // 域名模式下这台机器的公网入口是 https://<slug>.<域名>，
+  // 由本机 relay 自己服务；不配置 domain 时它不存在。
+  const publicAuthority = config.relay.domain === undefined
+    ? undefined
+    : `${config.relay.slug}.${config.relay.domain}`
   const trustedHosts = trustedHostsFor({
     lanAddress: lan,
+    ...publicAuthority === undefined ? {} : { publicAuthority },
     hubAuthority: hub?.browserAuthority,
   })
   say(`dsh 信任的地址：${trustedHosts.join('、')}`)
@@ -214,6 +220,7 @@ export async function run(argv: readonly string[]): Promise<number> {
       host: config.relay.host,
       port: config.relay.port,
       slug: config.relay.slug,
+      ...config.relay.domain === undefined ? {} : { domain: config.relay.domain },
       data: config.relay.data,
       home: config.home,
     }),
@@ -257,6 +264,7 @@ export async function run(argv: readonly string[]): Promise<number> {
       relayHost: config.relay.host,
       machine: config.relay.slug,
       lanAddress: lan,
+      ...publicAuthority === undefined ? {} : { publicUrl: `https://${publicAuthority}` },
       hub,
       adminReady,
     }))

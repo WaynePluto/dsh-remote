@@ -41,7 +41,7 @@ Every machine running dsh-remote is **identical**: its own dsh, a console, and a
 
 - The relation is **one-way**: pc1 can open pc2, but pc2 cannot open pc1; any machine can act as the entry
 - Exposed machines **need no public IP and no port forwarding**
-- Each attached machine gets a **fixed port** on the entry machine (e.g. `http://pc1:30810` is pc2) — safe to bookmark; with a domain and HTTPS you can also use `pc2.your-domain` subdomains (optional)
+- Each attached machine gets a **fixed port** on the entry machine (e.g. `http://pc1:30810` is pc2) — safe to bookmark; once the entry machine sets `relay.domain` behind a TLS proxy, subdomains like `https://pc2.your-domain` take over instead (recommended for the public internet — see the [deployment guide](deploy/README.md))
 - dsh only ever listens on `127.0.0.1`; every outward-facing door is guarded by the console
 
 ## Requirements

@@ -115,8 +115,9 @@ relay 每次启动都会把本机挂到它自己身上（membership.json 中带 
 | dsh.port | 3080 | dsh 端口，绑定 127.0.0.1 |
 | dsh.extraArgs | [] | dsh 额外参数 |
 | relay.port | 30809 | 控制台端口 |
-| relay.host | 0.0.0.0 | 局域网访问监听地址 |
+| relay.host | 0.0.0.0；配了 domain 时 127.0.0.1 | 局域网访问监听地址；域名模式只监听 loopback，公网流量走前置 TLS 反代 |
 | relay.slug | 由主机名推导 | 机器名 |
+| relay.domain | （不设置） | 公网根域；设置后 relay 以域名模式运行，机器地址是 `https://<slug>.<域名>`，launcher 同时把它加入 dsh 的 trusted host |
 | relay.data | home/relay.db | SQLite 数据库 |
 | home | ~/.dsh-remote | 设备密钥、membership、JWT 密钥与日志 |
 
@@ -162,6 +163,7 @@ release 支持 `--skip-build` 复用 dist、`--skip-exe` 跳过 Windows exe；�
 
 见 [deploy/README.md](../deploy/README.md)、[Caddyfile](../deploy/Caddyfile) 与 [systemd unit](../deploy/dsh-remote.service)。
 systemd 管理 launcher，Restart=always 负责整套恢复；ReadWritePaths 覆盖 dsh-remote home、DSH_HOME 和工作目录。
-JWT 密钥由 launcher 生成，不写入 unit。公网 relay 监听 loopback，TLS 代理原样保留 Host。
+JWT 密钥由 launcher 生成，不写入 unit。公网部署在配置里写 `relay.domain`，relay 监听 loopback，
+TLS 代理原样保留 Host。
 
 后续发布任务与平台实机验收统一记在 [当前进度](05-roadmap.md)。

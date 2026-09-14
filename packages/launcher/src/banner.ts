@@ -1,5 +1,5 @@
 import type { MembershipHub } from '@dsh-remote/protocol'
-import { DEFAULT_RELAY_HOST } from './config.js'
+import { DEFAULT_RELAY_HOST, isLoopbackBindHost } from './config.js'
 import { DSH_BIND_HOST } from './dsh.js'
 import { LAUNCHER_VERSION } from './version.js'
 
@@ -77,9 +77,9 @@ function hubScheme(relayUrl: string): 'http' | 'https' {
   return relayUrl.startsWith('wss://') ? 'https' : 'http'
 }
 
-/** 绑定 loopback 的 relay 有意不允许从局域网访问。 */
+/** 绑定 loopback 的 relay 有意不允许从局域网访问；与域名模式的 host 校验共用同一判定。 */
 function loopbackBind(host: string): boolean {
-  return host === '::1' || host === '0:0:0:0:0:0:0:1' || host.startsWith('127.')
+  return isLoopbackBindHost(host)
 }
 
 export interface BannerOptions {
@@ -92,6 +92,11 @@ export interface BannerOptions {
   readonly machine?: string | undefined
   /** 这台机器的局域网 IPv4 地址（如果有）。 */
   readonly lanAddress?: string | undefined
+  /**
+   * 配置了 relay.domain 时的公网入口（`https://<slug>.<域名>`）。
+   * 与「远程访问」行不同：它描述这台机器自己的 relay，不是挂在别人身上。
+   */
+  readonly publicUrl?: string | undefined
   /** 这台机器挂靠的远程入口；没有时为 undefined。 */
   readonly hub?: MembershipHub | undefined
   /**
@@ -172,6 +177,10 @@ export function renderBanner(options: BannerOptions): string {
     rows.push({ label: '局域网访问', value: '没找到局域网 IPv4 地址', note: '暂不可用' })
   } else {
     rows.push({ label: '局域网访问', value: `http://${options.lanAddress}:${relayPort}`, note: '需登录' })
+  }
+
+  if (options.publicUrl !== undefined) {
+    rows.push({ label: '公网访问', value: options.publicUrl, note: '需登录' })
   }
   // dsh 自己的地址不会被作为入口提供：dsh 0.1.2
   // 使用每次启动都会变化的 token 自行认证浏览器，因此

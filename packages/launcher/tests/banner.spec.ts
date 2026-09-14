@@ -40,6 +40,22 @@ describe('banner', () => {
       .toContain('控制台只监听 127.0.0.1')
   })
 
+  it('shows the public entry with a login note in domain mode', () => {
+    const banner = renderBanner({
+      ...LOCAL,
+      relayHost: '127.0.0.1',
+      publicUrl: 'https://hub.dsh.example.com',
+    })
+    expect(banner).toContain('公网访问')
+    expect(banner).toContain('https://hub.dsh.example.com')
+    // 域名模式监听 loopback：局域网行明确说已关闭，而不是打印错误地址。
+    expect(banner).toContain('控制台只监听 127.0.0.1')
+  })
+
+  it('never prints a public entry outside domain mode', () => {
+    expect(renderBanner(LOCAL)).not.toContain('公网访问')
+  })
+
   it('tells a machine with no remote entry how to get one', () => {
     const banner = renderBanner(LOCAL)
     expect(banner).toContain('没有远程入口')

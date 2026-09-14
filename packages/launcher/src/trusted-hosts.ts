@@ -82,17 +82,21 @@ export function lanAddress(): string | undefined {
 /**
  * 浏览器可能放进到达这台机器 dsh 的请求 `Host` header 中的每个 authority。
  * Mode A 原样转发 Host（铁律 7），因此 dsh 必须信任所有这些 authority，否则请求会得到 403；没有端口的条目匹配任意端口。
- * @param options - 局域网地址和 hub 面向浏览器的 authority，二者都可选；尚未加入 hub 的机器只能在本地访问。
+ * @param options - 局域网地址、本机公网子域名（配置了 relay.domain 时）和 hub 面向浏览器的 authority，全部可选；尚未加入 hub 的机器只能在本地访问。
  * @returns 去重且顺序稳定的 `--trusted-host` 列表。
  * @throws LauncherError 条目不是裸 `host[:port]` 时抛出。
  */
 export function trustedHostsFor(options: {
   readonly lanAddress?: string | undefined
+  readonly publicAuthority?: string | undefined
   readonly hubAuthority?: string | undefined
 }): readonly string[] {
   const sources: TrustedHostSource[] = [
     ...LOOPBACK_TRUSTED_HOSTS.map(value => ({ value, origin: '本机地址' })),
     ...options.lanAddress === undefined ? [] : [{ value: options.lanAddress, origin: '本机局域网地址' }],
+    ...options.publicAuthority === undefined
+      ? []
+      : [{ value: options.publicAuthority, origin: 'relay.domain 配置的本机公网地址' }],
     ...options.hubAuthority === undefined
       ? []
       : [{ value: options.hubAuthority, origin: 'membership.json 里入口机器的浏览器地址' }],

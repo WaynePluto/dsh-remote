@@ -75,6 +75,59 @@ describe('launcher config', () => {
       .toBe(join(homedir(), 'db', 'relay.db'))
   })
 
+  it('binds loopback by default when a public domain is configured', () => {
+    const config = parseLauncherConfig(JSON.stringify({
+      relay: { domain: 'DSH.Example.COM', slug: 'hub' },
+    }), 'test.json')
+    expect(config.relay.domain).toBe('dsh.example.com')
+    expect(config.relay.host).toBe('127.0.0.1')
+  })
+
+  it('keeps serving the LAN on all interfaces when no domain is configured', () => {
+    expect(parseLauncherConfig('{}', 'test.json').relay.host).toBe(DEFAULT_RELAY_HOST)
+  })
+
+  it('refuses an explicit non-loopback bind in domain mode before spawning anything', () => {
+    const document = JSON.stringify({ relay: { domain: 'dsh.example.com', host: '0.0.0.0' } })
+    expect(() => parseLauncherConfig(document, 'test.json')).toThrow(LauncherError)
+    try {
+      parseLauncherConfig(document, 'test.json')
+      expect.unreachable('an insecure domain-mode bind must stop the launcher')
+    } catch (error) {
+      expect(error).toBeInstanceOf(LauncherError)
+      expect(error instanceof LauncherError ? error.hint : '').toContain('127.0.0.1')
+    }
+  })
+
+  it('accepts a loopback bind alongside a domain', () => {
+    const config = parseLauncherConfig(JSON.stringify({
+      relay: { domain: 'dsh.example.com', host: '127.0.0.1' },
+    }), 'test.json')
+    expect(config.relay.host).toBe('127.0.0.1')
+  })
+
+  it.each([
+    ['https://dsh.example.com', /domain/],
+    ['dsh.example.com:443', /domain/],
+    ['dsh.example.com.', /domain/],
+    ['dsh..example.com', /domain/],
+    ['-bad.dsh.example.com', /domain/],
+    ['', /domain/],
+  ])('rejects the malformed public domain %s instead of guessing', (domain, message) => {
+    expect(() => parseLauncherConfig(JSON.stringify({ relay: { domain } }), 'test.json')).toThrow(message)
+  })
+
+  it('points the retired relay.publicDomain key at relay.domain', () => {
+    const cwd = withConfig(JSON.stringify({ relay: { publicDomain: 'dsh.example.com' } }))
+    try {
+      loadLauncherConfig({ cwd })
+      expect.unreachable('a retired key must stop the launcher')
+    } catch (error) {
+      expect(error).toBeInstanceOf(LauncherError)
+      expect(error instanceof LauncherError ? error.hint : '').toContain('relay.domain')
+    }
+  })
+
   it('expands ~ in the home override, like dsh does for its own paths', () => {
     const config = parseLauncherConfig(JSON.stringify({ home: '~/somewhere-else' }), 'test.json')
     expect(config.home).toBe(join(homedir(), 'somewhere-else'))

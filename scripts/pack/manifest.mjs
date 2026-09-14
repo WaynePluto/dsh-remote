@@ -65,6 +65,7 @@ export const BUILD_ARTIFACTS = [
   'packages/relay/dist/cli.js',
   'packages/connector/dist/cli.js',
   'packages/plugins/remote-privileged/dist/index.js',
+  'packages/plugins/browser-compat/dist/index.js',
   'packages/plugins/directory-picker-browse/dist/index.js',
   'packages/plugins/copilot-auth/dist/index.js',
   'packages/plugins/models-catalog/dist/index.js',
@@ -108,6 +109,9 @@ export const BUILD_ARTIFACTS = [
 export const DSH_PLUGIN_FILES = [
   'node_modules/@dsh-remote/dsh-plugin-remote-privileged/dsh-overlay.yml',
   'node_modules/@dsh-remote/dsh-plugin-remote-privileged/dist/index.js',
+  // 旧 WebKit 垫片只注入 index.html 脚本，无浏览器模块。
+  'node_modules/@dsh-remote/dsh-plugin-browser-compat/dsh-overlay.yml',
+  'node_modules/@dsh-remote/dsh-plugin-browser-compat/dist/index.js',
   'node_modules/@dsh-remote/dsh-plugin-directory-picker-browse/dsh-overlay.yml',
   'node_modules/@dsh-remote/dsh-plugin-directory-picker-browse/dist/index.js',
   'node_modules/@dsh-remote/dsh-plugin-copilot-auth/dsh-overlay.yml',

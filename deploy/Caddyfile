@@ -11,20 +11,18 @@
 # ---------------------------------------------------------------------------
 # 前提：relay 必须以「域名模式」运行
 # ---------------------------------------------------------------------------
-# 域名模式 = relay 启动时带上 --domain <域名> --scheme https
-#（packages/relay/src/cli.ts）。只有这时 relay 才会：
+# 域名模式 = 配置文件 /etc/dsh-remote/dsh-remote.config.json 的
+# relay.host 写 127.0.0.1，并加上 "domain": "dsh.example.com"
+# （对应 relay 启动参数 --domain <域名> --scheme https，
+#   packages/launcher/src/relay.ts）。只有这时 relay 才会：
 #   * 把 <slug>.dsh.example.com 解析成机器（packages/relay/src/http/security.ts）
 #   * 发 __Secure- 前缀 + Secure + Domain=.dsh.example.com 的会话 cookie
 #     （packages/relay/src/auth/cookies.ts）
+# launcher 会同时把 hub.dsh.example.com 写进 dsh 的 --trusted-host，
+# 并拒绝在域名模式下绑定非 loopback 地址。
 #
-# 当前 launcher 拉起本机 relay 时用的是固定参数
-# `--scheme http --lan-http --direct-slug <slug>`（packages/launcher/src/relay.ts），
-# 还没有把域名模式暴露成配置项。在那之前，本文件对流量的作用是：
-#   ✓ 成员机器用 wss://dsh.example.com 拨号进来（隧道的 /_tunnel/control 与
-#     /_tunnel/stream 在任何 Host / Origin 校验之前处理，所以现在就能用）
-#   ✗ 浏览器用 https://<机器>.dsh.example.com 访问会拿到 404/403：
-#     Host 不是 IP、Origin 又是 https，两道检查都不通过
-# 详情和临时替代做法见同目录 README.md 的「现状与限制」。
+# 没配 domain 的机器走明文局域网 HTTP 模式：域名 Host 得到 404、
+# https Origin 得到 403，只能用 IP / localhost / VPN 直连访问。
 # ---------------------------------------------------------------------------
 
 {

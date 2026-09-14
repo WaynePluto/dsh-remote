@@ -89,4 +89,27 @@ describe('relay arguments', () => {
     // 启动，或在没有认证的情况下服务局域网。
     expect(relayArguments({ path: 'relay.js', needsTsx: false }, options)).toContain('--lan-http')
   })
+
+  it('runs the public-domain mode with https and no insecure LAN flag', () => {
+    const args = relayArguments({ path: 'relay.js', needsTsx: false }, {
+      ...options,
+      host: '127.0.0.1',
+      domain: 'dsh.example.com',
+    })
+    expect(args).toEqual([
+      'relay.js',
+      'serve',
+      '--host', '127.0.0.1',
+      '--port', '30809',
+      '--direct-slug', 'pc1',
+      '--domain', 'dsh.example.com',
+      '--scheme', 'https',
+      '--data', options.data,
+      '--home', options.home,
+    ])
+    // 域名模式绝不能带上 --lan-http：它会把 cookie 模式切回
+    // 非 Secure 的局域网形态（relay 的 config 校验会拒绝，但
+    // 在这里断言能更早发现参数组装回退）。
+    expect(args).not.toContain('--lan-http')
+  })
 })
