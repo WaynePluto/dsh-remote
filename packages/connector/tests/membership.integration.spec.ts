@@ -151,6 +151,66 @@ describe('connector membership', () => {
     expect(connector.hub?.slug).toBe('pc2')
   }, 30_000)
 
+  it('still demotes a rejected hub after authenticating with a different hub', async () => {
+    // 冒烟复现：机器先经自挂条目认证成功，再切到吊销了设备的外部入口。
+    // 对别的 hub 在线过不能让被拒的重连变成致命退出。
+    const home = newHome()
+    const publicKey = registerDevice(home)
+    const local = await relayKnowing(home)
+    const rejected = await startFakeRelay({ knownDevices: [publicKey], revokedDevices: [publicKey] })
+
+    writeJoin(home, hubOf(local))
+    const { connector, finished, isSettled } = startConnector(home)
+    await connector.ready()
+    expect(local.isOnline(SLUG)).toBe(true)
+
+    writeJoin(home, hubOf(rejected))
+    const path = membershipFilePath(home)
+    await waitFor(
+      () => readMembershipFile(path)?.lastHub !== undefined,
+      15_000,
+      'the rejected hub being demoted to lastHub',
+    )
+    await waitFor(() => connector.hub === undefined, 15_000, 'the connector going idle')
+    expect(isSettled()).toBe(false)
+    expect(readMembershipFile(path)?.lastHub).toMatchObject({
+      relayUrl: `ws://127.0.0.1:${String(rejected.port)}`,
+    })
+
+    await connector.stop()
+    expect(await finished).toBe('ok')
+  }, 30_000)
+
+  it('demotes a rejected tokenless hub to lastHub instead of exiting', async () => {
+    const home = newHome()
+    // 设备密钥被入口吊销后的重连：membership 不带令牌，认证被 DEVICE_REVOKED 拒绝。
+    const publicKey = registerDevice(home)
+    const relay = await startFakeRelay({ knownDevices: [publicKey], revokedDevices: [publicKey] })
+    relays.push(relay)
+    writeJoin(home, hubOf(relay, { browserAuthority: BROWSER_AUTHORITY }))
+
+    const { connector, lines, finished, isSettled } = startConnector(home)
+    const path = membershipFilePath(home)
+
+    await waitFor(
+      () => readMembershipFile(path)?.lastHub !== undefined,
+      15_000,
+      'the rejected hub being demoted to lastHub',
+    )
+    await waitFor(() => connector.hub === undefined, 15_000, 'the connector going idle')
+    // 一键重连失败绝不能变成停机：connector 保持运行，而不是致命退出。
+    expect(isSettled()).toBe(false)
+    expect(count(lines, 'demoted the membership to last-hub')).toBe(1)
+    expect(readMembershipFile(path)?.lastHub).toMatchObject({
+      relayUrl: `ws://127.0.0.1:${String(relay.port)}`,
+      slug: SLUG,
+      browserAuthority: BROWSER_AUTHORITY,
+    })
+
+    await connector.stop()
+    expect(await finished).toBe('ok')
+  }, 30_000)
+
   it('disconnects and goes idle when membership is cleared', async () => {
     const home = newHome()
     const relay = await relayKnowing(home)

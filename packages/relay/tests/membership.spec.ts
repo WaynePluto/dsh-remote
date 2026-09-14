@@ -7,6 +7,7 @@ import { MEMBERSHIP_FILE_NAME, parseMembership, type MembershipHub } from '@dsh-
 import {
   ADMIN_MEMBERSHIP_JOIN_PATH,
   ADMIN_MEMBERSHIP_LEAVE_PATH,
+  ADMIN_MEMBERSHIP_RECONNECT_PATH,
   ADMIN_HUB_PATH,
 } from '../src/admin/console-app.js'
 import {
@@ -98,6 +99,11 @@ function joinHub(fixture: Fixture, options: {
 /** connector 在这台机器上实际会读取的 membership。 */
 function storedHub(fixture: Fixture): MembershipHub | undefined {
   return parseMembership(readFileSync(fixture.membershipPath, 'utf8'))?.hub
+}
+
+/** 「重新连接」会恢复的 lastHub。 */
+function storedLastHub(fixture: Fixture): MembershipHub | undefined {
+  return parseMembership(readFileSync(fixture.membershipPath, 'utf8'))?.lastHub
 }
 
 function membershipFileExists(fixture: Fixture): boolean {
@@ -375,5 +381,109 @@ describe('launcher dsh auto-restart status on the hub page', () => {
     const { body } = await openConsole(fixture)
     expect(body).not.toContain('自动重启 dsh')
     expect(body).not.toContain('正在自动重启')
+  })
+})
+
+describe('remembering the last hub for one-click reconnect', () => {
+  it('stores the left hub as lastHub and offers a reconnect card', async () => {
+    const fixture = await startFixture()
+    const joined = await openConsole(fixture)
+    await joinHub(fixture, {
+      csrf: joined.csrf,
+      csrfPair: joined.csrfPair,
+      fields: { command: HUB_COMMAND },
+    })
+
+    const reloaded = await openConsole(fixture)
+    const response = await post(fixture, ADMIN_MEMBERSHIP_LEAVE_PATH, {
+      csrf: reloaded.csrf,
+      csrfPair: reloaded.csrfPair,
+    })
+    expect(response.status, response.body).toBe(303)
+
+    // 取消后：没有 hub，但记住了上次的入口（不带一次性令牌）。
+    expect(storedHub(fixture)).toBeUndefined()
+    expect(storedLastHub(fixture)).toMatchObject({
+      relayUrl: HUB_URL,
+      slug: HUB_SLUG,
+      browserAuthority: HUB_AUTHORITY,
+    })
+    expect(readFileSync(fixture.membershipPath, 'utf8')).not.toContain('enrollToken')
+
+    const left = await openConsole(fixture)
+    expect(left.body).toContain('上次的远程入口')
+    expect(left.body).toContain(`action="${ADMIN_MEMBERSHIP_RECONNECT_PATH}"`)
+    expect(left.body).toContain('重新连接这个远程入口')
+    expect(left.body).toContain(HUB_URL)
+    expect(left.body).not.toContain(ENROLL_TOKEN)
+  })
+
+  it('reconnects the remembered hub without a token and clears the memory', async () => {
+    const fixture = await startFixture()
+    const joined = await openConsole(fixture)
+    await joinHub(fixture, {
+      csrf: joined.csrf,
+      csrfPair: joined.csrfPair,
+      fields: { command: HUB_COMMAND },
+    })
+    const reloaded = await openConsole(fixture)
+    await post(fixture, ADMIN_MEMBERSHIP_LEAVE_PATH, {
+      csrf: reloaded.csrf,
+      csrfPair: reloaded.csrfPair,
+    })
+
+    const left = await openConsole(fixture)
+    const response = await post(fixture, ADMIN_MEMBERSHIP_RECONNECT_PATH, {
+      csrf: left.csrf,
+      csrfPair: left.csrfPair,
+    })
+    expect(response.status, response.body).toBe(303)
+    expect(response.headers.location).toBe(ADMIN_HUB_PATH)
+
+    // 恢复的 hub 不带令牌：connector 用设备密钥直接认证。
+    expect(storedHub(fixture)).toMatchObject({
+      relayUrl: HUB_URL,
+      slug: HUB_SLUG,
+      browserAuthority: HUB_AUTHORITY,
+    })
+    expect(storedHub(fixture)?.enrollToken).toBeUndefined()
+    expect(storedLastHub(fixture)).toBeUndefined()
+
+    const audit = fixture.store.listAudit().find(record => record.event === 'membership.joined')
+    expect(audit).toMatchObject({ success: true, actorUserId: fixture.userId })
+    expect(audit?.metadata).toMatchObject({
+      relayUrl: HUB_URL,
+      slug: HUB_SLUG,
+      enrollTokenProvided: false,
+      via: 'reconnect',
+    })
+    // 重连后的页面不再显示重连卡片。
+    const back = await openConsole(fixture)
+    expect(back.body).toContain('挂在一台入口机器上')
+    expect(back.body).not.toContain('上次的远程入口')
+  })
+
+  it('requires the CSRF token and ignores reconnect without a remembered hub', async () => {
+    const fixture = await startFixture()
+    const page = await openConsole(fixture)
+
+    // 没有 lastHub：回到本页，什么都不写。
+    const response = await post(fixture, ADMIN_MEMBERSHIP_RECONNECT_PATH, {
+      csrf: page.csrf,
+      csrfPair: page.csrfPair,
+    })
+    expect(response.status, response.body).toBe(303)
+    expect(membershipFileExists(fixture)).toBe(false)
+
+    // 伪造的提交被 CSRF 检查拒绝。
+    const forged = await postCsrfForm(fixture, {
+      path: ADMIN_MEMBERSHIP_RECONNECT_PATH,
+      host: HOST,
+      origin: ORIGIN,
+      sessionCookie: fixture.sessionCookie,
+      csrfPair: page.csrfPair,
+      fields: { csrf: 'not-the-token' },
+    })
+    expect(forged.status).toBe(403)
   })
 })

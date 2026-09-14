@@ -13,6 +13,8 @@ export const ADMIN_TOTP_CONFIRM_PATH = `${ADMIN_ACCOUNT_PATH}/totp/confirm`
 /** membership 指的是这台机器加入 hub，而不是 hub 的成员机器。 */
 export const ADMIN_MEMBERSHIP_JOIN_PATH = `${ADMIN_PATH_PREFIX}/membership/join`
 export const ADMIN_MEMBERSHIP_LEAVE_PATH = `${ADMIN_PATH_PREFIX}/membership/leave`
+/** 一键恢复 lastHub 记录的上次远程入口；不需要注册令牌。 */
+export const ADMIN_MEMBERSHIP_RECONNECT_PATH = `${ADMIN_PATH_PREFIX}/membership/reconnect`
 
 /**
  * 控制台的三个页面，按标签栏显示的顺序排列。

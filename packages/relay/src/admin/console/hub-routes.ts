@@ -1,6 +1,7 @@
 import type { HttpBindings } from '@hono/node-server'
 import type { Hono } from 'hono'
 import {
+  lastHubFromHub,
   MEMBERSHIP_FILE_NAME,
   machineSlugSchema,
   type Membership,
@@ -8,6 +9,7 @@ import {
 } from '@dsh-remote/protocol'
 import {
   clearMembershipFile,
+  isSelfHub,
   parseConnectorCommand,
   readMembershipFile,
   writeMembershipFile,
@@ -23,6 +25,7 @@ import {
   ADMIN_HUB_PATH,
   ADMIN_MEMBERSHIP_JOIN_PATH,
   ADMIN_MEMBERSHIP_LEAVE_PATH,
+  ADMIN_MEMBERSHIP_RECONNECT_PATH,
   confirmPage,
 } from './shell.js'
 import type {
@@ -95,7 +98,7 @@ export function registerHubRoutes(
     const consequences = view.kind === 'joined'
       ? [
           `${machine} 不再出现在 ${view.hub.relayUrl} 的机器列表里，也不能再从那个地址打开。`,
-          `${machine} 保存的注册令牌会被清掉，重新挂上去需要再粘一次对方给的命令。`,
+          `这个入口会被记住，取消后可以在本页一键「重新连接」，不需要新的注册令牌。`,
           `${machine} 的 dsh 会自动重启一次以撤销对入口机器地址的信任，期间短暂中断。`,
           `挂在 ${machine} 上的那些机器不受影响，一台都不会掉线。`,
           `本机和局域网地址不受影响，仍然可以打开 ${machine} 的 dsh。`,
@@ -210,12 +213,14 @@ export function registerHubRoutes(
       // 清除无人能解析的文件正是此操作的目的，因此审计行只会失去这台机器过去所挂接的位置详情。
       previous = undefined
     }
+    // 上次入口（去掉已用的一次性令牌）随「取消」保存，供「重新连接」一键恢复。
+    const lastHub = previous === undefined ? undefined : lastHubFromHub(previous)
     const now = Date.now()
     try {
       // 取消后机器回到“只能从自己的地址打开”，而这条链路由
       // 自挂条目支撑；没有 directSlug 的部署保持清空行为。
       if (config.directSlug === undefined) {
-        clearMembershipFile(membershipPath)
+        clearMembershipFile(membershipPath, lastHub)
       } else {
         writeSelfMembership({
           store,
@@ -225,6 +230,7 @@ export function registerHubRoutes(
           // 走主端口，它就是自挂条目该拨的端口。
           relayPort: dependencies.mainListenPort?.() ?? config.port,
           logger,
+          ...lastHub === undefined ? {} : { lastHub },
         })
       }
     } catch (error) {
@@ -246,6 +252,58 @@ export function registerHubRoutes(
         relayUrl: previous?.relayUrl ?? null,
         slug: previous?.slug ?? null,
         via: 'admin-console',
+      },
+    })
+    return redirectResponse(ADMIN_HUB_PATH, session.setCookieHeaders)
+  })
+
+  app.post(ADMIN_MEMBERSHIP_RECONNECT_PATH, async (context) => {
+    const session = sessionOf(context.env.incoming)
+    const body = await context.req.parseBody()
+    const forged = rejectForgedSubmit(context, body)
+    if (forged !== undefined) return forged
+    let membership: Membership | undefined
+    try {
+      membership = readMembershipFile(membershipPath)
+    } catch {
+      membership = undefined
+    }
+    const lastHub = membership?.lastHub
+    const current = membership?.hub
+    // 没有可恢复的记录、或已经挂着别的入口时，回到本页按现状显示；
+    // 自挂条目不算操作员设置的远程入口，重连与粘贴命令一样直接替换它。
+    if (lastHub === undefined || (current !== undefined && !isSelfHub(current))) {
+      return redirectResponse(ADMIN_HUB_PATH, session.setCookieHeaders)
+    }
+    const now = Date.now()
+    // 恢复不需要令牌：设备密钥仍在两侧，hub 还认识这台机器时直接认证。
+    // 若对方已「停止并移除」，connector 会被拒绝并把条目降回 lastHub，本页随之回到重连卡片。
+    try {
+      writeMembershipFile(membershipPath, {
+        version: 1,
+        hub: { ...lastHub, joinedAt: now },
+      })
+    } catch (error) {
+      logger.error({ err: error, path: membershipPath }, 'could not write the membership file')
+      return renderHub({
+        session,
+        appearance: appearanceOf(context, ADMIN_HUB_PATH),
+        status: 500,
+        error: `写入 ${MEMBERSHIP_FILE_NAME} 失败，${machine} 没有重新连上上次的入口。检查 ${membershipPath} 的权限后重试。`,
+      })
+    }
+    audit.record({
+      occurredAt: now,
+      event: 'membership.joined',
+      success: true,
+      actorUserId: session.userId,
+      sourceIp: context.env.incoming.socket.remoteAddress ?? 'unknown',
+      metadata: {
+        relayUrl: lastHub.relayUrl,
+        slug: lastHub.slug,
+        ...lastHub.browserAuthority === undefined ? {} : { browserAuthority: lastHub.browserAuthority },
+        enrollTokenProvided: false,
+        via: 'reconnect',
       },
     })
     return redirectResponse(ADMIN_HUB_PATH, session.setCookieHeaders)

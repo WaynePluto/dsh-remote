@@ -7,6 +7,7 @@ import {
   parseMembership,
   serializeMembership,
   type Membership,
+  type MembershipLastHub,
 } from '@dsh-remote/protocol'
 
 /** membership 文件存在但无法使用；只有操作员可以修复它。 */
@@ -86,11 +87,15 @@ export function writeMembershipFile(path: string, membership: Membership): void 
 }
 
 /**
- * 让这台机器退出其 hub。
+ * 让这台机器退出其 hub，可选保留上次的入口供「重新连接」。
  * @param path - membership 文件的绝对路径。
+ * @param lastHub - 要记住的上次入口；不带时文件回到纯「未加入」状态。
  */
-export function clearMembershipFile(path: string): void {
+export function clearMembershipFile(path: string, lastHub?: MembershipLastHub): void {
   // 保留无 hub 的文件而不是 unlink：connector 之后会读到明确的
   // “not a member”，而不必区分文件被删除还是 home 缺失。
-  writeMembershipFile(path, { version: 1 })
+  writeMembershipFile(path, {
+    version: 1,
+    ...lastHub === undefined ? {} : { lastHub },
+  })
 }

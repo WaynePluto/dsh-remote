@@ -4,7 +4,12 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Logger } from 'pino'
 import type { AuditRecorder } from '../../audit/index.js'
 import type { BrowserCookiePolicy } from '../../auth/cookies.js'
-import { DSH_RESTART_STATUS_FILE_NAME, parseDshRestartStatus, type DshRestartStatus } from '@dsh-remote/protocol'
+import {
+  DSH_RESTART_STATUS_FILE_NAME,
+  parseDshRestartStatus,
+  type DshRestartStatus,
+  type MembershipLastHub,
+} from '@dsh-remote/protocol'
 import type { RelayConfig } from '../../config.js'
 import {
   isSelfHub,
@@ -170,9 +175,17 @@ export function createAdminConsoleRequestContext(options: {
       }
     }
     const hub = membership?.hub
-    if (hub === undefined) return { kind: 'none' }
+    /** 加入或重新连接都会清掉 lastHub，因此只有未加入/自挂两种状态携带它。 */
+    const lastHub: MembershipLastHub | undefined = hub === undefined || isSelfHub(hub)
+      ? membership?.lastHub
+      : undefined
+    if (hub === undefined) {
+      return lastHub === undefined ? { kind: 'none' } : { kind: 'none', lastHub }
+    }
     // 自挂条目由 relay 维护，页面对它的说明和操作都不同。
-    return isSelfHub(hub) ? { kind: 'self', hub } : { kind: 'joined', hub }
+    return isSelfHub(hub)
+      ? { kind: 'self', hub, ...lastHub === undefined ? {} : { lastHub } }
+      : { kind: 'joined', hub }
   }
 
   const dshRestartStatusPath = join(config.home, DSH_RESTART_STATUS_FILE_NAME)

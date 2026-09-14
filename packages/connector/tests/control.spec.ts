@@ -203,6 +203,8 @@ describe('connector control state machine', () => {
       })
       expect(outcome.fatal).toBe(true)
       expect(outcome.message).toContain(code)
+      // 调用方按协议码区分「重连被拒可降级」与「令牌问题要响亮失败」。
+      expect(outcome.code).toBe(code)
     } finally {
       await relay.close()
     }

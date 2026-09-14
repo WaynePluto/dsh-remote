@@ -94,6 +94,31 @@ describe('ensureSelfMembership', () => {
     expect(readFileSync(path, 'utf8')).toBe(JSON.stringify(foreign))
   })
 
+  it('刷新或重建自挂条目时保留操作员的 lastHub', () => {
+    const { store, home, path } = openFixture()
+    const lastHub = {
+      relayUrl: 'wss://hub.dsh.test',
+      slug: 'pc2',
+      browserAuthority: 'hub.dsh.test',
+      joinedAt: 1_800_000_000_000,
+    }
+    // 自挂条目 + lastHub（取消远程入口后的常态）→ 刷新令牌重写时不能冲掉它。
+    writeFileSync(path, JSON.stringify({
+      version: 1,
+      hub: { ...selfHub({ slug: 'pc1', relayPort: 30_809 }, 1), enrollToken: 'spent-token-0123' },
+      lastHub,
+    }))
+    expect(ensureSelfMembership({ store, home, slug: 'pc1', relayPort: 30_809 })).toEqual({ kind: 'refreshed' })
+    expect(parseMembership(readFileSync(path, 'utf8'))?.lastHub).toEqual(lastHub)
+
+    // 没有条目（文件只剩 lastHub）→ 重建自挂条目时同样保留。
+    writeFileSync(path, JSON.stringify({ version: 1, lastHub }))
+    expect(ensureSelfMembership({ store, home, slug: 'pc1', relayPort: 30_809 })).toEqual({ kind: 'created' })
+    const rebuilt = parseMembership(readFileSync(path, 'utf8'))
+    expect(rebuilt?.hub?.selfManaged).toBe(true)
+    expect(rebuilt?.lastHub).toEqual(lastHub)
+  })
+
   it('文件读不出时不覆盖', () => {
     const { store, home, path } = openFixture()
     writeFileSync(path, '{ not json', 'utf8')

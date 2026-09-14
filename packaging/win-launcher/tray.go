@@ -344,7 +344,18 @@ func (a *application) openAdmin() {
 	a.open(a.settings.adminURL())
 }
 
+// open 打开界面地址：优先本机 Chrome，找不到或启动不了
+// 再交给用户配置的默认浏览器——用户要的是“尽量 Chrome”，
+// 不是“非 Chrome 不可”。
 func (a *application) open(target string) {
+	if chrome := findChrome(); chrome != "" {
+		err := shellOpenWith(chrome, target)
+		if err == nil {
+			a.log.printf("用 Chrome 打开 %s（%s）", target, chrome)
+			return
+		}
+		a.log.printf("用 Chrome 打开 %s 失败（%v），改用默认浏览器", target, err)
+	}
 	if err := shellOpen(target); err != nil {
 		a.log.printf("打开 %s 失败：%v", target, err)
 		messageBox("打不开 "+target+"：\n\n"+err.Error(), appName, mbIconError)

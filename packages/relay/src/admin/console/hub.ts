@@ -1,9 +1,15 @@
-import { MEMBERSHIP_FILE_NAME, type DshRestartStatus, type MembershipHub } from '@dsh-remote/protocol'
+import {
+  MEMBERSHIP_FILE_NAME,
+  type DshRestartStatus,
+  type MembershipHub,
+  type MembershipLastHub,
+} from '@dsh-remote/protocol'
 import { escapeHtml, type PageAppearance } from '../shared.js'
 import {
   ADMIN_HUB_PATH,
   ADMIN_MEMBERSHIP_JOIN_PATH,
   ADMIN_MEMBERSHIP_LEAVE_PATH,
+  ADMIN_MEMBERSHIP_RECONNECT_PATH,
   consolePage,
   formatTime,
 } from './shell.js'
@@ -17,11 +23,13 @@ export const MIN_ENROLL_TOKEN_LENGTH = 16
  * D16 最多允许一个：机器可以通过自己的地址以及最多一个其他机器的地址访问，
  * 不能形成链。`self` 是 relay 维护的自挂条目（见 `membership/self-join.ts`），
  * 它让本机与局域网地址能打开这台机器的 dsh，不是操作员设置的远程入口。
+ * `lastHub` 是「取消远程入口」时记住的上次入口，只在未加入/自挂状态下存在，
+ * 供「重新连接」一键恢复。
  */
 export type MembershipView =
-  | { readonly kind: 'none' }
+  | { readonly kind: 'none'; readonly lastHub?: MembershipLastHub | undefined }
   | { readonly kind: 'joined'; readonly hub: MembershipHub }
-  | { readonly kind: 'self'; readonly hub: MembershipHub }
+  | { readonly kind: 'self'; readonly hub: MembershipHub; readonly lastHub?: MembershipLastHub | undefined }
   | { readonly kind: 'unreadable'; readonly message: string }
 
 /** 仅支持 ws/wss：connector 向外拨号，从不通过 HTTP 获取。 */
@@ -88,6 +96,31 @@ function describeTrustChange(status: DshRestartStatus): string {
 }
 
 /**
+ * 「重新连接」卡片：取消远程入口时记住的上次入口。
+ *
+ * 恢复不需要注册令牌——设备密钥仍在两侧，hub 还认识这台机器时直接认证；
+ * 对方已「停止并移除」时会失败并回到本页，文案必须说明这条路。
+ * @param lastHub membership 记录的上次入口。
+ * @param machine 这台机器自己的名称。
+ * @param csrf 表单携带的 CSRF token。
+ * @returns 置于远程入口条目下方的 markup。
+ */
+function reconnectCard(lastHub: MembershipLastHub, machine: string, csrf: string): string {
+  const name = escapeHtml(machine)
+  const authority = lastHub.browserAuthority === undefined
+    ? ''
+    : `<br>入口机器的浏览器地址 ${escapeHtml(lastHub.browserAuthority)}`
+  return `<div class="hub">
+<h3>上次的远程入口</h3>
+<p class="meta">入口机器地址 ${escapeHtml(lastHub.relayUrl)}<br>${name} 在那边的机器名 ${escapeHtml(lastHub.slug)}<br>挂上去的时间 ${escapeHtml(formatTime(lastHub.joinedAt))}${authority}</p>
+<form method="post" action="${ADMIN_MEMBERSHIP_RECONNECT_PATH}">
+<input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+<button type="submit">重新连接这个远程入口</button></form>
+<p class="hint">重新连接不需要注册令牌：入口机器还保存着 ${name} 的设备密钥。如果那边已经「停止并移除」过 ${name}，重连不会成功——本页会回到现在的样子，需要回入口机器重新签发令牌再粘一次。</p>
+</div>`
+}
+
+/**
  * launcher 自动重启 dsh 的进度卡（见 protocol 的 dsh-restart 契约）。
  *
  * 页面没有脚本，状态不会自己刷新；进行中的文案明确让操作员刷新查看结果，
@@ -131,6 +164,11 @@ export function hubPage(options: {
   const restart = options.restartStatus === undefined
     ? ''
     : restartStatusCard(options.restartStatus, machine)
+  const reconnect = view.kind !== 'none' && view.kind !== 'self'
+    ? ''
+    : view.lastHub === undefined
+      ? ''
+      : reconnectCard(view.lastHub, machine, csrf)
   return consolePage({
     current: ADMIN_HUB_PATH,
     machine,
@@ -139,7 +177,7 @@ export function hubPage(options: {
     intro: `「机器」那一页是<strong>别的机器挂在 ${name} 上</strong>，在那里停止并移除一台机器，停的是对方那台机器上的 dsh-remote；这一页是 <strong>${name} 挂在别人身上</strong>，取消只影响 ${name} 自己，那边的机器一台都不会掉线。${name} 同时只能有一个远程入口。`,
     username: options.username,
     appearance: options.appearance,
-    body: `${alert}${entryCard(view, machine)}${restart}
+    body: `${alert}${entryCard(view, machine)}${reconnect}${restart}
 <h2 class="section">设置远程入口</h2>
 <p class="hint">到你想用作入口的那台机器上，在它控制台的「机器」页签发一个注册令牌，它会给出一条完整命令；把那条命令整个粘到下面。地址、${name} 在那边的机器名、注册令牌都在命令里，不用再分开填。粘好后 dsh 会自动重启以信任新的地址，本页会显示重启进度。</p>
 <form method="post" action="${ADMIN_MEMBERSHIP_JOIN_PATH}">

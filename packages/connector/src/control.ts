@@ -29,6 +29,8 @@ export interface SessionOutcome {
   /** 重连无济于事：设备密钥被拒绝或吊销，或协议不兼容。 */
   readonly fatal: boolean
   readonly message: string
+  /** relay 报告并结束会话的协议错误码；非 error 帧结束时为 undefined。 */
+  readonly code?: ProtocolErrorCode
 }
 
 export interface ControlSessionOptions {
@@ -195,6 +197,7 @@ export function runControlSession(options: ControlSessionOptions): Promise<Sessi
             authenticated: phase === 'ready',
             fatal: unrecoverable,
             message: `${frame.code}: ${frame.message}`,
+            code: frame.code,
           })
         }
         return

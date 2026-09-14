@@ -7,9 +7,11 @@ import {
   controlFrameSchema,
   decodeControlFrame,
   deviceChallengeMessage,
+  lastHubFromHub,
   parseDshRestartStatus,
   serializeDshRestartStatus,
   type DshRestartStatus,
+  type Membership,
   dshAuthFrameSchema,
   encodeControlFrame,
   errorFrameSchema,
@@ -290,6 +292,23 @@ describe('membership contract', () => {
     expect(() => parseMembership('{')).toThrow()
     expect(() => parseMembership('{"version":99}')).toThrow()
     expect(() => parseMembership(JSON.stringify({ ...joined, extra: true }))).toThrow()
+  })
+
+  it('keeps the remembered last hub alongside a cleared membership', () => {
+    const left: Membership = { version: 1, lastHub: lastHubFromHub(joined.hub) }
+    expect(parseMembership(serializeMembership(left))).toEqual(left)
+    // lastHub 永远不携带一次性令牌或自挂标记。
+    expect(parseMembership(serializeMembership(left))?.lastHub).not.toHaveProperty('enrollToken')
+    expect(lastHubFromHub({ ...joined.hub, selfManaged: true })).not.toHaveProperty('selfManaged')
+  })
+
+  it('keeps files written before lastHub existed readable', () => {
+    expect(parseMembership(serializeMembership(joined))?.lastHub).toBeUndefined()
+    expect(parseMembership(JSON.stringify({ version: 1 }))).toEqual({ version: 1 })
+    expect(() => parseMembership(JSON.stringify({
+      version: 1,
+      lastHub: { relayUrl: 'http://hub.dsh.test', slug: 'pc1', joinedAt: 0 },
+    }))).toThrow()
   })
 })
 

@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, watch, writeFileSync, type
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import {
+  lastHubFromHub,
   MEMBERSHIP_FILE_NAME,
   parseMembership,
   serializeMembership,
@@ -115,8 +116,8 @@ export function writeMembershipFile(path: string, membership: Membership): void 
  * hub 接受一次性注册令牌后删除它，并保留其他所有字段；已使用的秘密不能留在磁盘上。
  * 首先重新读取文件：管理控制台可能在会话启动后将这台机器重新加入另一个 hub，
  * 因此该 hub 的新 token 必须保留。
- * @param path - membership 文件路径。
- * @param hub - 刚刚使用其 token、且磁盘记录的 hub。
+ * @param path membership 文件路径。
+ * @param hub 刚刚使用其 token、且磁盘记录的 hub。
  * @returns 文件被重写时为 true。
  * @throws MembershipFileError 文件不可读、格式错误或不可写时抛出。
  */
@@ -128,6 +129,30 @@ export function clearSpentEnrollToken(path: string, hub: MembershipHub): boolean
   if (joined.relayUrl !== hub.relayUrl || joined.slug !== hub.slug) return false
   const { enrollToken: _spent, ...rest } = joined
   writeMembershipFile(path, { ...membership, hub: rest })
+  return true
+}
+
+/**
+ * 把被 hub 拒绝的 membership 条目降级为 lastHub：机器保持运行并回到
+ * 「没有远程入口」，控制台仍可一键重连或重新粘命令。
+ *
+ * 降级丢弃一次性令牌（对被拒的设备它已无用）并保留地址身份。先重新读取
+ * 文件并核对仍是同一个 hub：认证期间的几秒钟里操作员可能已经粘了新命令，
+ * 那份新意图必须原样保留。自挂条目不降级——它支撑本机与局域网直达链路；
+ * 仍带未用令牌的条目不降级——刚粘的命令失败要留在原地响亮报错。
+ * @param path membership 文件路径。
+ * @param hub 被拒绝的 hub（用于核对仍是同一个条目）。
+ * @returns 文件被降级时为 true。
+ * @throws MembershipFileError 文件不可读、格式错误或不可写时抛出。
+ */
+export function demoteRejectedHub(path: string, hub: Pick<MembershipHub, 'relayUrl' | 'slug'>): boolean {
+  const membership = readMembershipFile(path)
+  const joined = membership?.hub
+  if (membership === undefined || joined === undefined) return false
+  if (joined.relayUrl !== hub.relayUrl || joined.slug !== hub.slug) return false
+  if (joined.selfManaged === true) return false
+  if (joined.enrollToken !== undefined) return false
+  writeMembershipFile(path, { version: 1, lastHub: lastHubFromHub(joined) })
   return true
 }
 

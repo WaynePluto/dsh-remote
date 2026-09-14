@@ -5,6 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { afterEach, describe, expect, it } from 'vitest'
 import { serializeMembership, type Membership, type MembershipHub } from '@dsh-remote/protocol'
 import {
+  demoteRejectedHub,
   MembershipFileError,
   clearSpentEnrollToken,
   defaultDshRemoteHome,
@@ -136,3 +137,43 @@ async function waitFor(check: () => boolean, timeoutMs: number): Promise<void> {
   }
   throw new Error(`condition not met within ${String(timeoutMs)}ms`)
 }
+
+describe('demoting a rejected hub', () => {
+  it('moves a tokenless rejected hub to lastHub, keeping its address identity', () => {
+    // 重连与已注册的条目都不带令牌；令牌在注册成功后被 connector 清除。
+    const path = membershipFilePath(newHome())
+    const { enrollToken: _spent, ...tokenless } = HUB
+    writeMembershipFile(path, { version: 1, hub: tokenless })
+
+    expect(demoteRejectedHub(path, HUB)).toBe(true)
+    const membership = read(path)
+    expect(membership?.hub).toBeUndefined()
+    expect(membership?.lastHub).toEqual({
+      relayUrl: HUB.relayUrl,
+      slug: HUB.slug,
+      browserAuthority: HUB.browserAuthority,
+      joinedAt: HUB.joinedAt,
+    })
+  })
+
+  it('refuses to demote a self-managed hub, an unused token, or a changed identity', () => {
+    const selfPath = membershipFilePath(newHome())
+    writeMembershipFile(selfPath, { version: 1, hub: { ...HUB, selfManaged: true } })
+    expect(demoteRejectedHub(selfPath, HUB)).toBe(false)
+    expect(read(selfPath)?.hub?.selfManaged).toBe(true)
+
+    // 刚粘的命令还带着未用的令牌：失败要留在原地响亮报错，不能被静默降级。
+    const tokenPath = membershipFilePath(newHome())
+    writeMembershipFile(tokenPath, { version: 1, hub: { ...HUB, enrollToken: 'unused-token-0123456789' } })
+    expect(demoteRejectedHub(tokenPath, HUB)).toBe(false)
+    expect(read(tokenPath)?.hub?.enrollToken).toBeDefined()
+
+    const switchedPath = membershipFilePath(newHome())
+    writeMembershipFile(switchedPath, {
+      version: 1,
+      hub: { ...HUB, relayUrl: 'ws://10.9.9.9:30809', slug: 'other' },
+    })
+    expect(demoteRejectedHub(switchedPath, HUB)).toBe(false)
+    expect(read(switchedPath)?.hub?.slug).toBe('other')
+  })
+})

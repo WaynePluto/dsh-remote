@@ -1,5 +1,5 @@
 import type { Logger } from 'pino'
-import type { MembershipHub } from '@dsh-remote/protocol'
+import type { MembershipLastHub, MembershipHub } from '@dsh-remote/protocol'
 import { issueDeviceEnrollToken } from '../store/index.js'
 import type { RelayStore } from '../store/store.js'
 import { readMembershipFile, writeMembershipFile } from './file.js'
@@ -52,7 +52,8 @@ export type SelfJoinOutcome
  * 无条件写入自挂条目（附新签发的一次性注册令牌）。
  *
  * 供 {@link ensureSelfMembership} 与「取消远程入口」使用：取消后机器必须
- * 回到“只能从自己的地址打开”的状态，而这正需要自挂条目支撑。
+ * 回到“只能从自己的地址打开”的状态，而这正需要自挂条目支撑。已存在的
+ * lastHub 原样保留——它属于操作员的「重新连接」历史，不属于自挂条目。
  * @param options relay 的 store、dsh-remote home、本机 slug、主端口和 logger。
  * @returns 写入的时间戳；写入失败时抛出 `MembershipFileError`。
  */
@@ -60,6 +61,7 @@ export function writeSelfMembership(options: {
   readonly store: RelayStore
   readonly home: string
   readonly logger?: Logger | undefined
+  readonly lastHub?: MembershipLastHub | undefined
 } & SelfHubOptions): number {
   const now = Date.now()
   const { token } = issueDeviceEnrollToken({
@@ -72,7 +74,11 @@ export function writeSelfMembership(options: {
   })
   writeMembershipFile(
     membershipFilePath(options.home),
-    { version: 1, hub: { ...selfHub(options, now), enrollToken: token } },
+    {
+      version: 1,
+      hub: { ...selfHub(options, now), enrollToken: token },
+      ...options.lastHub === undefined ? {} : { lastHub: options.lastHub },
+    },
   )
   return now
 }
@@ -103,16 +109,17 @@ export function ensureSelfMembership(options: {
   readonly logger?: Logger | undefined
 } & SelfHubOptions): SelfJoinOutcome {
   const path = membershipFilePath(options.home)
-  let hub: MembershipHub | undefined
+  let membership: ReturnType<typeof readMembershipFile>
   try {
-    hub = readMembershipFile(path)?.hub
+    membership = readMembershipFile(path)
   } catch (error) {
     options.logger?.error({ err: error, path }, 'could not read the membership file; leaving it alone')
     return { kind: 'unreadable' }
   }
+  const hub = membership?.hub
   if (hub !== undefined && !isSelfHub(hub)) return { kind: 'kept' }
 
-  writeSelfMembership(options)
+  writeSelfMembership({ ...options, ...membership?.lastHub === undefined ? {} : { lastHub: membership.lastHub } })
   options.logger?.info(
     { path, slug: options.slug, relayPort: options.relayPort },
     'self-joined this machine to its own relay so its own address can open dsh',

@@ -135,10 +135,11 @@ const (
 	processTerminate uint32 = 0x0001
 	processSetQuota  uint32 = 0x0100
 
-	hkeyCurrentUser syscall.Handle = 0x80000001
-	keyQueryValue   uint32         = 0x0001
-	keySetValue     uint32         = 0x0002
-	regSZ           uint32         = 1
+	hkeyCurrentUser  syscall.Handle = 0x80000001
+	hkeyLocalMachine syscall.Handle = 0x80000002
+	keyQueryValue    uint32         = 0x0001
+	keySetValue      uint32         = 0x0002
+	regSZ            uint32         = 1
 )
 
 type point struct {
@@ -272,8 +273,9 @@ func shellOpen(target string) error {
 	return fmt.Errorf("ShellExecuteW 返回 %d", result)
 }
 
-// shellOpenWith 在文件类型完全没有关联时，使用指定程序打开文件；
-// 否则 shellOpen 只会提供“打开方式”对话框。
+// shellOpenWith 用指定程序打开参数：日志兜底用 notepad 打开
+// 没有关联程序的 .log，界面地址用 Chrome 而不是默认浏览器。
+// 参数加引号，虽然目前的调用方（路径、URL）都不含空格。
 func shellOpenWith(program string, argument string) error {
 	verb := utf16Ptr("open")
 	file := utf16Ptr(program)

@@ -42,10 +42,38 @@ export const membershipSchema = z.strictObject({
     selfManaged: z.literal(true).optional(),
     joinedAt: z.number().int().nonnegative(),
   }).optional(),
+  /**
+   * 上次使用的远程入口。「取消远程入口」时由 relay 把当时的 hub（去掉
+   * 已用的一次性令牌）保存到这里，控制台据此提供一键「重新连接」；
+   * 重新连接或设置新入口都会清掉它。它不是秘密——设备密钥仍在两侧，
+   * hub 还认识这台机器时，恢复 hub 条目即可直接认证。
+   */
+  lastHub: z.strictObject({
+    relayUrl: relayUrlSchema,
+    slug: machineSlugSchema,
+    browserAuthority: z.string().min(1).max(255).optional(),
+    /** 该 hub 当初被加入的时间；随条目一起保留用于展示。 */
+    joinedAt: z.number().int().nonnegative(),
+  }).optional(),
 })
 
 export type Membership = z.infer<typeof membershipSchema>
 export type MembershipHub = NonNullable<Membership['hub']>
+export type MembershipLastHub = NonNullable<Membership['lastHub']>
+
+/**
+ * 把一个 hub 条目转成可保存的 lastHub：去掉一次性注册令牌与自挂标记。
+ * @param hub 要保留的 hub 条目。
+ * @returns 只含地址身份与时间的 lastHub。
+ */
+export function lastHubFromHub(hub: MembershipHub): MembershipLastHub {
+  return {
+    relayUrl: hub.relayUrl,
+    slug: hub.slug,
+    ...hub.browserAuthority === undefined ? {} : { browserAuthority: hub.browserAuthority },
+    joinedAt: hub.joinedAt,
+  }
+}
 
 /** dsh-remote home 目录下使用的文件名。 */
 export const MEMBERSHIP_FILE_NAME = 'membership.json'

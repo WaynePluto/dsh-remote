@@ -13,6 +13,7 @@ import {
 import { loadOrCreateDeviceKey } from './device-key.js'
 import { runControlSession, type SessionOutcome } from './control.js'
 import {
+  demoteRejectedHub,
   MembershipFileError,
   clearSpentEnrollToken,
   membershipFilePath,
@@ -51,8 +52,34 @@ export interface Connector {
 }
 
 /** 决定运行中的控制信道是否仍服务于该 membership 的身份。 */
+function hubKey(hub: HubTarget): string
+function hubKey(hub: HubTarget | undefined): string | undefined
 function hubKey(hub: HubTarget | undefined): string | undefined {
   return hub === undefined ? undefined : `${hub.relayUrl}|${hub.slug}`
+}
+
+/**
+ * hub 明确拒绝这台设备身份的协议码。此时令牌无济于事——设备密钥
+ * 不被接受（AUTH_FAILED）或已被入口机器吊销（DEVICE_REVOKED）。
+ */
+const DEVICE_REJECTION_CODES: ReadonlySet<string> = new Set(['AUTH_FAILED', 'DEVICE_REVOKED'])
+
+/**
+ * 会话结果是否应当尝试降级而不是致命退出。
+ *
+ * 只覆盖「被拒的这个 hub 从未认证成功过」：曾在线的 hub 被吊销必须整体退出，
+ * 那是入口机器「停止并移除」的既定语义；但对别的 hub（例如本机自挂条目）
+ * 认证过不算数。其余守卫（自挂条目、未用令牌、期间换了入口）由
+ * `demoteRejectedHub` 重读文件后判断。
+ */
+function shouldDemoteRejectedHub(
+  outcome: SessionOutcome,
+  hub: HubTarget,
+  authenticatedHubKeys: ReadonlySet<string>,
+): boolean {
+  return outcome.code !== undefined
+    && DEVICE_REJECTION_CODES.has(outcome.code)
+    && !authenticatedHubKeys.has(hubKey(hub))
 }
 
 export function createConnector(
@@ -83,6 +110,8 @@ export function createConnector(
   const controller = new AbortController()
   let online = false
   let attempt = 0
+  /** 本进程运行期间认证成功过的 hub key；曾在线的 hub 被吊销必须致命退出。 */
+  const authenticatedHubKeys = new Set<string>()
   /** 设备已经注册的 hub key；enroll token 是一次性的。 */
   let registeredWith: string | undefined
   /** Connector 最近接受的 membership；文件可能已经不同。 */
@@ -214,6 +243,7 @@ export function createConnector(
         onReady: () => {
           attempt = 0
           online = true
+          authenticatedHubKeys.add(key)
           registeredWith = key
           const joined = membership?.hub
           if (cliHub === undefined && joined !== undefined && joined.enrollToken !== undefined) {
@@ -300,6 +330,25 @@ export function createConnector(
         if (controller.signal.aborted) break
         if (switching) continue
         if (outcome.fatal) {
+          // 重连被拒（这个 hub 从未认证成功）：降级为 lastHub 并继续运行，
+          // 控制台可重连或重新粘命令；降级不适用时保持既有的致命退出。
+          if (shouldDemoteRejectedHub(outcome, hub, authenticatedHubKeys)) {
+            try {
+              if (demoteRejectedHub(membershipPath, hub)) {
+                logger.error(
+                  { reason: outcome.message, relayUrl: hub.relayUrl, membershipPath },
+                  'the hub rejected this device; demoted the membership to last-hub and staying idle '
+                  + '(re-issue a token on the hub and re-join from the console to register again)',
+                )
+                continue
+              }
+            } catch (error) {
+              logger.error(
+                { err: error, membershipPath },
+                'could not demote the rejected membership; stopping loudly instead',
+              )
+            }
+          }
           const error = new ConnectorFatalError(outcome.message)
           if (!readySettled) {
             readySettled = true
