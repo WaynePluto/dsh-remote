@@ -27,6 +27,8 @@
 | D15 | 非 loopback 浏览器请求统一登录 | 仅 loopback socket 与 loopback Host 同时成立才免登录 |
 | D16 | 每台机器运行 dsh、relay、connector | 任意机器可作为远程入口，关系单向且每机最多一个入口 |
 | D17 | 扩展放在 packages/plugins，各包自行说明 | 普通运行插件使用 overlay；精简预设使用专属 Profile Bundle |
+| D18 | Linux systemd 以个人普通用户运行整套 dsh-remote | 默认 `~/.dsh-remote` 保存 relay 运行数据，`~/.dsh` 保存官方 dsh 数据；普通操作使用用户权限，管理员操作由用户在交互终端输入 sudo，保留系统缓存；不主动建立 root shell |
+| D19 | 公网使用泛子域名，本机保留 loopback，裸域名只进管理入口 | `https://<机器名>.<域名>` 保持每台机器独立 origin；`http://127.0.0.1:<端口>` 始终是本机入口；域名模式默认关闭成员端口，新增机器不改 DNS、证书或 TLS 反代；域名模式的公网 Cookie 与本机 HTTP 的 host-only 辅助 Cookie 分开 |
 
 ## 2.05 术语
 
@@ -54,7 +56,8 @@ launcher 随之停掉 dsh 与 relay；恢复需要重新签发注册令牌。
 ## 2.1 拓扑与路由
 
 relay 按以下顺序解析目标：子域名 → 持久化的每机器端口 → `directSlug`。
-子域名适合公网 HTTPS；每机器端口适合无域名的局域网；`directSlug` 指向入口机器自己的 dsh。
+裸 `publicDomain` 只提供统一管理入口并跳转到 `/_admin`，不指向任何 dsh；子域名适合公网 HTTPS；每机器端口适合无域名的局域网；`directSlug` 指向入口机器自己的 dsh。
+域名模式下 `directSlug` 仍由本机 loopback 地址提供，使用 `http://127.0.0.1:<relay-port>`，不改变本机控制台和 dsh 的访问方式。
 
 `directSlug` 路由也经过 connector 控制信道，因此 relay 在 `serve` 启动时把本机挂到它自己
 身上：membership.json 中写入带 `selfManaged` 标记的自挂条目并附一次性注册令牌，connector
@@ -63,9 +66,11 @@ relay 按以下顺序解析目标：子域名 → 持久化的每机器端口 �
 launcher 的 banner 与 `--trusted-host` 都按「没有远程入口」处理它。
 
 端口不在 cookie 作用域内，因此同一主机不同端口共享登录态；配置 Cookie Domain 时子域也共享登录态。
+域名模式的公网会话使用 `Domain=.<域名>` 的 Secure Cookie；真实 loopback 请求使用独立的非 Secure、host-only 辅助 Cookie，确保本机 HTTP 的 CSRF、主题和管理表单不依赖公网会话。
 系统按同一管理员控制这些机器设计，不将端口当作用户隔离边界。
 
-转发到目标 dsh 的 Host 是入口机器的 authority，目标 dsh 必须通过 `--trusted-host` 信任它。
+转发到目标 dsh 的 Host 是浏览器访问的机器 authority，目标 dsh 必须通过 `--trusted-host` 信任它。
+域名模式下，connector 的控制地址使用公网裸域名（如 `wss://dsh.example.com`），目标 dsh 信任对应机器子域名（如 `pc2.dsh.example.com`）；从入口机器本机控制台签发命令时也必须生成这个可达的公网地址，不能把 `127.0.0.1` 打进命令。
 入口地址变化后需要重启目标 dsh。
 
 ## 2.2 Profile 与插件装载

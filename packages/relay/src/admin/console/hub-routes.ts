@@ -85,7 +85,10 @@ export function registerHubRoutes(
     if (view.kind === 'none') return redirectResponse(ADMIN_HUB_PATH, session.setCookieHeaders)
     // 自挂条目由 relay 维护，不是操作员设置的远程入口，没有可取消的内容。
     if (view.kind === 'self') return redirectResponse(ADMIN_HUB_PATH, session.setCookieHeaders)
-    const { csrf, setCookieHeaders } = dependencies.confirmCsrf(context.req.header('cookie'))
+    const { csrf, setCookieHeaders } = dependencies.confirmCsrf(
+      context.env.incoming,
+      context.req.header('cookie'),
+    )
     // 无法读取的远程入口仍值得清除——这是能修复它的唯一操作——因此页面要说明将清除什么。
     const consequences = view.kind === 'joined'
       ? [

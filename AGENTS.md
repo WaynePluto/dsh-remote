@@ -60,7 +60,8 @@ TypeScript + ESM + pnpm workspace，构建 tsdown，开发 tsx，测试 Vitest�
 - yolo-mode 固定 danger-full-access + ask，合法 approval 自动 allowed-once，用户提问不自动回答。
   schema 与执行/展示参数都过滤提权字段；升级运行 yolo-mode-check，任何契约变化必须响亮失败。
 - services 在沙箱外 spawn，受限模式 start/restart 必须批准；终端沿用 dsh PTY 沙箱。
-  interactive_terminal 只用于预期用户直接输入，普通 Git、构建、测试和长任务用 pwsh/bash。
+  interactive_terminal 只用于预期用户直接输入，普通 Git、构建、测试和长任务用 pwsh/bash；
+  Linux sudo 管理任务的命令统一走交互终端，可在同一终端内复用系统缓存，但不建立持续 root shell。
 - Windows 杀进程树用 taskkill /T /F；常驻服务用两级启动器并记录 L2 pid，不以 detached:true 保证存活。
 - 全局提示词只保存 DSH_HOME/AGENTS.md，UTF-8 字节上限 1 MiB、原子写入，冒烟由 dsh 加载器反向认领。
 - files 插件的 Git 根只取 live session.header.cwd，Git 采集无 shell且有界；文件树、读取与预览跟随 dsh 原生 workspaceFiles/UI，目录右键只复制绝对/相对路径；

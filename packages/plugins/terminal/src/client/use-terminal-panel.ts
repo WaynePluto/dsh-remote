@@ -40,6 +40,13 @@ export function useTerminalPanel({ sessionId, actions, t }: TerminalPanelProps):
 
   const screenRef = useRef<HTMLPreElement | null>(null)
   const followRef = useRef(true)
+  // 每次切换会话、terminal 或重新发起操作都递增；过时请求不能清空新 terminal 的密码草稿。
+  const interactionRef = useRef(0)
+
+  const invalidateInteraction = useCallback((): void => {
+    interactionRef.current += 1
+    setPending(undefined)
+  }, [])
 
   const reportFailure = useCallback((cause: unknown): void => {
     setNote({ text: fill(translate('failed'), { message: describe(cause) }), bad: true })
@@ -58,24 +65,44 @@ export function useTerminalPanel({ sessionId, actions, t }: TerminalPanelProps):
 
   // 不同 conversation 就是不同 agent；清除输入、选择和提示，避免显示上一 conversation 的状态。
   useEffect(() => {
+    invalidateInteraction()
     setSelected(undefined)
     setDraft('')
     setNote(undefined)
-  }, [sessionId])
+  }, [invalidateInteraction, sessionId])
+
+  // 收起 dock 会卸载输入框；敏感草稿不能在不可见状态下留在 panel 内。
+  useEffect(() => {
+    if (collapsed) setDraft('')
+  }, [collapsed])
 
   // 保持合法选择，但绝不把用户无声切离正在输入的 terminal。
   useEffect(() => {
     if (terminals.length === 0) {
       if (selected !== undefined) {
+        invalidateInteraction()
         setSelected(undefined)
         resetScreen()
       }
+      setDraft('')
       return
     }
-    if (selected !== undefined && terminals.some(entry => entry.id === selected)) return
+    const selectedTerminal = selected === undefined
+      ? undefined
+      : terminals.find(entry => entry.id === selected)
+    if (selectedTerminal !== undefined) {
+      // shell 已退出时，输入框会消失；同时撤掉可能仍在等待的旧发送。
+      if (!selectedTerminal.running) {
+        invalidateInteraction()
+        setDraft('')
+      }
+      return
+    }
+    invalidateInteraction()
     setSelected(terminals[terminals.length - 1]?.id)
+    setDraft('')
     resetScreen()
-  }, [terminals, selected, resetScreen])
+  }, [invalidateInteraction, terminals, selected, resetScreen])
 
   // 像 terminal 一样跟随输出；用户向上滚动阅读时立即停止跟随。
   useEffect(() => {
@@ -92,29 +119,34 @@ export function useTerminalPanel({ sessionId, actions, t }: TerminalPanelProps):
 
   const selectTerminal = useCallback((terminalId: string): void => {
     if (terminalId === selected) return
+    invalidateInteraction()
     setSelected(terminalId)
+    setDraft('')
     resetScreen()
     setNote(undefined)
     followRef.current = true
-  }, [resetScreen, selected])
+  }, [invalidateInteraction, resetScreen, selected])
 
   const send = useCallback((text: string, submit: boolean): void => {
     const verb = actions?.onSend
     if (verb === undefined || selected === undefined) return
+    const request = interactionRef.current + 1
+    interactionRef.current = request
     setPending('send')
     setNote(undefined)
     void (async () => {
       try {
         const result = await verb(selected, text, submit)
-        // 只有 delivered 的 send 才清空输入框；refusal（尤其 busy）必须保留已输入内容。
+        if (interactionRef.current !== request) return
+        // 只有确认到达 terminal 的 send 才清空输入框；busy、失败和不确定结果都保留草稿。
         if (result.ok) setDraft('')
         else setNote({ text: result.message, bad: true })
         followRef.current = true
         setEagerUntil(Date.now() + EAGER_WINDOW_MS)
       } catch (cause: unknown) {
-        reportFailure(cause)
+        if (interactionRef.current === request) reportFailure(cause)
       } finally {
-        setPending(undefined)
+        if (interactionRef.current === request) setPending(undefined)
       }
     })()
   }, [actions, reportFailure, selected])
@@ -122,17 +154,20 @@ export function useTerminalPanel({ sessionId, actions, t }: TerminalPanelProps):
   const interrupt = useCallback((): void => {
     const verb = actions?.onInterrupt
     if (verb === undefined || selected === undefined) return
+    const request = interactionRef.current + 1
+    interactionRef.current = request
     setPending('interrupt')
     setNote(undefined)
     void (async () => {
       try {
         const result = await verb(selected)
+        if (interactionRef.current !== request) return
         setNote({ text: result.message, bad: !result.ok })
         setEagerUntil(Date.now() + EAGER_WINDOW_MS)
       } catch (cause: unknown) {
-        reportFailure(cause)
+        if (interactionRef.current === request) reportFailure(cause)
       } finally {
-        setPending(undefined)
+        if (interactionRef.current === request) setPending(undefined)
       }
     })()
   }, [actions, reportFailure, selected])

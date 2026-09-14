@@ -168,7 +168,7 @@ async function main() {
     '展开区保留工具的完整原始描述', JSON.stringify(snapshot.entries[0]?.fullDescription))
   check(snapshot.entries[0]?.failures === 1, '失败次数被单独计出')
   // 只有两档状态：dsh 没有 deferred tool loading（docs/dsh/runtime.md）。
-  const statuses = [...new Set(snapshot.entries.map(entry => entry.status))].sort()
+  const statuses = [...new Set(snapshot.entries.map(entry => entry.status))].toSorted()
   check(statuses.every(status => status === 'used' || status === 'unused'),
     '状态只有 used / unused 两档（dsh 没有工具延迟加载）', statuses.join('、'))
 
@@ -184,12 +184,12 @@ async function main() {
   check(typeof seat?.label === 'function', 'tab 文案是 thunk，跟随语言切换', typeof seat?.label)
   check(client.namespaces.includes('dsh-plugin-tools-inspector'), '文案命名空间也是包名后缀',
     client.namespaces.join('、'))
-  const PLATFORM_MODULES = [
+  const PLATFORM_MODULES = new Set([
     'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',
     '@deepseek-ai/dsh-client-store', '@deepseek-ai/dsh-client-ui-slots',
     '@deepseek-ai/dsh-client-ui-primitives',
-  ]
-  const offTable = client.externals.filter(id => !PLATFORM_MODULES.includes(id))
+  ])
+  const offTable = client.externals.filter(id => !PLATFORM_MODULES.has(id))
   check(offTable.length === 0, '浏览器产物只 require 页面模块表里的说明符',
     offTable.length === 0 ? client.externals.join('、') : `表外：${offTable.join('、')}`)
 

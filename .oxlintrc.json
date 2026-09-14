@@ -13,6 +13,8 @@
   "ignorePatterns": ["**/dist/**", "**/node_modules/**", "release/**", "docs/reference/**"],
   "rules": {
     "no-console": "off",
-    "typescript/consistent-type-imports": "error"
+    "typescript/consistent-type-imports": "error",
+    "unicorn/require-module-specifiers": "off",
+    "eslint/no-underscore-dangle": ["warn", { "allow": ["require_", "__DSH_REMOTE_ITERATOR_POLYFILLED__", "__DSH_REMOTE_BROWSER_COMPAT__"] }]
   }
 }

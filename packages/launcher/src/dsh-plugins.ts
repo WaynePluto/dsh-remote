@@ -16,11 +16,11 @@ export const DSH_PLUGIN_PACKAGES = [
     artifacts: [['dist', 'index.js']],
   },
   {
-    // 仅 Host 侧：向 index.html 注入内联垫片脚本，让缺少 Iterator helpers
-    // 的旧 WebKit（Safari < 18.4，含全部 iOS 内嵌浏览器）也能启动 dsh 前端；
-    // pdf.js 顶层的 Iterator 探测会在模块求值时让整个页面挂掉。
+    // Host 侧向 index.html 注入 API 垫片和临时诊断桥，client 侧提供
+    // 设置里的“浏览器日志”页面；两半都必须存在，启动失败也要能从早期桥接
+    // 记录模块加载错误。
     name: '@dsh-remote/dsh-plugin-browser-compat',
-    artifacts: [['dist', 'index.js']],
+    artifacts: [['dist', 'index.js'], ['dist', 'client.js']],
   },
   {
     // 仅 Host 侧的组合修复：dsh 的 auto 目录选择器会选择

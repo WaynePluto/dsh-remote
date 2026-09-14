@@ -11,6 +11,7 @@ import {
 import type { RelayStore } from '../../store/store.js'
 import type { UserRecord } from '../../store/types.js'
 import type { MachineRegistry } from '../../tunnel/registry.js'
+import { isLoopbackBrowserRequest } from '../../auth/loopback.js'
 import { type MembershipView } from './hub.js'
 import {
   csrfToken,
@@ -45,6 +46,9 @@ export interface AdminConsoleHeaderContext {
   readonly req: {
     header: (name: string) => string | undefined
   }
+  readonly env: {
+    readonly incoming: IncomingMessage
+  }
 }
 
 /** 状态变更前检查同源和 CSRF 时需要的请求接口。 */
@@ -52,6 +56,9 @@ export interface AdminConsoleSubmitContext {
   readonly req: {
     raw: Request
     header: (name: string) => string | undefined
+  }
+  readonly env: {
+    readonly incoming: IncomingMessage
   }
 }
 
@@ -82,7 +89,7 @@ export interface AdminConsoleRequestContext {
   }) => Response
   readonly membershipView: () => MembershipView
   readonly adminAccount: (session: AdminConsoleSession) => UserRecord | undefined
-  readonly confirmCsrf: (cookieHeader: string | undefined) => {
+  readonly confirmCsrf: (incoming: IncomingMessage, cookieHeader: string | undefined) => {
     csrf: string
     setCookieHeaders: string[]
   }
@@ -125,7 +132,7 @@ export function createAdminConsoleRequestContext(options: {
     context: AdminConsoleHeaderContext,
     returnTo: string,
   ): PageAppearance => ({
-    theme: readThemePreference(cookies, context.req.header('cookie')),
+    theme: readThemePreference(cookies.forRequest(context.env.incoming), context.req.header('cookie')),
     returnTo,
   })
 
@@ -135,9 +142,10 @@ export function createAdminConsoleRequestContext(options: {
     render: (csrf: string) => string
   }): Response => {
     const csrf = csrfToken()
+    const cookiePolicy = input.session.userId === null ? cookies.forLoopback() : cookies
     return new Response(input.render(csrf), {
       status: input.status,
-      headers: htmlHeaders([...input.session.setCookieHeaders, cookies.csrfHeader(csrf)]),
+      headers: htmlHeaders([...input.session.setCookieHeaders, cookiePolicy.csrfHeader(csrf)]),
     })
   }
 
@@ -164,22 +172,25 @@ export function createAdminConsoleRequestContext(options: {
     return users.length === 1 ? users[0] : undefined
   }
 
-  const confirmCsrf = (cookieHeader: string | undefined): {
+  const confirmCsrf = (incoming: IncomingMessage, cookieHeader: string | undefined): {
     csrf: string
     setCookieHeaders: string[]
   } => {
-    const existing = cookies.readCsrf(cookieHeader)
+    const cookiePolicy = cookies.forRequest(incoming)
+    const existing = cookiePolicy.readCsrf(cookieHeader)
     if (existing !== undefined) return { csrf: existing, setCookieHeaders: [] }
     const csrf = csrfToken()
-    return { csrf, setCookieHeaders: [cookies.csrfHeader(csrf)] }
+    return { csrf, setCookieHeaders: [cookiePolicy.csrfHeader(csrf)] }
   }
 
   const rejectForgedSubmit = (
     context: AdminConsoleSubmitContext,
     body: Record<string, unknown>,
   ): Response | undefined => {
-    if (!sameOrigin(context.req.raw, config.publicScheme)) return emptyResponse(403)
-    if (!equalCsrf(cookies.readCsrf(context.req.header('cookie')), textField(body.csrf))) {
+    const loopback = isLoopbackBrowserRequest(context.env.incoming)
+    if (!sameOrigin(context.req.raw, config.publicScheme, loopback)) return emptyResponse(403)
+    const cookiePolicy = cookies.forRequest(context.env.incoming)
+    if (!equalCsrf(cookiePolicy.readCsrf(context.req.header('cookie')), textField(body.csrf))) {
       return emptyResponse(403)
     }
     return undefined

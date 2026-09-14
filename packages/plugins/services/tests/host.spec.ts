@@ -1,3 +1,4 @@
+/* oxlint-disable no-await-in-loop -- 宿主进程测试逐项等待生命周期结束，避免测试进程互相抢端口和临时目录。 */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

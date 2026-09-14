@@ -65,11 +65,13 @@ dsh plugin --profile dsh-remote-web add <bundle-package>
 
 | 顺序 | 路由键 | 示例 |
 |---|---|---|
+| 0 | publicDomain 裸域名（仅管理入口） | `dsh.example.com` → `/_admin` |
 | 1 | publicDomain 下的子域名 | `pc2.dsh.example.com` |
 | 2 | 持久化的每机器端口 | `10.1.2.87:30810` |
-| 3 | directSlug | 入口机器自己的 `10.1.2.87:30809` |
+| 3 | directSlug | 入口机器自己的 `10.1.2.87:30809` 或本机 `127.0.0.1:30809` |
 
 dsh 使用绝对 `/api` 路径，所以每台机器必须有独立 origin，不能放在子路径下。
+域名模式默认不打开成员端口，新增机器只需注册设备；同一台机器的本机 loopback 入口仍保留。
 端口模式不需要域名；同主机不同端口共享 cookie，边界见 [安全](04-security.md)。
 
 ## 4. 隧道协议
@@ -133,9 +135,9 @@ launcher、relay、connector 不引入原生模块；dsh 的平台依赖决定�
 
 ## 6. 请求顺序
 
-1. HTTPS 由反向代理终结，原始 Host 保留。
+1. 公网 HTTPS 由反向代理终结，原始 Host 保留；本机 loopback HTTP 直接连接 relay，不经过公网反代。
 2. relay 验证浏览器会话；仅 loopback socket 与 loopback Host 同时成立才免登录。
-3. 校验原始 Host/Origin、sec-fetch-site，解析目标机器并检查访问权限及在线状态。
+3. 校验原始 Host/Origin、sec-fetch-site，域名公网请求要求 HTTPS Origin，loopback 请求允许 HTTP Origin；解析目标机器并检查访问权限及在线状态。
 4. 创建隧道数据流，原样转发请求头、URL、body。
 5. dsh 验证信任规则及自己的 cookie，响应经原路返回。
 

@@ -3,6 +3,7 @@
  * 支持 --target=<目标>（可重复或逗号分隔）、all、--skip-build 和 --skip-exe。
  * 目标共用 staging，按命令顺序串行部署；跨平台目标在裁剪前、本机目标在裁剪后冒烟。
  */
+/* oxlint-disable no-await-in-loop -- 打包目标共用 staging，必须串行部署和验收。 */
 import {
   copyFileSync,
   existsSync,

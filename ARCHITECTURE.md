@@ -23,12 +23,12 @@
 | 设置与模型插件（8） | `packages/plugins/{agents-md,proxy,copilot-auth,models-catalog,model-capabilities,favorite-models,subagent-depth,notify}` | 全局提示词、出网代理、模型登录/目录/能力/收藏、深度设置、桌面通知 | dsh 设置/连接/槽位；代理用 undici，模型目录用 pi-ai |
 | 会话插件（4） | `packages/plugins/{exec-process,turn-retry,chat-scroll,user-message-fork}` | 执行过程折叠、重试、滚动、用户消息分叉 | dsh 会话/投影/浏览器 UI；仅 turn-retry 有实质宿主业务 |
 | 工作区与工具插件（5） | `packages/plugins/{services,terminal,tools-inspector,skills-inspector,files}` | 常驻服务、交互终端、工具/技能历史、右侧 Sidebar 只读文件浏览 | dsh live Agent、工具、PTY、RPC、Sidebar slots；services 自有 Node 进程管理引擎 |
-| 环境与预设插件（5） | `packages/plugins/{remote-privileged,browser-compat,directory-picker-browse,yolo-mode,concise-mode}` | 远程设置、旧 WebKit Iterator 垫片、网页目录选择、固定 YOLO、精简预设 | dsh 插件组合；concise-mode 是 Bundle，其余是 overlay |
+| 环境与预设插件（5） | `packages/plugins/{remote-privileged,browser-compat,directory-picker-browse,yolo-mode,concise-mode}` | 远程设置、旧 WebKit API 垫片与临时浏览器诊断、网页目录选择、固定 YOLO、精简预设 | dsh 插件组合；concise-mode 是 Bundle，其余是 overlay |
 | 开发与验证脚本 | `scripts/dev-stack.mjs`、`local-config.mjs`、`*-check.mjs` | 本地全链路、独立凭据目录、插件契约冒烟、依赖检查 | launcher/relay 源码模块、Node；脚本各自声明环境前提 |
 | 发行打包 | `scripts/pack.mjs`、`packaging/`、`.github/workflows/` | 分平台 deploy/归档、产物检查、启动脚本、图标、CI | archiver、pnpm、Go 工具链；不带 Node 二进制 |
 | Windows 托盘 | `packaging/win-launcher/*.go` | 菜单、单实例、自启动、日志轮转、Node launcher 生命周期 | Go 标准库、Win32 API；同一 `package main`，无第三方 Go 包 |
 
-22 个插件中 21 个普通 overlay，1 个 Profile Bundle；17 个有浏览器入口。`@dsh-remote/plugin-ui` 不是插件，不进入 overlay 清单或 launcher 插件顺序。
+22 个插件中 21 个普通 overlay，1 个 Profile Bundle；18 个有浏览器入口。`@dsh-remote/plugin-ui` 不是插件，不进入 overlay 清单或 launcher 插件顺序。
 具体功能及使用限制见 [插件索引](docs/plugins.md) 和各包 README。
 
 ## 3. 源码依赖关系图
@@ -64,7 +64,7 @@ graph TD
 | relay → protocol | `packages/relay/src/server.ts:6–9`、`http/security.ts:3`、`auth/device.ts:5` |
 | connector → protocol | `packages/connector/src/backoff.ts:1`、`config.ts:3`、`control.ts:5–19` |
 | plugins → dsh 族库 | `services/src/index.ts` 的 defineTool；`model-capabilities/src/index.ts:3` 的 schemastery；浏览器入口导入官方 UI/slots |
-| plugins → plugin-ui | services/turn-retry 的 dialog adapter、agents-md/proxy/notify 的 nav-glyph、skills/tools inspector 的 View、services/terminal 的 dock styles 均 import `@dsh-remote/plugin-ui` |
+| plugins → plugin-ui | services/turn-retry 的 dialog adapter、agents-md/proxy/notify/browser-compat 的 nav-glyph、skills/tools inspector 的 View、services/terminal 的 dock styles 均 import `@dsh-remote/plugin-ui` |
 | plugin-ui → React | `packages/plugin-ui/src/dialog-pointer.tsx`、`navigation-glyph.ts`、`inspector.tsx`、`dock-styles.ts` |
 | plugins → undici | `packages/plugins/proxy/src/dispatcher.ts:22` |
 | launcher/relay/connector/protocol → zod | 各包的 `src/config.ts`（protocol 为 `src/frames.ts`） |
@@ -99,6 +99,7 @@ graph TD
 ### 插件双端与运行期协作
 
 - 通常按 `src/index.ts`（宿主）、`src/client/index.tsx`（浏览器）、`shared.ts`（纯契约）分层。
+- `browser-compat` 的 Host head 注入脚本先安装旧 Web API 垫片并创建有界内存诊断桥；client 半只通过该桥注册设置页和补充 `slots.onEntryError`，不使用 RPC、settings 或持久化。
 - `services` 的 `core.ts`/`manager.ts` 不依赖 dsh；入口负责工具、RPC 及沙箱外 spawn 的批准门。core 已拆为 registry、logs、process-identity、process-lifecycle、readiness，入口通过显式 re-export 保持旧导出。
 - `files` 只以 `session.header.cwd` 为 Git 投影根；原生 `ui-sidebar-files`/`ui-sidebar-documentpreview` 负责文件读写视图，插件浏览器半以 slot shadow 增强原生树、双 pane 导航、Git 状态、临时预览/图片缩放和右键菜单；首次 guide 入口用非用户可见 sentinel 保持可达，不注册文件写入接口。
 - `tools-inspector`/`skills-inspector` 回放既有持久化事件；不 append 自定义 Session 事件。

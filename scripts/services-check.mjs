@@ -150,12 +150,12 @@ async function main() {
   check(typeof seat?.order === 'number', '声明了 order，不靠注册先后决定位置', String(seat?.order))
   check(client.namespaces.includes('dsh-plugin-services'), '文案命名空间也是包名后缀',
     client.namespaces.join('、'))
-  const PLATFORM_MODULES = [
+  const PLATFORM_MODULES = new Set([
     'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',
     '@deepseek-ai/dsh-client-store', '@deepseek-ai/dsh-client-ui-slots',
     '@deepseek-ai/dsh-client-ui-primitives',
-  ]
-  const offTable = client.externals.filter(id => !PLATFORM_MODULES.includes(id))
+  ])
+  const offTable = client.externals.filter(id => !PLATFORM_MODULES.has(id))
   check(offTable.length === 0, '浏览器产物只 require 页面模块表里的说明符',
     offTable.length === 0 ? client.externals.join('、') : `表外：${offTable.join('、')}`)
   check(client.externals.includes('@deepseek-ai/dsh-client-ui-primitives'),

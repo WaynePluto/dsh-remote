@@ -108,6 +108,7 @@ export function condense(text: string): string {
  * @returns 新的已排序数组；不修改入参。
  */
 export function sortEntries(entries: readonly ToolEntry[]): ToolEntry[] {
+  // oxlint-disable-next-line no-array-sort -- 浏览器 bundle 兼容旧 WebKit，不能依赖 ES2023 toSorted。
   return [...entries].sort((a, b) => {
     if (a.status !== b.status) return a.status === 'used' ? -1 : 1
     if (a.status === 'used' && a.calls !== b.calls) return b.calls - a.calls

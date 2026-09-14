@@ -303,7 +303,10 @@ export function SkillsView({
   useEffect(() => {
     let alive = true
     void onCanOpen()
-      .then((value) => { if (alive) setCanOpen(value) })
+      .then((value) => {
+        if (alive) setCanOpen(value)
+        return value
+      })
       .catch(() => { if (alive) setCanOpen(false) })
     return () => { alive = false }
   }, [onCanOpen])
@@ -318,6 +321,7 @@ export function SkillsView({
         void onLocate(name)
           .then((location) => {
             setLocations(next => ({ ...next, [name]: { status: 'ready', location } }))
+            return location
           })
           .catch((cause: unknown) => {
             setLocations(next => ({

@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Config, backendConfig, sendToTerminal, snapshot } from '../src/index.js'
 
 /** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
+/* oxlint-disable no-await-in-loop -- live smoke 逐项验证通道端点，顺序本身是验收契约。 */
 const TIMEOUT_MS = 90_000
 
 /** 测试契约：此处说明本测试锁定的行为和回归边界。（涉及：`apply`） */

@@ -26,7 +26,7 @@ import type { RelayConfig } from '../config.js'
 import { proxyHttpRequest } from './proxy.js'
 import { servePublicAsset } from './public-assets.js'
 import { redirectToLogin, rejectSocket, sendHttp } from './responses.js'
-import { checkBrowserRequest } from './security.js'
+import { checkBrowserRequest, isPublicDomainHost } from './security.js'
 import { proxyWebSocketUpgrade } from './upgrade.js'
 import type { TunnelServer } from '../tunnel/server.js'
 
@@ -148,6 +148,7 @@ export function createBrowserServer(
       sendHttp(res, 400, 'bad request')
       return
     }
+    const requestCookies = cookies.forRequest(req)
     if (path.pathname === TUNNEL_CONTROL_PATH || path.pathname === TUNNEL_STREAM_PATH) {
       // connector 始终拨号主端口；成员端口只承载面向一台机器的浏览器流量。
       if (route.memberSlug !== undefined) {
@@ -172,7 +173,7 @@ export function createBrowserServer(
 
     // 外观切换在认证和初始设置门控前响应，登录页和设置向导都需要它。
     if (path.pathname === THEME_PATH) {
-      const result = resolveThemeSwitch({ method: req.method, url: path, cookies })
+      const result = resolveThemeSwitch({ method: req.method, url: path, cookies: requestCookies })
       if (result.kind === 'error') {
         sendHttp(res, result.status, result.message)
         return
@@ -189,7 +190,7 @@ export function createBrowserServer(
 
     /** 此请求的页面使用的外观，并返回到当前 URL。 */
     const appearance: PageAppearance = {
-      theme: readThemePreference(cookies, req.headers.cookie),
+      theme: readThemePreference(requestCookies, req.headers.cookie),
       returnTo: req.url ?? '/',
     }
 
@@ -257,6 +258,20 @@ export function createBrowserServer(
       return
     }
     if (setCookieHeaders.length !== 0) res.setHeader('set-cookie', setCookieHeaders)
+
+    if (
+      (req.method === 'GET' || req.method === 'HEAD')
+      && path.pathname === '/'
+      && isPublicDomainHost(req.headers.host, config)
+    ) {
+      res.writeHead(302, {
+        location: ADMIN_PATH_PREFIX,
+        'cache-control': 'no-store',
+        'content-length': 0,
+      })
+      res.end()
+      return
+    }
 
     // 必须先完成认证，再检查原始 Host、Origin 和 sec-fetch-site。
     const check = checkBrowserRequest(req, config, route.memberSlug)

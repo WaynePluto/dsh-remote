@@ -1,4 +1,6 @@
+import type { IncomingMessage } from 'node:http'
 import type { SessionTokens } from './session.js'
+import { isLoopbackBrowserRequest } from './loopback.js'
 
 export type BrowserCookiePolicyInput =
   | { readonly mode: 'lan-http' }
@@ -69,11 +71,15 @@ export class BrowserCookiePolicy {
   readonly names: BrowserCookieNames
   readonly #secure: boolean
   readonly #domain: string | undefined
+  readonly #loopback: BrowserCookiePolicy | undefined
 
-  constructor(input: BrowserCookiePolicyInput) {
+  constructor(input: BrowserCookiePolicyInput, createLoopback = true) {
     this.mode = input.mode
     this.#secure = input.mode === 'domain-https'
     this.#domain = input.mode === 'domain-https' ? normalizedDomain(input.domain) : undefined
+    this.#loopback = createLoopback && input.mode === 'domain-https'
+      ? new BrowserCookiePolicy({ mode: 'lan-http' }, false)
+      : undefined
     const prefix = this.#secure ? '__Secure-' : ''
     this.names = {
       access: `${prefix}dsh_access`,
@@ -81,6 +87,18 @@ export class BrowserCookiePolicy {
       csrf: `${prefix}dsh_csrf`,
       theme: `${prefix}dsh_theme`,
     }
+  }
+
+  /** 按原始 socket 和 Host 选择当前请求的 Cookie 形态。 */
+  forRequest(request: IncomingMessage): BrowserCookiePolicy {
+    return this.#loopback !== undefined && isLoopbackBrowserRequest(request)
+      ? this.#loopback
+      : this
+  }
+
+  /** 为没有携带 IncomingMessage 的本机页面渲染路径提供 loopback Cookie。 */
+  forLoopback(): BrowserCookiePolicy {
+    return this.#loopback ?? this
   }
 
   readAccess(cookieHeader: string | undefined): string | undefined {

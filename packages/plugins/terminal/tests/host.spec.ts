@@ -1,4 +1,5 @@
 /** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`dispatch`、`ctx.terminals`、`live.spec.ts`） */
+/* oxlint-disable consistent-function-scoping -- 测试 helper 保持在对应 describe 内，避免共享可变测试语境。 */
 
 import type { Context } from '@deepseek-ai/cordis'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -468,6 +469,7 @@ describe('interactive terminal tool wrapper', () => {
     for (const text of [
       'ordinary commands', 'Git', 'builds', 'tests', 'scripts', 'persistent shell state',
       'long-running work', 'pwsh', 'bash', 'run_in_background', 'non-interactive',
+      'Use interactive_terminal for every Linux sudo command', 'sudo -i', 'sudo su', 'su root', 'sudo credential cache',
     ]) {
       expect(`${tool.description}\n${sections[0]?.text}`).toContain(text)
     }

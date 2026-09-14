@@ -277,7 +277,7 @@ async function main() {
   check(byName['dsh-source']?.directory === '/tmp/project/.agents/skills/dsh-source',
     '技能目录来自 resourceBase', String(byName['dsh-source']?.directory))
   // 来源桶就是「全局还是项目级」的答案，不该被我们改写。
-  const sources = [...new Set(snapshot.entries.map(entry => entry.source))].sort()
+  const sources = [...new Set(snapshot.entries.map(entry => entry.source))].toSorted()
   check(sources.join(',') === 'bundled,project-agents,user-dsh',
     '来源桶原样透传（全局 / 项目级的权威答案）', sources.join('、'))
 
@@ -293,12 +293,12 @@ async function main() {
   check(typeof seat?.label === 'function', 'tab 文案是 thunk，跟随语言切换', typeof seat?.label)
   check(client.namespaces.includes('dsh-plugin-skills-inspector'), '文案命名空间也是包名后缀',
     client.namespaces.join('、'))
-  const PLATFORM_MODULES = [
+  const PLATFORM_MODULES = new Set([
     'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',
     '@deepseek-ai/dsh-client-store', '@deepseek-ai/dsh-client-ui-slots',
     '@deepseek-ai/dsh-client-ui-primitives',
-  ]
-  const offTable = client.externals.filter(id => !PLATFORM_MODULES.includes(id))
+  ])
+  const offTable = client.externals.filter(id => !PLATFORM_MODULES.has(id))
   check(offTable.length === 0, '浏览器产物只 require 页面模块表里的说明符',
     offTable.length === 0 ? client.externals.join('、') : `表外：${offTable.join('、')}`)
 
@@ -347,12 +347,12 @@ async function main() {
       check(typeof value?.complete === 'boolean',
         '快照带着「技能目录是否完整」（有 provider 失败时页面要如实说明）',
         String(value?.complete))
-      const allowed = [
+      const allowed = new Set([
         'name', 'description', 'fullDescription', 'whenToUse', 'source', 'provider', 'directory',
         'modelInvocable', 'userInvocable', 'loaded',
-      ]
+      ])
       const extra = value?.entries?.flatMap(entry =>
-        Object.keys(entry).filter(key => !allowed.includes(key))) ?? []
+        Object.keys(entry).filter(key => !allowed.has(key))) ?? []
       check(extra.length === 0, '条目形状没有多出未预期的字段', extra.join('、'))
 
       const missing = await context.callChannel('locate', { sessionId: 'no-such-session', name: 'definitely-not-a-skill' }, cookie)

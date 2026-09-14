@@ -87,7 +87,10 @@ export function registerMachineRoutes(
     if (device.slug === config.directSlug) {
       return redirectResponse(ADMIN_PATH_PREFIX, session.setCookieHeaders)
     }
-    const { csrf, setCookieHeaders } = dependencies.confirmCsrf(context.req.header('cookie'))
+    const { csrf, setCookieHeaders } = dependencies.confirmCsrf(
+      context.env.incoming,
+      context.req.header('cookie'),
+    )
     return new Response(confirmPage({
       title: '停止并移除机器',
       machine,

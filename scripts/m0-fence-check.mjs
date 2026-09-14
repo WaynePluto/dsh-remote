@@ -7,6 +7,7 @@
  * token 来自：`dsh web: http://127.0.0.1:3080/?token=<token>`。
  */
 
+/* oxlint-disable no-await-in-loop -- fence 检查按请求序列验证状态码和 token 交换，顺序不可并发。 */
 import http from 'node:http'
 import { randomBytes, randomUUID } from 'node:crypto'
 

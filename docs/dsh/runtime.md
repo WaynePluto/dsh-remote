@@ -104,6 +104,11 @@ start 合并创建与前台发送，interrupt 固定 SIGINT，不暴露 raw send
 严格用于预期必须让用户在可见终端直接输入的命令。普通命令、构建、Git、测试、长任务与持久 shell 状态
 均使用 pwsh/bash；可改非交互的优先改非交互。持续服务使用 services。
 
+Linux 个人用户部署允许一个窄范围例外：所有 sudo 命令都必须通过交互终端执行，即使缓存可能跳过密码提示；
+已经因 sudo 人工认证而打开的交互终端，可以在同一管理员任务内复用系统的 sudo 凭据缓存执行后续明确命令。
+这不等于允许用 interactive_terminal 承担普通持久 shell 工作。模型应先说明具体命令和影响，不主动运行 `sudo -i`、`sudo su`、`su root` 或等价的持续 root shell，
+也不修改 sudoers、配置免密授权或用脚本维持 root 控制通道。密码只由用户在网页终端输入。
+
 ### Registry 契约
 
 - owner 按对象同一性比较且必须是 live Agent，恢复出的新 Agent 不等于原 owner。
@@ -113,6 +118,8 @@ start 合并创建与前台发送，interrupt 固定 SIGINT，不暴露 raw send
 - backend 在非 danger-full-access 下调用 ctx.sandbox.confine，插件不自己 spawn 终端。
 - sendWaitMs 默认 10 秒，等待后仍忙返回 busy:true，页面必须保留草稿。
 - 短暂 unavailable 不等于终端已关闭，轮询失败不能立即卸载面板丢草稿。
+- 浏览器输入框默认使用密码遮罩，关闭拼写检查、自动纠正、自动大写和自动填充提示；切换 conversation 或 terminal
+  时清除草稿，收起 panel 也清除不可见草稿，过时请求不能清空新 terminal 的输入。输入未作为模型工具参数保存，但目标程序回显时仍可能进入输出。
 
 ### Windows 就绪与轮询
 

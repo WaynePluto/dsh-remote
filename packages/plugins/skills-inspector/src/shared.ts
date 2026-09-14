@@ -190,6 +190,7 @@ export function condense(text: string, limit: number = MAX_DESCRIPTION): string 
  * @returns 新的已排序数组；不修改入参。
  */
 export function sortLoaded(entries: readonly SkillEntry[]): SkillEntry[] {
+  // oxlint-disable-next-line no-array-sort -- 浏览器 bundle 兼容旧 WebKit，不能依赖 ES2023 toSorted。
   return [...entries].sort((a, b) => {
     const left = a.loaded?.lastIndex ?? -1
     const right = b.loaded?.lastIndex ?? -1
@@ -226,8 +227,10 @@ export function groupBySource(entries: readonly SkillEntry[]): SourceGroup[] {
   return [...buckets.entries()]
     .map(([source, group]) => ({
       source,
+      // oxlint-disable-next-line no-array-sort -- 浏览器 bundle 兼容旧 WebKit，不能依赖 ES2023 toSorted。
       entries: group.sort((a, b) => a.name.localeCompare(b.name, 'en')),
     }))
+    // oxlint-disable-next-line no-array-sort -- 浏览器 bundle 兼容旧 WebKit，不能依赖 ES2023 toSorted。
     .sort((a, b) =>
       sourceOrder(a.source) - sourceOrder(b.source)
       || a.source.localeCompare(b.source, 'en'))

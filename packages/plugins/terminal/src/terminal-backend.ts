@@ -1,3 +1,4 @@
+/* oxlint-disable no-await-in-loop -- terminal 启动重试必须串行等待上一次失败和退避。 */
 import type { Context } from '@deepseek-ai/cordis'
 import TerminalSessionService from '@deepseek-ai/dsh-terminal'
 import * as terminalBash from '@deepseek-ai/dsh-terminal-bash'
@@ -73,6 +74,7 @@ export function backendConfig(
 
 /** 挂载 dsh PTY registry、shell backend 与启动补偿。 */
 export function mountTerminalBackend(ctx: Context, config: Config): void {
+  // oxlint-disable-next-line no-new -- 构造函数通过 ctx 注册 terminal service，实例本身不需要保留。
   new TerminalSessionService(ctx)
   ctx.plugin(terminalBash, backendConfig(config))
   ctx.inject(['terminals'], scope => {

@@ -61,7 +61,8 @@ JSON 数据，serve 形态渲染进 index.html 文本，静态 worker 形态由 
 
 head 位置的经典脚本 parser-blocking，先于页面 combo 模块求值。remote-privileged 用
 global 行注入 `__DSH_TRANSPORT__`；browser-compat 用 head script 行在旧 WebKit 上垫平
-Iterator helpers（函数体 toString 序列化，必须自包含、不引用模块作用域）。
+Iterator/AbortSignal/Promise 能力，并建立当前页面内存中的诊断桥（函数体 `toString()` 序列化，
+必须自包含、不引用模块作用域）。client 半读取该桥显示临时日志，不向 Host 发 RPC。
 
 ## 设置写入
 
@@ -85,6 +86,8 @@ namespace 统一为 dsh-plugin-<名字>，全局提示词正文直接保存文�
 
 - keyed/single/list 槽同一 cell 可以按 priority 影子覆盖，数值最小者渲染；同 cell + 同 priority 才冲突。
 - 接管现有 renderer 使用 priority:-1；并列添加用 list 或插件定义的子槽。
+- `ctx.slots.onEntryError` 观察被错误边界捕获的 slot renderer 异常；它只覆盖渲染边界，不等于全局
+  `window.error` 或 Promise 拒绝监听。监听器随插件 fiber 清理，来源为 `packages/client/ui-renderer/src/client/registry.ts`。
 - settings.models.provider-card 是 keyed，llm-pi-ai 的入口由 copilot-auth 负责组合。
   model-capabilities 使用其项目子槽，models-catalog 使用 settings.models.footer。
 - conversation.view 是 session-scoped list，label 必须是 thunk，才能随语言切换。
@@ -94,8 +97,12 @@ namespace 统一为 dsh-plugin-<名字>，全局提示词正文直接保存文�
 
 settings.section 没有 icon 字段，导航 shell 按 id 选择图标，未知 id 为齿轮。
 出处：`packages/client/ui-settings-general/src/client/SettingsRoot.tsx`。
-项目的代理、通知、全局提示词使用局部导航标记和注入样式，不替换 React 节点。
-升级检查 _navCell 等局部类名；不匹配时退回默认图标。
+项目的代理、通知、全局提示词和浏览器日志使用局部导航标记和注入样式，不替换 React 节点。
+当前图标映射为 `IconGlobeOutline14`、`IconAlarmClockOutline16`、`IconListPenOutline16` 和
+`IconCodeOutline16`；`settings.section` 没有 icon 字段，因此插件调用这些原生 component 并将
+返回的 SVG element 序列化成导航 mask。
+公共 helper 使用 dsh shell 已渲染的直接子 SVG 作为 mask 载体，并隐藏其原生子路径，避免伪元素在
+React 重建或旧 WebKit flex 布局中丢失。升级检查包含 `navCell`/`navLabel` 的局部类名；不匹配时退回默认图标。
 
 ### 右侧 Sidebar 页面类型
 

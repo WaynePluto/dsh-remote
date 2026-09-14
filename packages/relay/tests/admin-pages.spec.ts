@@ -1,3 +1,4 @@
+/* oxlint-disable no-await-in-loop -- 页面矩阵需要按顺序访问，避免多个真实 relay 请求互相影响。 */
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   type RelayStore,

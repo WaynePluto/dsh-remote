@@ -114,7 +114,7 @@ function call(callId: string, name: string): ReplayableEvent {
  * @param failed - 是否失败。
  * @returns 事件。
  */
-function result(callId: string, failed: boolean): ReplayableEvent {
+function toolResult(callId: string, failed: boolean): ReplayableEvent {
   return {
     type: 'tool/result',
     data: {
@@ -127,9 +127,9 @@ function result(callId: string, failed: boolean): ReplayableEvent {
 describe('replayToolCalls', () => {
   it('从会话日志数出每个工具的调用与失败次数', () => {
     const replay = replayToolCalls([
-      call('c1', 'read'), result('c1', false),
-      call('c2', 'read'), result('c2', true),
-      call('c3', 'bash'), result('c3', false),
+      call('c1', 'read'), toolResult('c1', false),
+      call('c2', 'read'), toolResult('c2', true),
+      call('c3', 'bash'), toolResult('c3', false),
     ])
     expect(countOf(replay, 'read')).toEqual({ calls: 2, failures: 1 })
     expect(countOf(replay, 'bash')).toEqual({ calls: 1, failures: 0 })
@@ -152,7 +152,7 @@ describe('replayToolCalls', () => {
 
   it('配不上对的失败被安全忽略，不会归到别的工具头上', () => {
     // fork 继承的前缀被截断时会出现这种半截日志。
-    const replay = replayToolCalls([call('c1', 'read'), result('ghost', true)])
+    const replay = replayToolCalls([call('c1', 'read'), toolResult('ghost', true)])
     expect(countOf(replay, 'read')).toEqual({ calls: 1, failures: 0 })
   })
 
@@ -185,8 +185,8 @@ describe('project', () => {
 
   it('把 schema 与计数合成快照并排好序', () => {
     const replay = replayToolCalls([
-      call('c1', 'read'), result('c1', false),
-      call('c2', 'read'), result('c2', true),
+      call('c1', 'read'), toolResult('c1', false),
+      call('c2', 'read'), toolResult('c2', true),
     ])
     const snapshot = project(schemas, name => countOf(replay, name))
 

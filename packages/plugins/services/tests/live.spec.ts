@@ -1,3 +1,4 @@
+/* oxlint-disable no-await-in-loop -- live 测试按进程生命周期顺序启动和回收服务。 */
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'

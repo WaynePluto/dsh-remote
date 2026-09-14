@@ -17,6 +17,7 @@ import {
   openAuthenticatedPage,
   openCsrfPage,
   postCsrfForm,
+  postForm,
   setCookieArray,
   startAuthenticatedRelayFixture,
   type AuthenticatedRelayTestFixture,
@@ -261,7 +262,7 @@ describe('M2.5 admin console', () => {
     // 令牌，以及 dsh 必须信任的 authority（模式 A 原样转发
     // 浏览器 Host；使用公网域名时它就是该机器的子域名）。
     expect(issued.body)
-      .toContain(`dsh-remote-connector --relay wss://${HOST} --slug pc9 --enroll-token ${token} --hub-authority pc9.dsh.test`)
+      .toContain(`dsh-remote-connector --relay wss://dsh.test --slug pc9 --enroll-token ${token} --hub-authority pc9.dsh.test`)
 
     const tokenId = lastIssuedTokenId(fixture.store)
     if (tokenId === undefined) throw new Error('the console wrote no audit row for the token')
@@ -286,6 +287,33 @@ describe('M2.5 admin console', () => {
     const reloaded = await openConsole(fixture)
     expect(reloaded.body).not.toContain(token)
     expect(reloaded.body).not.toContain('class="secret"')
+  })
+
+  it('keeps the loopback admin flow on HTTP with a separate CSRF cookie', async () => {
+    const fixture = await startFixture({ online: false })
+    const localHost = `127.0.0.1:${String(fixture.port)}`
+    const localPage = await openCsrfPage(fixture, {
+      path: ADMIN_PATH_PREFIX,
+      host: localHost,
+      cookie: '',
+      csrfCookieName: 'dsh_csrf',
+      label: 'loopback console',
+    })
+    expect(localPage.status, localPage.body).toBe(200)
+    const csrfCookie = setCookieArray(localPage.headers).find(header => header.startsWith('dsh_csrf='))
+    expect(csrfCookie).toBeDefined()
+    expect(csrfCookie).not.toContain('Secure')
+    expect(csrfCookie).not.toContain('Domain=')
+
+    const issued = await postForm(fixture, {
+      path: ADMIN_TOKEN_CREATE_PATH,
+      host: localHost,
+      origin: `http://${localHost}`,
+      cookie: localPage.csrfPair,
+      fields: { csrf: localPage.csrf, slug: 'pc9', name: '' },
+    })
+    expect(issued.status, issued.body).toBe(200)
+    expect(issued.body).toContain('dsh-remote-connector --relay wss://dsh.test')
   })
 
   it('rejects a malformed slug without issuing anything', async () => {

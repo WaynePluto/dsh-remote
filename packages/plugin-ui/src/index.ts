@@ -42,7 +42,7 @@ export {
   installNavigationGlyph,
   navigationGlyphStylesheet,
 } from './navigation-glyph.js'
-export type { NavigationGlyphOptions } from './navigation-glyph.js'
+export type { NavigationGlyph, NavigationGlyphOptions } from './navigation-glyph.js'
 
 export {
   INSPECTOR_BORDER,

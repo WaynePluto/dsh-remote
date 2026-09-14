@@ -1,6 +1,7 @@
 import type { IncomingMessage, OutgoingHttpHeaders } from 'node:http'
 import { isIP } from 'node:net'
 import { machineSlugSchema } from '@dsh-remote/protocol'
+import { isLoopbackBrowserRequest } from '../auth/loopback.js'
 import type { RelayConfig } from '../config.js'
 
 export type BrowserRequestCheck =
@@ -13,6 +14,13 @@ function authorityOf(host: string): URL | undefined {
   } catch {
     return undefined
   }
+}
+
+/** 域名模式的裸域名只作为入口控制台，不作为任何机器的 dsh 路由。 */
+export function isPublicDomainHost(host: string | undefined, config: RelayConfig): boolean {
+  if (host === undefined || config.publicDomain === undefined) return false
+  const authority = authorityOf(host)
+  return authority?.hostname.toLowerCase() === config.publicDomain
 }
 
 /** IP 字面量或 `localhost`：Host 决定如何到达端口路由的 hub。 */
@@ -78,7 +86,8 @@ export function checkBrowserRequest(
   if (origin !== undefined) {
     try {
       const parsed = new URL(origin)
-      if (parsed.protocol !== `${config.publicScheme}:` || parsed.host.toLowerCase() !== authority.host.toLowerCase()) {
+      const expectedScheme = isLoopbackBrowserRequest(req) ? 'http' : config.publicScheme
+      if (parsed.protocol !== `${expectedScheme}:` || parsed.host.toLowerCase() !== authority.host.toLowerCase()) {
         return { ok: false, status: 403, message: 'forbidden' }
       }
     } catch {

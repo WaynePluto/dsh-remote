@@ -80,9 +80,14 @@ export function TerminalPanel(props: TerminalPanelProps) {
                 <div style={inputRowStyle}>
                   <input
                     className={inputClass}
+                    type="password"
                     value={draft}
                     aria-label={translate('inputLabel')}
                     placeholder={translate('inputPlaceholder')}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     disabled={pending !== undefined}
                     onChange={event => { setDraft(event.target.value) }}
                     onKeyDown={onKeyDown}

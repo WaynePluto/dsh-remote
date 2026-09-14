@@ -97,7 +97,7 @@ export function dispatch(
     const session = (agent as { session?: { snapshotEvents?: () => readonly ReplayableEvent[] } } | undefined)?.session
     const events = typeof session?.snapshotEvents === 'function' ? session.snapshotEvents() : []
     const replay = replayToolCalls(events)
-    return { ok: true, value: project(schemas, name => countOf(replay, name)) }
+    return { ok: true, value: project(schemas, toolName => countOf(replay, toolName)) }
   } catch (error: unknown) {
     return {
       ok: false,

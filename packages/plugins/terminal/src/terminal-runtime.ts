@@ -1,3 +1,4 @@
+/* oxlint-disable no-await-in-loop -- terminal send 在 busy 时按固定间隔串行重试，不能并发提交输入。 */
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'

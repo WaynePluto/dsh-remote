@@ -16,8 +16,10 @@
 # （对应 relay 启动参数 --domain <域名> --scheme https，
 #   packages/launcher/src/relay.ts）。只有这时 relay 才会：
 #   * 把 <slug>.dsh.example.com 解析成机器（packages/relay/src/http/security.ts）
-#   * 发 __Secure- 前缀 + Secure + Domain=.dsh.example.com 的会话 cookie
+#   * 发 __Secure- 前缀 + Secure + Domain=.dsh.example.com 的公网会话 cookie；本机
+#     127.0.0.1 的 HTTP 请求会由 relay 选择独立的非 Secure host-only 辅助 cookie
 #     （packages/relay/src/auth/cookies.ts）
+#   * 裸 dsh.example.com 只进入 relay 管理入口，GET / 会跳转到 /_admin，不会指向本机 dsh
 # launcher 会同时把 hub.dsh.example.com 写进 dsh 的 --trusted-host，
 # 并拒绝在域名模式下绑定非 loopback 地址。
 #
@@ -31,8 +33,8 @@
 }
 
 # 泛域名证书不覆盖 apex 本身，所以 *.dsh.example.com 和 dsh.example.com 两个名字都要写：
-#   dsh.example.com        集线器自己（登录页 /_auth/login、管理页 /_admin、隧道入口）
-#   *.dsh.example.com      每台成员机器一个子域名（铁律 6：一台机器一个子域名，不挂子路径）
+#   dsh.example.com        统一入口（登录页 /_auth/login、管理页 /_admin；裸 / 跳转到 /_admin）
+#   *.dsh.example.com      每台机器一个子域名（铁律 6：一台机器一个 origin，不挂子路径）
 *.dsh.example.com, dsh.example.com {
 	# 泛域名证书只能用 DNS-01 挑战，HTTP-01 拿不到 *.example.com。
 	# DNS 模块不在官方默认二进制里，需要自己构建一份带插件的 Caddy：
@@ -63,6 +65,8 @@
 	#
 	# Caddy 默认会补上 X-Forwarded-For / -Proto / -Host，relay 不信任这些头来判断
 	# 是不是本机访问（docs/04-security.md），所以留着也不会造成绕过。
+	# 该 site block 只匹配上面的两个 Host；不要把它改成无条件的默认站点，
+	# 否则外部请求伪造 loopback Host 可能触及本机免登录入口。
 	reverse_proxy 127.0.0.1:30809
 }
 

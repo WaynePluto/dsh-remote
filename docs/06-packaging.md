@@ -162,8 +162,9 @@ release 支持 `--skip-build` 复用 dist、`--skip-exe` 跳过 Windows exe；�
 ## 6. 服务器部署
 
 见 [deploy/README.md](../deploy/README.md)、[Caddyfile](../deploy/Caddyfile) 与 [systemd unit](../deploy/dsh-remote.service)。
-systemd 管理 launcher，Restart=always 负责整套恢复；ReadWritePaths 覆盖 dsh-remote home、DSH_HOME 和工作目录。
-JWT 密钥由 launcher 生成，不写入 unit。公网部署在配置里写 `relay.domain`，relay 监听 loopback，
-TLS 代理原样保留 Host。
+systemd 以个人普通用户管理 launcher，Restart=always 负责整套恢复；默认运行数据在 `~/.dsh-remote`，
+官方 dsh 数据在 `~/.dsh`，工作目录从用户家目录开始。个人模式不使用 `ProtectHome`、`NoNewPrivileges`、
+`ProtectSystem` 或 `ReadWritePaths`，sudo 仍由系统策略控制。JWT 密钥由 launcher 生成，不写入 unit。
+公网部署在配置里写 `relay.domain`，relay 监听 loopback，TLS 代理原样保留 Host。
 
 后续发布任务与平台实机验收统一记在 [当前进度](05-roadmap.md)。

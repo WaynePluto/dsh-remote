@@ -3,6 +3,7 @@ import { getRequestListener, type HttpBindings } from '@hono/node-server'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { BrowserAuthenticator } from '../auth/browser.js'
+import { isLoopbackBrowserRequest } from '../auth/loopback.js'
 import { LoginRateLimitError } from '../auth/login-limiter.js'
 import { InvalidCredentialsError } from '../auth/service.js'
 import { InvalidSessionError } from '../auth/session.js'
@@ -114,6 +115,8 @@ export function createAuthRequestListener(options: {
   publicScheme: 'http' | 'https'
 }): (request: IncomingMessage, response: ServerResponse) => Promise<void> {
   const { authenticator, publicScheme } = options
+  const cookiesOf = (context: { readonly env: { readonly incoming: IncomingMessage } }) =>
+    authenticator.cookies.forRequest(context.env.incoming)
   const app = new Hono<{ Bindings: HttpBindings }>()
   app.use(`${AUTH_PATH_PREFIX}/*`, bodyLimit({ maxSize: 16 * 1_024 }))
 
@@ -128,32 +131,38 @@ export function createAuthRequestListener(options: {
    * @returns 交给渲染器的外观。
    */
   const appearanceOf = (
-    context: { req: { header: (name: string) => string | undefined } },
+    context: {
+      req: { header: (name: string) => string | undefined }
+      env: { incoming: IncomingMessage }
+    },
     path: string,
     returnTo: string,
   ): PageAppearance => ({
-    theme: readThemePreference(authenticator.cookies, context.req.header('cookie')),
+    theme: readThemePreference(cookiesOf(context), context.req.header('cookie')),
     returnTo: `${path}?returnTo=${encodeURIComponent(returnTo)}`,
   })
 
   app.get(LOGIN_PATH, (context) => {
     const csrf = csrfToken()
     const returnTo = safeReturnTo(context.req.query('returnTo'))
+    const cookies = cookiesOf(context)
     return new Response(loginPage({
       csrf,
       returnTo,
       appearance: appearanceOf(context, LOGIN_PATH, returnTo),
     }), {
       status: 200,
-      headers: htmlHeaders([authenticator.cookies.csrfHeader(csrf)]),
+      headers: htmlHeaders([cookies.csrfHeader(csrf)]),
     })
   })
 
   app.post(LOGIN_PATH, async (context) => {
-    if (!sameOrigin(context.req.raw, publicScheme)) return emptyResponse(403)
+    const loopback = isLoopbackBrowserRequest(context.env.incoming)
+    if (!sameOrigin(context.req.raw, publicScheme, loopback)) return emptyResponse(403)
     const body = await context.req.parseBody()
     const csrf = textField(body.csrf)
-    if (!equalCsrf(authenticator.cookies.readCsrf(context.req.header('cookie')), csrf)) {
+    const cookies = cookiesOf(context)
+    if (!equalCsrf(cookies.readCsrf(context.req.header('cookie')), csrf)) {
       return emptyResponse(403)
     }
     const username = textField(body.username)
@@ -167,8 +176,8 @@ export function createAuthRequestListener(options: {
         userAgent: context.req.header('user-agent') ?? null,
       })
       return redirectResponse(returnTo, [
-        ...authenticator.cookies.sessionHeaders(tokens),
-        authenticator.cookies.clearCsrfHeader(),
+        ...cookies.sessionHeaders(tokens),
+        cookies.clearCsrfHeader(),
       ])
     } catch (error) {
       const nextCsrf = csrfToken()
@@ -182,7 +191,7 @@ export function createAuthRequestListener(options: {
           error: '登录尝试过多，请在 15 分钟后重试。',
         }), {
           status: 429,
-          headers: htmlHeaders([authenticator.cookies.csrfHeader(nextCsrf)]),
+          headers: htmlHeaders([cookies.csrfHeader(nextCsrf)]),
         })
         response.headers.set('retry-after', String(Math.ceil(error.retryAfterMs / 1_000)))
         return response
@@ -196,36 +205,39 @@ export function createAuthRequestListener(options: {
         error: '账号、密码或动态验证码不正确。',
       }), {
         status: 401,
-        headers: htmlHeaders([authenticator.cookies.csrfHeader(nextCsrf)]),
+        headers: htmlHeaders([cookies.csrfHeader(nextCsrf)]),
       })
     }
   })
 
   app.post(REFRESH_PATH, async (context) => {
-    if (!sameOrigin(context.req.raw, publicScheme)) return emptyResponse(403)
+    const loopback = isLoopbackBrowserRequest(context.env.incoming)
+    if (!sameOrigin(context.req.raw, publicScheme, loopback)) return emptyResponse(403)
     const body = await context.req.parseBody()
+    const cookies = cookiesOf(context)
     if (!equalCsrf(
-      authenticator.cookies.readCsrf(context.req.header('cookie')),
+      cookies.readCsrf(context.req.header('cookie')),
       context.req.header('x-csrf-token') ?? textField(body.csrf),
     )) {
       return emptyResponse(403)
     }
-    const refresh = authenticator.cookies.readRefresh(context.req.header('cookie'))
+    const refresh = cookies.readRefresh(context.req.header('cookie'))
     if (refresh === undefined) return emptyResponse(401)
     try {
       const tokens = await authenticator.rotateRefreshToken(refresh)
-      return emptyResponse(204, authenticator.cookies.sessionHeaders(tokens))
+      return emptyResponse(204, cookies.sessionHeaders(tokens))
     } catch (error) {
       if (!(error instanceof InvalidSessionError)) throw error
-      return emptyResponse(401, authenticator.cookies.clearSessionHeaders())
+      return emptyResponse(401, cookies.clearSessionHeaders())
     }
   })
 
   app.get(LOGOUT_PATH, (context) => {
+    const cookies = cookiesOf(context)
     // 复用浏览器已有的 CSRF cookie，而不是替换它：
     // 覆盖它会使打开此页面的控制台标签页中的隐藏令牌失效，
     // 操作员取消返回时表单就会失效。
-    const existing = authenticator.cookies.readCsrf(context.req.header('cookie'))
+    const existing = cookies.readCsrf(context.req.header('cookie'))
     const csrf = existing ?? csrfToken()
     const returnTo = safeReturnTo(context.req.query('returnTo'))
     return new Response(logoutPage({
@@ -234,24 +246,26 @@ export function createAuthRequestListener(options: {
       appearance: appearanceOf(context, LOGOUT_PATH, returnTo),
     }), {
       status: 200,
-      headers: htmlHeaders(existing === undefined ? [authenticator.cookies.csrfHeader(csrf)] : []),
+      headers: htmlHeaders(existing === undefined ? [cookies.csrfHeader(csrf)] : []),
     })
   })
 
   app.post(LOGOUT_PATH, async (context) => {
-    if (!sameOrigin(context.req.raw, publicScheme)) return emptyResponse(403)
+    const loopback = isLoopbackBrowserRequest(context.env.incoming)
+    if (!sameOrigin(context.req.raw, publicScheme, loopback)) return emptyResponse(403)
     const body = await context.req.parseBody()
+    const cookies = cookiesOf(context)
     if (!equalCsrf(
-      authenticator.cookies.readCsrf(context.req.header('cookie')),
+      cookies.readCsrf(context.req.header('cookie')),
       context.req.header('x-csrf-token') ?? textField(body.csrf),
     )) {
       return emptyResponse(403)
     }
-    const refresh = authenticator.cookies.readRefresh(context.req.header('cookie'))
+    const refresh = cookies.readRefresh(context.req.header('cookie'))
     if (refresh !== undefined) await authenticator.logout(refresh)
     const cleared = [
-      ...authenticator.cookies.clearSessionHeaders(),
-      authenticator.cookies.clearCsrfHeader(),
+      ...cookies.clearSessionHeaders(),
+      cookies.clearCsrfHeader(),
     ]
     // 表单导航必须落到某处：204 会让浏览器停在会话已不存在的页面上，
     // 却没有任何内容显示退出成功。程序调用方仍会得到裸 204。

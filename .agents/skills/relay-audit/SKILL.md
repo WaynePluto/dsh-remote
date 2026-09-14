@@ -21,7 +21,7 @@ description: 查证 dsh-remote relay 的安全活动记录（SQLite audit_log �
 |---|---|
 | 本仓库开发（`pnpm dev`） | `.dev/relay.db`（`scripts/local-config.mjs`） |
 | 绿色包 / 托盘 | `<dsh-remote home>/relay.db`，home 默认 `~/.dsh-remote`（`packages/launcher/src/config.ts`） |
-| systemd 部署 | `/var/lib/dsh-remote/relay.db`（`deploy/README.md`） |
+| systemd 部署 | `~/.dsh-remote/relay.db`，Linux 通常为 `/home/<user>/.dsh-remote/relay.db`（`deploy/README.md`） |
 | 直接跑 `dsh-remote-relay` 且没给 `--data` | `./data/relay.db`（`packages/relay/src/cli.ts`） |
 
 拿不准就问用户，或按上表顺序探测存在性。**不要**去猜别的路径。

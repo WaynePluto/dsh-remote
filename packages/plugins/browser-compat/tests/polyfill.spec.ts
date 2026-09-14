@@ -121,11 +121,16 @@ describe('iterator polyfill behavior', () => {
     expect(new Function(`${BEHAVIOR_SCRIPT} return results`)()).toEqual(EXPECTED)
   })
 
-  it('does not touch an existing native implementation', () => {
-    const marker = { alreadyHere: true }
+  it('preserves an existing native implementation and adds the pdf.js join helper', () => {
+    const helperNames = ['map', 'filter', 'take', 'drop', 'flatMap', 'reduce', 'toArray', 'forEach', 'some', 'every', 'find']
+    const marker = {
+      from: () => undefined,
+      prototype: Object.fromEntries(helperNames.map(name => [name, () => undefined])),
+    }
     ;(globalThis as GlobalWithIterator).Iterator = marker
     iteratorPolyfill()
     expect((globalThis as GlobalWithIterator).Iterator).toBe(marker)
+    expect(typeof marker.prototype.join).toBe('function')
   })
 })
 

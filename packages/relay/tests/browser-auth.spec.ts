@@ -140,6 +140,21 @@ describe('browser cookie policies', () => {
     }
   })
 
+  it('uses a separate non-Secure host-only policy for a real loopback request', () => {
+    const policy = new BrowserCookiePolicy({ mode: 'domain-https', domain: 'dsh.test' })
+    const local = policy.forRequest(fakeRequest({
+      remoteAddress: '127.0.0.1',
+      host: '127.0.0.1:30809',
+    }))
+    expect(local.names.csrf).toBe('dsh_csrf')
+    expect(local.csrfHeader('csrf-token')).not.toContain('Secure')
+    expect(local.csrfHeader('csrf-token')).not.toContain('Domain=')
+    expect(policy.forRequest(fakeRequest({
+      remoteAddress: '127.0.0.1',
+      host: 'pc1.dsh.test',
+    }))).toBe(policy)
+  })
+
   it('rejects malformed and duplicate cookie values', () => {
     expect(readCookie('one=first; one=second', 'one')).toBeUndefined()
     expect(readCookie('one=%GG', 'one')).toBeUndefined()
@@ -320,6 +335,17 @@ describe('relay authentication endpoints', () => {
       expect(sessionCookies.every(header => header.includes('HttpOnly'))).toBe(true)
       expect(sessionCookies.every(header => header.includes('Secure'))).toBe(true)
       expect(sessionCookies.every(header => header.includes('Domain=.dsh.test'))).toBe(true)
+
+      const apex = await browserRequest({
+        port: fixture.port,
+        path: '/',
+        headers: {
+          host: 'dsh.test',
+          cookie: cookieHeader(sessionCookies),
+        },
+      })
+      expect(apex.status).toBe(302)
+      expect(apex.headers.location).toBe('/_admin')
 
       const authenticated = await browserRequest({
         port: fixture.port,

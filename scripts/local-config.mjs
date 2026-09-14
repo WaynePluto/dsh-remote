@@ -47,7 +47,7 @@ export const PLUGINS_DIRECTORY = join(ROOT, 'packages/plugins')
 export function dshPluginOverlays() {
   if (!existsSync(PLUGINS_DIRECTORY)) return []
   const overlays = []
-  for (const entry of readdirSync(PLUGINS_DIRECTORY, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+  for (const entry of readdirSync(PLUGINS_DIRECTORY, { withFileTypes: true }).toSorted((a, b) => a.name.localeCompare(b.name))) {
     if (!entry.isDirectory()) continue
     const packageDirectory = join(PLUGINS_DIRECTORY, entry.name)
     const overlay = join(packageDirectory, 'dsh-overlay.yml')

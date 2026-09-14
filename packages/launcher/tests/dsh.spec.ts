@@ -127,16 +127,19 @@ describe('connector entry', () => {
   })
 })
 
+function barePluginName(name: string): string {
+  return (name.split('/')[1] ?? name).replace(/^dsh-plugin-/u, '')
+}
+
 describe('dsh plugin overlays', () => {
   const packed = join('C:', 'green', 'dist')
   const source = join('D:', 'dev', 'dsh-remote', 'packages', 'launcher', 'src')
-  const bareName = (name: string): string => (name.split('/')[1] ?? name).replace(/^dsh-plugin-/u, '')
   /** 每个插件在绿色包中的位置。 */
   const deployedRoots = Object.fromEntries(DSH_PLUGIN_PACKAGES.map(({ name }) =>
     [name, join(packed, '..', 'node_modules', ...name.split('/'))]))
   /** 每个插件在 workspace 中的位置。 */
   const workspaceRoots = Object.fromEntries(DSH_PLUGIN_PACKAGES.map(({ name }) =>
-    [name, join(source, '..', '..', 'plugins', bareName(name))]))
+    [name, join(source, '..', '..', 'plugins', barePluginName(name))]))
 
   it('finds every plugin deployed into the package own node_modules', () => {
     expect(resolveDshPluginOverlays(packed, installedAt(deployedRoots)))
@@ -155,8 +158,8 @@ describe('dsh plugin overlays', () => {
   it('refuses an overlay whose plugin was never built', () => {
     // overlay 指定 ./dist/index.js；缺少它时 dsh 会在其
     // loader 深处以无人可处理的裸 module-resolution 错误失败。
-    const overlays = DSH_PLUGIN_PACKAGES.map(({ name }) => join(deployedRoots[name] as string, PLUGIN_OVERLAY_FILE))
-    expect(() => resolveDshPluginOverlays(packed, path => overlays.includes(path))).toThrow(LauncherError)
+    const overlays = new Set(DSH_PLUGIN_PACKAGES.map(({ name }) => join(deployedRoots[name] as string, PLUGIN_OVERLAY_FILE)))
+    expect(() => resolveDshPluginOverlays(packed, path => overlays.has(path))).toThrow(LauncherError)
   })
 
   it('refuses a plugin whose browser bundle is missing, which would fail dsh\'s whole web UI', () => {

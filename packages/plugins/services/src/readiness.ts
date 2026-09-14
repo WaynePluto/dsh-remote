@@ -5,6 +5,7 @@
  * @module @dsh-remote/dsh-plugin-services/readiness
  */
 
+/* oxlint-disable no-await-in-loop -- 就绪探测必须逐轮检查存活、端口和日志，不能并发消耗探测窗口。 */
 import net from 'node:net'
 import { isPidAlive } from './process-identity.js'
 import type { ServiceRecord } from './registry.js'

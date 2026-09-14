@@ -168,6 +168,15 @@ export function renderSetupRequiredPage(
   })
 }
 
+function renderSetupPage(
+  body: string,
+  status: number,
+  csrf: string,
+  cookiePolicy: BrowserCookiePolicy,
+): Response {
+  return new Response(body, { status, headers: htmlHeaders([cookiePolicy.csrfHeader(csrf)]) })
+}
+
 /**
  * 构建 `/_setup` 初始设置向导 listener。
  *
@@ -184,11 +193,10 @@ export function createSetupRequestListener(options: {
   logger: Logger
 }): (request: IncomingMessage, response: ServerResponse) => Promise<void> {
   const { cookies, store, authenticator, logger } = options
+  const cookiesOf = (context: { readonly env: { readonly incoming: IncomingMessage } }) =>
+    cookies.forRequest(context.env.incoming)
   const app = new Hono<{ Bindings: HttpBindings }>()
   app.use('*', bodyLimit({ maxSize: 16 * 1_024 }))
-
-  const page = (body: string, status: number, csrf: string): Response =>
-    new Response(body, { status, headers: htmlHeaders([cookies.csrfHeader(csrf)]) })
 
   /**
    * 向导页面渲染所用的外观。两步都由同一个 GET 提供，因此切换器返回这里，
@@ -197,9 +205,12 @@ export function createSetupRequestListener(options: {
    * @returns 交给渲染器的外观。
    */
   const appearanceOf = (
-    context: { req: { header: (name: string) => string | undefined } },
+    context: {
+      req: { header: (name: string) => string | undefined }
+      env: { incoming: IncomingMessage }
+    },
   ): PageAppearance => ({
-    theme: readThemePreference(cookies, context.req.header('cookie')),
+    theme: readThemePreference(cookiesOf(context), context.req.header('cookie')),
     returnTo: SETUP_PATH_PREFIX,
   })
 
@@ -208,6 +219,7 @@ export function createSetupRequestListener(options: {
     username: string
     status: number
     appearance: PageAppearance
+    cookiePolicy: BrowserCookiePolicy
     error?: string
   }): Promise<Response> => {
     const csrf = csrfToken()
@@ -215,13 +227,13 @@ export function createSetupRequestListener(options: {
       label: context.username,
       secret: context.secret,
     }))
-    return page(enrollmentPage({
+    return renderSetupPage(enrollmentPage({
       csrf,
       qrSvg,
       secret: context.secret,
       appearance: context.appearance,
       ...context.error === undefined ? {} : { error: context.error },
-    }), context.status, csrf)
+    }), context.status, csrf, context.cookiePolicy)
   }
 
   app.get(SETUP_PATH_PREFIX, async (context) => {
@@ -236,17 +248,19 @@ export function createSetupRequestListener(options: {
         username: state.user.username,
         status: 200,
         appearance: appearanceOf(context),
+        cookiePolicy: cookiesOf(context),
       })
     }
     const csrf = csrfToken()
-    return page(passwordPage({ csrf, appearance: appearanceOf(context) }), 200, csrf)
+    return renderSetupPage(passwordPage({ csrf, appearance: appearanceOf(context) }), 200, csrf, cookiesOf(context))
   })
 
   app.post(SETUP_CREATE_PATH, async (context) => {
     if (!reachable(context.env.incoming)) return emptyResponse(403)
     if (!originOk(context.req.raw)) return emptyResponse(403)
     const body = await context.req.parseBody()
-    if (!equalCsrf(cookies.readCsrf(context.req.header('cookie')), textField(body.csrf))) {
+    const cookiePolicy = cookiesOf(context)
+    if (!equalCsrf(cookiePolicy.readCsrf(context.req.header('cookie')), textField(body.csrf))) {
       return emptyResponse(403)
     }
     if (setupState(store).kind !== 'uninitialized') return redirectResponse(SETUP_PATH_PREFIX, [])
@@ -255,10 +269,11 @@ export function createSetupRequestListener(options: {
     const username = normalizeUsername(textField(body.username))
     const reject = (message: string): Response => {
       const csrf = csrfToken()
-      return page(
+      return renderSetupPage(
         passwordPage({ csrf, appearance: appearanceOf(context), username, error: message }),
         400,
         csrf,
+        cookiePolicy,
       )
     }
     try {
@@ -298,6 +313,7 @@ export function createSetupRequestListener(options: {
       username: created.user.username,
       status: 200,
       appearance: appearanceOf(context),
+      cookiePolicy,
     })
   })
 
@@ -305,7 +321,8 @@ export function createSetupRequestListener(options: {
     if (!reachable(context.env.incoming)) return emptyResponse(403)
     if (!originOk(context.req.raw)) return emptyResponse(403)
     const body = await context.req.parseBody()
-    if (!equalCsrf(cookies.readCsrf(context.req.header('cookie')), textField(body.csrf))) {
+    const cookiePolicy = cookiesOf(context)
+    if (!equalCsrf(cookiePolicy.readCsrf(context.req.header('cookie')), textField(body.csrf))) {
       return emptyResponse(403)
     }
     const state = setupState(store)
@@ -324,6 +341,7 @@ export function createSetupRequestListener(options: {
         username: state.user.username,
         status: 400,
         appearance: appearanceOf(context),
+        cookiePolicy,
         error: '动态码不正确或已经过期，请输入验证器上当前显示的 6 位数字。',
       })
     }
@@ -339,8 +357,8 @@ export function createSetupRequestListener(options: {
       userAgent: context.req.header('user-agent') ?? null,
     })
     return redirectResponse(ADMIN_PATH_PREFIX, [
-      ...authenticator.cookies.sessionHeaders(tokens),
-      authenticator.cookies.clearCsrfHeader(),
+      ...cookiePolicy.sessionHeaders(tokens),
+      cookiePolicy.clearCsrfHeader(),
     ])
   })
 

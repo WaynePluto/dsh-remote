@@ -5,8 +5,8 @@ export default defineConfig(
   createPluginBuildConfig({
     id: '@dsh-remote/dsh-plugin-browser-compat',
     entry: ['src/index.ts'],
-    hostDeps: {},
-    client: false,
-    hostName: false,
+    hostDeps: { neverBundle: [/^@deepseek-ai\//] },
+    client: true,
+    clientEntry: { client: 'src/client/index.tsx' },
   }),
 )

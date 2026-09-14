@@ -5,6 +5,7 @@
  * @module @dsh-remote/dsh-plugin-services/process-lifecycle
  */
 
+/* oxlint-disable no-await-in-loop -- Windows launcher 的 pid handoff 必须等待上一次 sidecar 写入结果。 */
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'

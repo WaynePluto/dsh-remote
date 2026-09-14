@@ -6,6 +6,7 @@
  * 全过程不发模型请求、不写会话；会实际启动并立即关闭 pwsh/bash PTY。
  */
 
+/* oxlint-disable no-await-in-loop -- smoke 按 PTY 与 relay 生命周期顺序执行，不能并行启动。 */
 import { join } from 'node:path'
 import { DSH_BIN, DSH_PROFILE, DEV_DIRECTORY, ROOT, dshPluginOverlays } from './local-config.mjs'
 import { createCheckContext, runLiveDshCheck } from './lib/check-context.mjs'
@@ -167,7 +168,8 @@ async function main() {
     && terminalTool.description.includes('pwsh') && terminalTool.description.includes('run_in_background'),
   'interactive_terminal 描述禁止普通一次性命令')
   check(guidance.includes('interactive_terminal') && guidance.includes('ordinary commands') && guidance.includes('persistent shell state') && guidance.includes('pwsh')
-    && guidance.includes('run_in_background'), 'PTY 系统指引明确交互终端边界')
+    && guidance.includes('run_in_background') && guidance.includes('Use interactive_terminal for every Linux sudo command')
+    && guidance.includes('sudo -i') && guidance.includes('sudo credential cache'), 'PTY 系统指引明确交互终端边界与 sudo 规则')
 
   check(artifact.plugins.length === 1 && artifact.provided.includes('terminals'),
     '挂载了 dsh 的 PTY registry / backend / tools（registry 是 Service，backend 是一个 ctx.plugin，tools 由 wrapper 直接捕获）',
@@ -197,12 +199,12 @@ async function main() {
   check(typeof seat?.order === 'number', '声明了 order，不靠注册先后决定位置', String(seat?.order))
   check(client.namespaces.includes('dsh-plugin-terminal'), '文案命名空间也是包名后缀',
     client.namespaces.join('、'))
-  const PLATFORM_MODULES = [
+  const PLATFORM_MODULES = new Set([
     'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',
     '@deepseek-ai/dsh-client-store', '@deepseek-ai/dsh-client-ui-slots',
     '@deepseek-ai/dsh-client-ui-primitives',
-  ]
-  const offTable = client.externals.filter(id => !PLATFORM_MODULES.includes(id))
+  ])
+  const offTable = client.externals.filter(id => !PLATFORM_MODULES.has(id))
   check(offTable.length === 0, '浏览器产物只 require 页面模块表里的说明符',
     offTable.length === 0 ? client.externals.join('、') : `表外：${offTable.join('、')}`)
   check(client.externals.includes('@deepseek-ai/dsh-client-ui-primitives'),
@@ -225,6 +227,9 @@ async function main() {
         check(bundleBody.includes('conversation.input.dock'), 'bundle 里带着输入框上方的槽注册')
         check(bundleBody.includes('/terminal'), 'bundle 里带着宿主那条私有通道的路径')
         check(bundleBody.includes('visibilitychange'), 'bundle 里带着「页面不可见就停止轮询」的那半逻辑')
+        check(bundleBody.includes('type: "password"') && bundleBody.includes('autoComplete: "off"')
+          && bundleBody.includes('autoCorrect: "off"') && bundleBody.includes('autoCapitalize: "off"'),
+        'bundle 里的 terminal 输入默认遮罩且关闭自动输入辅助')
       }
     },
     liveAssertions: async ({ cookie }) => {

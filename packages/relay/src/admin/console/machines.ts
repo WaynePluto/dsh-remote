@@ -138,7 +138,9 @@ function tokenPanel(options: {
 }): string {
   const { issued, host, config } = options
   const command = connectorCommand({
-    host,
+    // 域名模式下本机管理页可能从 127.0.0.1 打开，但目标机器必须拨到公网入口；
+    // 不把本机请求的 Host 当成 connector 的可达地址。
+    host: config.publicDomain ?? host,
     scheme: config.publicScheme,
     slug: issued.slug,
     token: issued.token,

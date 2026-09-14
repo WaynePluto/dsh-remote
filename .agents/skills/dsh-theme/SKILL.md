@@ -122,6 +122,15 @@ description: 编写或调整 dsh 插件的主题样式，处理表单焦点、�
   `--dsw-font-mono` 可能没有定义。
 - 已有 Dock 规则以仓库根 `docs/dsh/plugins.md` 为准，图标光学补偿须先量后改。
 
+### 设置导航的插件图标
+
+当前 dsh `settings.section` 没有 icon 字段，`ui-settings-general` 在导航 cell 内直接渲染一个 SVG。
+若插件必须补充语义图标，优先把这个现有 SVG 作为 16px mask 载体，隐藏其子路径，再用
+`currentColor` 填充 mask；不要只依赖 `::before` 伪元素，否则 React 重建导航行或旧 WebKit 的
+flex 计算可能留下空的图标盒。图标应直接调用 dsh primitives 的对应 component，再把返回的
+SVG element 序列化为 mask；项目实例是 `packages/plugin-ui/src/navigation-glyph.ts`，上游依据为
+`packages/client/ui-settings-general/src/client/SettingsRoot.tsx`。
+
 ### Native Sidebar tab 标题包装层的对齐
 
 原生 dock 的 `TabTitle` 本身已经是 `display:flex; align-items:center; gap:5px`，但插件若在 title slot 外包一层

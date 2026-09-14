@@ -20,6 +20,10 @@ export const INTERACTIVE_TERMINAL_GUIDANCE =
   + 'such as a password, MFA prompt, confirmation, or interactive wizard. Do not use it for ordinary commands, Git, '
   + 'builds, tests, scripts, persistent shell state, continuous output, or merely long-running work. Use pwsh or bash '
   + 'for those, with run_in_background when needed. If a command can be made non-interactive with flags, use pwsh or bash. '
+  + 'Use interactive_terminal for every Linux sudo command, even when the cache might suppress the prompt. Explain the exact command '
+  + 'and its impact first; the user types the password in the visible panel, and the same terminal may reuse the system sudo '
+  + 'credential cache for later explicit commands in that task. Do not run '
+  + 'sudo -i, sudo su, su root, or an equivalent persistent root shell, and do not modify sudoers or create a root control channel. '
   + 'The user supplies sensitive input through the visible terminal panel; do not put secrets in tool arguments.'
 
 /** interactive_terminal 的完整说明；英文内容是 model-facing 文案，保持不翻译。 */
@@ -28,7 +32,10 @@ export const INTERACTIVE_TERMINAL_DESCRIPTION =
   + 'The user can type into the terminal panel while the command runs. Use action start to run the command, read to collect '
   + 'later output, list to inspect sessions, interrupt to send Ctrl-C, and close to end a session. Do not use this for ordinary '
   + 'one-shot commands, Git, builds, tests, scripts, persistent shell state, continuous output, or merely long-running work; '
-  + 'use pwsh or bash instead, with run_in_background when needed. If flags can make the command non-interactive, use pwsh or bash.'
+  + 'use pwsh or bash instead, with run_in_background when needed. If flags can make the command non-interactive, use pwsh or bash. '
+  + 'Use the interactive terminal for sudo even if the cache may avoid a prompt. State the exact command and impact before asking '
+  + 'the user to type a password; a task may reuse the system cache in the same terminal, but do not start sudo -i, sudo su, '
+  + 'su root, or another persistent root shell.'
 
 /** 已废弃别名；使用 {@link INTERACTIVE_TERMINAL_DESCRIPTION}。 */
 export const INTERACTIVE_TERMINAL_OPEN_DESCRIPTION = INTERACTIVE_TERMINAL_DESCRIPTION
@@ -183,6 +190,17 @@ export function textBlock(text: string): { type: 'text', text: string } {
   return { type: 'text', text }
 }
 
+/** 将一个宿主服务包成只替换单个成员的 facade。 */
+function facadeService(service: object, property: string, replacement: (...args: never[]) => unknown): object {
+  return new Proxy(service, {
+    get(target, key) {
+      if (key === property) return replacement
+      const value = Reflect.get(target, key, target) as unknown
+      return typeof value === 'function' ? value.bind(target) : value
+    },
+  })
+}
+
 /** 捕获并完整校验上游六个 terminal tool 与唯一 prompt section。 */
 export function captureUpstreamTerminalContract(
   ctx: Context,
@@ -192,14 +210,6 @@ export function captureUpstreamTerminalContract(
   const services = ctx as unknown as TerminalRegistrationServices
   const tools: CapturedTool[] = []
   const sections: CapturedSection[] = []
-  const facadeService = (service: object, property: string, replacement: (...args: never[]) => unknown): object =>
-    new Proxy(service, {
-      get(target, key) {
-        if (key === property) return replacement
-        const value = Reflect.get(target, key, target) as unknown
-        return typeof value === 'function' ? value.bind(target) : value
-      },
-    })
   const toolFacade = facadeService(
     services.tools, 'register',
     ((tool: CapturedTool) => { tools.push(tool) }) as (...args: never[]) => unknown,

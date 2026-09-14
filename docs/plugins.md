@@ -36,7 +36,7 @@
 |---|---|---|
 | [精简模式](../packages/plugins/concise-mode/README.md) | 新建会话时选择预设 | 提供 concise 与 concise-ptc 两个精简预设 |
 | [远程设置](../packages/plugins/remote-privileged/README.md) | 自动生效 | 让已认证的远程浏览器使用完整设置页 |
-| [浏览器兼容](../packages/plugins/browser-compat/README.md) | 自动生效 | 为旧 WebKit（Safari < 18.4）垫平 Iterator helpers，让 dsh 前端能启动 |
+| [浏览器兼容](../packages/plugins/browser-compat/README.md) | 自动生效；设置 → 浏览器日志 | 为旧 WebKit 垫平 Iterator/AbortSignal/Promise 缺口，并提供当前页面临时错误日志与能力清单 |
 | [网页目录选择](../packages/plugins/directory-picker-browse/README.md) | 打开工作区 | 在浏览器内选择运行 dsh 的机器上的目录 |
 | [固定 YOLO](../packages/plugins/yolo-mode/README.md) | 自动生效 | 固定全权限并自动允许权限请求；用户提问仍需回答 |
 

@@ -1,5 +1,6 @@
 /** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`fs`） */
 
+/* oxlint-disable no-await-in-loop -- 文件测试按用例顺序操作临时目录，保持失败定位和清理顺序。 */
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

@@ -3,7 +3,8 @@
 ## 1. 威胁模型
 
 能通过 relay 操作 dsh 的人，可以以 dsh 进程用户的权限执行命令、读写文件和读取凭据。
-这不是多租户隔离系统。relay 登录是远程访问的主要防线；dsh 自带 cookie 认证与 Host/Origin fence 是附加防护。
+Linux systemd 部署默认让 dsh 进程用户就是指定的个人普通用户，因此这个边界接近该用户通过 SSH 登录后的权限，
+不是多租户隔离系统。relay 登录是远程访问的主要防线；dsh 自带 cookie 认证与 Host/Origin fence 是附加防护。
 
 dsh 永远只监听 127.0.0.1。connector 主动拨出，不需要在目标机器开放 dsh 入站端口。
 每台机器的 relay 仍需按其监听地址、防火墙和 TLS 配置保护，不能把“connector 拨出”理解为整台机器没有攻击面。
@@ -27,7 +28,7 @@ dsh 永远只监听 127.0.0.1。connector 主动拨出，不需要在目标机�
 | 密码哈希 | Node 内置 scrypt，参数由 password.ts 定义 |
 | 二次验证 | TOTP，首次使用完成绑定 |
 | 会话 | 15 分钟 JWT；30 天可吊销 refresh cookie |
-| Cookie | HttpOnly、SameSite=Lax；HTTPS 使用 Secure 和 __Secure- 前缀 |
+| Cookie | 公网 HTTPS 使用 HttpOnly、SameSite=Lax、Secure、__Secure- 前缀和共享 Domain；真实 loopback HTTP 使用独立的 host-only、非 Secure 辅助 Cookie |
 | 限流 | 按 IP 与账号双维度，5 次失败锁定 15 分钟 |
 | 账号恢复 | 有数据库访问权的操作者可重置密码或 TOTP，现有会话随之吊销 |
 
@@ -40,7 +41,8 @@ dsh 永远只监听 127.0.0.1。connector 主动拨出，不需要在目标机�
 不信任 X-Forwarded-For 来决定豁免。局域网 IP、反代后的域名请求都必须登录。
 首次设置向导还要求数据库中尚无管理员，非 loopback 访问不能抢先初始化。
 
-IP 模式使用 host-only cookie；域名模式可配置 Cookie Domain 共享子域登录态。
+IP 模式使用 host-only cookie；域名模式的公网会话使用 Cookie Domain 共享子域登录态。
+域名模式的本机 `http://127.0.0.1:<端口>` 不依赖公网会话：relay 按原始 loopback socket + Host 选择独立的非 Secure、host-only Cookie，用于 CSRF、主题和本机表单；公网 Cookie 不会被降级或复制到本机。
 cookie 不区分端口，同一主机的机器端口共享登录。Domain cookie 不能使用 __Host- 前缀。
 
 ## 3. 请求检查
@@ -48,8 +50,8 @@ cookie 不区分端口，同一主机的机器端口共享登录。Domain cookie
 顺序固定为：认证 → 原始 Host/Origin 与 sec-fetch-site 校验 → 隧道转发。
 WebSocket upgrade 遵守同样的顺序。
 
-- Host 必须属于已配置的管理入口或有效机器路由。
-- 带 Origin 的请求必须与原始目标 authority 匹配；cross-site 请求拒绝。
+- Host 必须属于已配置的管理入口或有效机器路由；配置的裸域名只进入 `/_admin`，不会隐式指向入口机器 dsh。
+- 带 Origin 的公网请求必须使用配置的 HTTPS scheme 并与原始目标 authority 匹配；真实 loopback 请求使用 HTTP scheme 并与 loopback authority 匹配；cross-site 请求拒绝。
 - 管理接口采用 CSRF 防护；转发请求同时保留 relay 和 dsh 的信任检查。
 - relay 不重写 Host/Origin；目标 dsh 通过 trustedHosts 声明信任。
 
@@ -74,11 +76,13 @@ token 只保存在当前控制信道的内存状态中，不写数据库或日�
 
 ## 4. 部署要求
 
-- 公网必须 HTTPS/WSS。relay 监听 loopback，由 Caddy/nginx 终结 TLS并保留原始 Host。
+- 公网必须 HTTPS/WSS。relay 监听 loopback，由 Caddy/nginx 终结 TLS并保留原始 Host；反向代理只匹配配置的裸域名与泛子域名，并拒绝以 loopback/IP Host 命中公网站点，避免外部请求被误认为 loopback。
 - 泛域名证书使用 DNS-01；配置 HSTS：max-age=31536000、includeSubDomains。
-- 用非 root 专用用户运行，限制可写目录；systemd 配置见 [部署说明](../deploy/README.md)。
-- 定期备份 relay 数据库、设备密钥及 dsh home；SQLite WAL 模式要求数据库目录可写。
-- 明文局域网 HTTP 仅用于显式开发联调，会使用非 Secure cookie并打印高风险警告。
+- Linux systemd 使用个人普通用户运行，不使用 root；个人模式有意不启用 `ProtectHome`、`NoNewPrivileges`、`ProtectSystem` 和 `ReadWritePaths`，
+  因而 dsh 看到该用户本来能看到的家目录与系统路径。systemd 配置和迁移步骤见 [部署说明](../deploy/README.md)。
+- 定期备份 `~/.dsh-remote`、设备密钥及 `~/.dsh`；SQLite WAL 模式要求 relay 数据库目录可写。
+- sudo 由系统 sudoers 决定权限和凭据缓存；密码只由用户在交互终端输入，dsh-remote 不保存、不自动续期、不配置免密 sudo。
+- 明文局域网 HTTP 仅用于显式开发联调，会使用非 Secure cookie并打印高风险警告；域名模式下本机 loopback HTTP 是独立的本机管理入口，不等于允许局域网访问。
   同网段监听者可能取得密码与会话，不应作为公网部署方式。
 - 发行包排除 pnpm 的 .modules.yaml 与 .pnpm/lock.yaml 等 registry 账本，避免泄露内网镜像地址。
   更换镜像或打包方式后，检查解压产物中的内部域名。
@@ -106,7 +110,8 @@ dsh 的 approval/asked、approval/decided 等审批事件属于 dsh 会话日志
 | dsh token 出现在 URL | 同源交换、no-referrer、HttpOnly cookie；仅向已登录用户发放 |
 | relay 可见明文业务流量 | relay 属于可信部署组件，TLS 在其前端终结；控制与数据隧道使用 WSS |
 | 常驻服务独立于会话和 dsh | 服务直接 spawn，受限沙箱模式下 start/restart 必须获得 allowed-once；面板不能创建服务 |
-| 交互终端可以输入 shell 文本 | 仅模型能通过 interactive_terminal/start 创建终端；网页通道只有 list/read/send/interrupt，沿用 dsh 沙箱 |
+| 交互终端可以输入 shell 文本 | 仅模型能通过 interactive_terminal/start 创建终端；网页通道只有 list/read/send/interrupt；输入框默认遮罩，用户可在同一管理员任务内复用系统 sudo 缓存，但不主动建立 root shell |
+| 个人用户部署的文件边界 | 默认 YOLO 下 AI 可读写个人用户本来有权限访问的家目录、凭据和项目；需要管理员权限时由用户明确输入 sudo，不能把个人用户模式当成沙箱隔离 |
 | 文件浏览读取边界 | files 插件不再自行读取文件；原生 workspaceFiles 负责目录/文件授权、分页和 HTML iframe 隔离，项目插件只通过认证 dsh 通道读取 Git snapshot；右键菜单不提供写入 |
 | alpha 依赖 | 只对明确选择的 dsh 族及 workspace 配置列明的依赖豁免 release-age；保留固定版本和完整性校验 |
 

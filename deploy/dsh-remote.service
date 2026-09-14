@@ -4,18 +4,21 @@
 # 这个 unit 只管 launcher，不要再给 relay 或 connector 单独写 unit：三个子进程的启动顺序、
 # 关闭顺序和 JWT 密钥都由 launcher 负责（packages/launcher/src/index.ts）。
 #
-# 适用对象：一台需要长期在线的集线器（hub），通常是 Linux 服务器。
+# 适用对象：一台需要长期在线的入口机器（hub），通常是 Linux 服务器。
 # 桌面成员机器不需要这个文件，见同目录的 README.md。
 #
+# 这是个人用户模式：launcher、dsh、relay、connector 都以同一个普通用户运行，
+# 让 dsh 的能力接近该用户通过 SSH 登录后的开发环境；不要把它配置成 root 服务。
+#
 # 需要替换的占位符：
-#   DshRemote                      专用的非特权系统用户 / 用户组
+#   <user>                         日常登录的普通用户；必须已经存在
+#   <group>                        该用户的主组（可与用户名相同，也可按实际情况填写）
 #   /opt/dsh-remote                解压出来的绿色包所在目录（保持只读）
 #   /etc/dsh-remote/dsh-remote.config.json   launcher 配置文件
-#   /var/lib/dsh-remote            dsh-remote home：relay.db、relay-jwt.secret、membership.json、device.key
-#   /var/lib/dsh-remote/dsh        DSH_HOME：dsh 的 profiles / settings / credentials / sessions
-#   /srv/dsh-remote/workspace      给 dsh 干活的目录（agent 要往这里写文件），
-#                                  也是下面的 WorkingDirectory、dsh 新会话的起始目录
-#   /usr/bin/node                Node 22.19+ 的绝对路径，用 `command -v node` 确认
+#   /home/<user>/.dsh-remote       dsh-remote home：relay.db、relay-jwt.secret、membership.json、device.key
+#   /home/<user>/.dsh              DSH_HOME：dsh 的 profiles / settings / credentials / sessions
+#   /home/<user>                   dsh 里的 agent 默认工作目录，也是下面的 WorkingDirectory
+#   /usr/bin/node                  Node 22.19+ 的绝对路径，用 `command -v node` 确认
 
 [Unit]
 Description=dsh-remote (dsh + relay + connector, supervised by the launcher)
@@ -24,36 +27,33 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=DshRemote
-Group=DshRemote
+User=<user>
+Group=<group>
 
 # 工作目录同时是 dsh 新会话的起始目录：dsh 拿自己的进程 cwd 当默认会话 cwd
 #（dsh 的 packages/api/session-controller/src/commands.ts 里 create 不带 cwd 时用
-# defaultCwd，即 dsh 进程的 cwd），三个子进程又都继承 launcher 的 cwd，
-# 所以必须指到可写的干活目录，不能指只读的程序目录 /opt/dsh-remote，
-# 否则 agent 建会话就落在只读目录里，一个文件都写不了。
+# defaultCwd，即 dsh 进程的 cwd），三个子进程又都继承 launcher 的 cwd。
+# 个人模式从用户家目录开始，目录选择器也会从这里开始列出目录。
 # launcher 自身不依赖当前目录：配置用 --config 显式指定，
 # dsh / relay / connector 的入口都按 launcher 的安装位置解析。
-WorkingDirectory=/srv/dsh-remote/workspace
+WorkingDirectory=/home/<user>
 # 绿色包里的启动器入口是 dist/index.js（源码仓库里是 packages/launcher/dist/index.js）。
 # 解压后用 `ls /opt/dsh-remote/dist` 确认一次再填。
 ExecStart=/usr/bin/node /opt/dsh-remote/dist/index.js --config /etc/dsh-remote/dsh-remote.config.json
 
-# HOME 决定 node 的 os.homedir()，dsh / pnpm / npm 的缓存都落在它下面。
-# 注意：下面开了 ProtectHome=true，/home 与 /root 会变成空目录，
-# 所以这个用户的家目录必须放在 /var/lib 之类的地方，不能放 /home。
-Environment=HOME=/var/lib/dsh-remote
-# 与官方 dsh 共用标准 DSH_HOME（铁律 10 / D14）；不设则是 $HOME/.dsh。
-Environment=DSH_HOME=/var/lib/dsh-remote/dsh
+# HOME 决定 node 的 os.homedir()，也决定默认的 dsh-remote home（$HOME/.dsh-remote）。
+Environment=HOME=/home/<user>
+# 与官方 dsh 共用标准 DSH_HOME（铁律 10 / D14）；显式写出便于 systemd 环境核对。
+Environment=DSH_HOME=/home/<user>/.dsh
 # relay、connector 和 launcher 都读这个变量（pino 的日志级别）。
 Environment=LOG_LEVEL=info
 # 不要在这里写 DSH_REMOTE_JWT_SECRET：launcher 首次运行会自己生成
-# /var/lib/dsh-remote/relay-jwt.secret（0600）并传给 relay 子进程。
+# /home/<user>/.dsh-remote/relay-jwt.secret（0600）并传给 relay 子进程。
 # 也不要在这里写 DSH_REMOTE_ADMIN_PASSWORD：它只在一次性的 init 命令里用。
 
 Restart=always
 RestartSec=5
-# 任一子进程意外退出时，launcher 会打印它最后 50 行日志、把其余子进程一起停掉，
+# 任一子进程意外退出时，launcher 会打印它最后 50 行日志、把其余进程一起停掉，
 # 然后自己以退出码 1 结束 —— 这是故意的，它不会偷偷重启子进程
 #（packages/launcher/src/supervisor.ts 的 onUnexpectedExit）。
 # 所以把服务重新拉起来的是上面这条 Restart=always，而不是 launcher 自己。
@@ -65,31 +65,18 @@ KillMode=mixed
 KillSignal=SIGTERM
 TimeoutStopSec=45
 
-# ---- 加固（docs/04-security.md §4）----
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectHome=true
-ProtectSystem=strict
+# ---- 个人用户模式的文件系统与提权边界 ----
+# dsh 应当看到与该用户 SSH 登录后相同的家目录和系统路径。
+# 这些限制若打开，会分别屏蔽 /home、阻止 sudo 获得新权限，或把系统目录挂成只读，
+# 因此这里明确关闭；个人用户的 Unix 权限、sudoers 和 dsh-remote 登录认证仍然生效。
+NoNewPrivileges=false
+PrivateTmp=false
+ProtectHome=false
+ProtectSystem=false
 UMask=0077
 
-# StateDirectory 会以 0700、属主为上面的 User 自动创建 /var/lib/dsh-remote，
-# 并把它变成可写目录（相当于一条 ReadWritePaths）。
-StateDirectory=dsh-remote
-StateDirectoryMode=0700
-
-# ProtectSystem=strict 把整个文件系统挂成只读，只有下面列出的路径可写。
-# 漏掉任何一条都会让服务在启动阶段就失败：
-#   /var/lib/dsh-remote        relay.db（SQLite，还会生成 -wal / -shm 同级文件）、
-#                            relay-jwt.secret、membership.json、device.key
-#   /var/lib/dsh-remote/dsh    DSH_HOME：profile 目录、settings、sessions，
-#                            以及 `dsh plugin --profile dsh-remote-web add` 装插件时的写入
-#   /srv/dsh-remote/workspace  dsh 里的 agent 实际改代码的地方；不列出来的目录它一个字节也写不了
-# 这几个目录必须先存在，否则 systemd 会以 "Failed to set up mount namespacing" 拒绝启动
-#（也可以在路径前加 - 表示允许不存在）。
-ReadWritePaths=/var/lib/dsh-remote
-ReadWritePaths=/var/lib/dsh-remote/dsh
-ReadWritePaths=/srv/dsh-remote/workspace
-
+# 不使用 StateDirectory / ReadWritePaths：运行数据位于用户自己的 ~/.dsh-remote，
+# dsh 的工作区也可以是该用户本来就有权限访问的任意目录。
 # 不要再加 MemoryDenyWriteExecute=true：它会直接打死 V8 的 JIT，Node 起不来。
 # 同理，收紧 SystemCallFilter= / RestrictAddressFamilies= 之前先想清楚 dsh 会派生
 # shell、PTY 和 pnpm，这些加固项很容易把 agent 的工具链一起挡掉。

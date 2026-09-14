@@ -102,8 +102,8 @@ function isSnapshotRequest(payload: unknown): payload is SnapshotRequest {
  */
 function isLocateRequest(payload: unknown): payload is LocateRequest {
   if (!isSnapshotRequest(payload)) return false
-  const name = (payload as { name?: unknown }).name
-  return typeof name === 'string' && name.length > 0
+  const requestedName = (payload as { name?: unknown }).name
+  return typeof requestedName === 'string' && requestedName.length > 0
 }
 
 /**

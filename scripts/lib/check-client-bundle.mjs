@@ -1,3 +1,4 @@
+/* oxlint-disable no-await-in-loop -- 检查脚本按依赖和构建产物顺序执行，失败时保留第一个原因。 */
 import { readFileSync } from 'node:fs'
 import { createContext as createVmContext, runInContext } from 'node:vm'
 import { pathToFileURL } from 'node:url'

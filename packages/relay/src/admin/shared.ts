@@ -226,14 +226,19 @@ export function equalCsrf(cookie: string | undefined, submitted: string): boolea
   return left.byteLength === right.byteLength && timingSafeEqual(left, right)
 }
 
-export function sameOrigin(request: Request, publicScheme: 'http' | 'https'): boolean {
+export function sameOrigin(
+  request: Request,
+  publicScheme: 'http' | 'https',
+  loopback = false,
+): boolean {
   const origin = request.headers.get('origin')
   if (origin === null) return true
   const host = request.headers.get('host')
   if (host === null) return false
   try {
     const parsed = new URL(origin)
-    return parsed.protocol === `${publicScheme}:` && parsed.host.toLowerCase() === host.toLowerCase()
+    const expectedScheme = loopback ? 'http' : publicScheme
+    return parsed.protocol === `${expectedScheme}:` && parsed.host.toLowerCase() === host.toLowerCase()
   } catch {
     return false
   }
