@@ -19,6 +19,7 @@
 
 import process from 'node:process'
 import { Command } from 'commander'
+import type { DshRestartStatus, MembershipHub } from '@dsh-remote/protocol'
 import { renderBanner } from './banner.js'
 import { CONNECTOR_CHILD, DSH_CHILD, RELAY_CHILD } from './children.js'
 import { loadLauncherConfig } from './config.js'
@@ -26,11 +27,18 @@ import { connectorArguments, resolveConnectorEntry } from './connector.js'
 import {
   dshArguments,
   dshTokenFromLine,
+  DSH_READY_TIMEOUT_MS,
   DSH_TOKEN_ENV_NAME,
   DSH_TOKEN_TIMEOUT_MS,
   resolveDshBin,
   waitForDsh,
 } from './dsh.js'
+import {
+  dshRestartStatusFilePath,
+  watchMembershipTrust,
+  writeDshRestartStatus,
+  type TrustChange,
+} from './dsh-restart.js'
 import { DSH_PLUGIN_PACKAGE_NAMES, resolveDshPluginOverlays } from './dsh-plugins.js'
 import { LauncherError } from './errors.js'
 import { JWT_SECRET_ENV_NAME, jwtSecretFilePath, loadOrCreateJwtSecret } from './jwt-secret.js'
@@ -47,6 +55,10 @@ import { LAUNCHER_VERSION } from './version.js'
 
 function say(message: string): void {
   console.log(`[dsh-remote] ${message}`)
+}
+
+function describeHosts(values: readonly string[]): string {
+  return values.join('、')
 }
 
 function reportFailure(error: unknown): void {
@@ -96,11 +108,12 @@ export async function run(argv: readonly string[]): Promise<number> {
   })
   say(configPath === undefined ? '没有找到配置文件，使用默认配置。' : `已读取配置 ${configPath}`)
 
-  const membership = readMembership(membershipFilePath(config.home))
+  const membershipPath = membershipFilePath(config.home)
+  const membership = readMembership(membershipPath)
   // relay 启动时会把本机挂到它自己身上（自动维护的自挂条目），
   // 它支撑本机与局域网地址直达 dsh，但不是操作员设置的远程入口：
   // banner 与 trusted hosts 都按「没有远程入口」处理。
-  const hub = isSelfHub(membership?.hub) ? undefined : membership?.hub
+  const hub: MembershipHub | undefined = isSelfHub(membership?.hub) ? undefined : membership?.hub
 
   const dshHome = resolveDshHome()
   const bootstrap = ensureProfile({
@@ -145,6 +158,8 @@ export async function run(argv: readonly string[]): Promise<number> {
   const relayEnv: NodeJS.ProcessEnv = { ...process.env, [JWT_SECRET_ENV_NAME]: jwtSecret }
 
   let shuttingDown = false
+  // membership 监视器创建后赋值；shutdown 先释放它，退出路径上不再触发 dsh 重启。
+  let stopTrustWatcher: (() => void) | undefined
   // 由下面的 executor 同步赋值；之所以可选只是因为
   // 编译器看不出来这一点。
   let settle: ((code: number) => void) | undefined
@@ -158,6 +173,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   const shutdown = async (code: number): Promise<void> => {
     if (shuttingDown) return
     shuttingDown = true
+    stopTrustWatcher?.()
     // 按反向启动顺序停止，使 connector 在它
     // 拨号的 relay 消失前停止拨号，并使 dsh 比两个客户端都晚退出。
     await supervisor.stopAll()
@@ -170,35 +186,39 @@ export async function run(argv: readonly string[]): Promise<number> {
   process.once('SIGINT', onSignal)
   process.once('SIGTERM', onSignal)
 
-  // dsh 0.1.2 自己认证浏览器：它打印每进程登录
-  // token，没有该 token 换取的 cookie 的每个 /api 请求都是 401。
-  // connector 将它报告给 relay，relay 通过 dsh 自己的交换流程将已经认证的
-  // 浏览器送入一次。
+  // dsh 0.1.2 自己认证浏览器：它打印每进程登录 token，没有该 token 换取的
+  // cookie 的每个 /api 请求都是 401。connector 将它报告给 relay，relay 通过
+  // dsh 自己的交换流程将已经认证的浏览器送入一次。token 每个进程都不同，
+  // 因此按名重启 dsh 后必须重新捕获，并连带重启 connector 让它上报新值。
   let noteDshToken: ((token: string) => void) | undefined
-  const dshToken = new Promise<string | undefined>((resolvePromise) => {
+  let dshToken: Promise<string | undefined> = new Promise((resolvePromise) => {
     noteDshToken = resolvePromise
   })
   let dshTokenSeen = false
-
-  supervisor.start({
-    name: DSH_CHILD,
-    command: process.execPath,
-    args: dshArguments({
-      dshBin,
-      profile: config.dsh.profile,
-      port: config.dsh.port,
-      trustedHosts,
-      patchFiles: dshPatchFiles,
-      extraArgs: config.dsh.extraArgs,
-    }),
-    onLine: (line) => {
-      if (dshTokenSeen) return
-      const token = dshTokenFromLine(line)
-      if (token === undefined) return
-      dshTokenSeen = true
-      noteDshToken?.(token)
-    },
-  })
+  const startDshChild = (hosts: readonly string[]): void => {
+    dshTokenSeen = false
+    dshToken = new Promise((resolvePromise) => { noteDshToken = resolvePromise })
+    supervisor.start({
+      name: DSH_CHILD,
+      command: process.execPath,
+      args: dshArguments({
+        dshBin,
+        profile: config.dsh.profile,
+        port: config.dsh.port,
+        trustedHosts: hosts,
+        patchFiles: dshPatchFiles,
+        extraArgs: config.dsh.extraArgs,
+      }),
+      onLine: (line) => {
+        if (dshTokenSeen) return
+        const token = dshTokenFromLine(line)
+        if (token === undefined) return
+        dshTokenSeen = true
+        noteDshToken?.(token)
+      },
+    })
+  }
+  startDshChild(trustedHosts)
 
   const ready = await waitForDsh({
     port: config.dsh.port,
@@ -240,15 +260,113 @@ export async function run(argv: readonly string[]): Promise<number> {
     console.warn('[dsh-remote] 没有从 dsh 的输出里读到登录 token；通过 relay 访问时可能会看到 dsh 自己的 401。')
   }
 
-  supervisor.start({
-    name: CONNECTOR_CHILD,
-    command: process.execPath,
-    args: connectorArguments(connectorEntry, {
-      home: config.home,
-      dshPort: config.dsh.port,
-    }),
-    ...token === undefined ? {} : { env: { ...process.env, [DSH_TOKEN_ENV_NAME]: token } },
-  })
+  const startConnectorChild = (loginToken: string | undefined): void => {
+    supervisor.start({
+      name: CONNECTOR_CHILD,
+      command: process.execPath,
+      args: connectorArguments(connectorEntry, {
+        home: config.home,
+        dshPort: config.dsh.port,
+      }),
+      ...loginToken === undefined ? {} : { env: { ...process.env, [DSH_TOKEN_ENV_NAME]: loginToken } },
+    })
+  }
+  startConnectorChild(token)
+
+  // membership 变化改变 dsh 必须信任的地址集合时自动重启 dsh，并连带重启
+  // connector 上报新 token；relay 与本机地址不变，无需重启。进度写入
+  // 状态文件，本机控制台的「远程入口」页会读取并展示它。
+  const restartStatusPath = dshRestartStatusFilePath(config.home)
+  const writeRestartStatus = (status: Omit<DshRestartStatus, 'at'>): void => {
+    try {
+      writeDshRestartStatus(restartStatusPath, { ...status, at: Date.now() })
+    } catch (error) {
+      console.warn(`[dsh-remote] 写入 dsh 重启状态失败：${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  const describeChange = (change: TrustChange): string => [
+    ...change.added.length === 0 ? [] : [`新增信任 ${describeHosts(change.added)}`],
+    ...change.removed.length === 0 ? [] : [`移除信任 ${describeHosts(change.removed)}`],
+  ].join('，')
+
+  let restartBusy = false
+  let queuedChange: TrustChange | undefined
+  const restartForTrust = async (change: TrustChange): Promise<void> => {
+    say(`远程入口变更（${describeChange(change)}），正在自动重启 dsh；期间本机的 dsh 短暂不可用。`)
+    writeRestartStatus({ state: 'restarting', added: [...change.added], removed: [...change.removed] })
+    try {
+      await supervisor.stop(DSH_CHILD)
+      if (shuttingDown) return
+      startDshChild(change.next)
+      const readyAgain = await waitForDsh({
+        port: config.dsh.port,
+        giveUp: () => shuttingDown || !supervisor.isRunning(DSH_CHILD),
+      })
+      // 重启后自行退出的 dsh 走 supervisor 的意外退出路径（整个程序停下并
+      // 打印它的输出）；这里只兜住“进程还在却迟迟不就绪”。
+      if (!readyAgain) {
+        throw new Error(`dsh 重启后没有在 ${String(DSH_READY_TIMEOUT_MS / 1000)} 秒内就绪`)
+      }
+      if (shuttingDown) return
+      const freshToken = await Promise.race([
+        dshToken,
+        new Promise<undefined>((resolvePromise) => {
+          setTimeout(() => resolvePromise(undefined), DSH_TOKEN_TIMEOUT_MS).unref()
+        }),
+      ])
+      if (freshToken === undefined) {
+        console.warn('[dsh-remote] 重启后没有从 dsh 的输出里读到登录 token；通过 relay 访问时可能会看到 dsh 自己的 401。')
+      }
+      await supervisor.stop(CONNECTOR_CHILD)
+      if (shuttingDown) return
+      startConnectorChild(freshToken)
+      writeRestartStatus({ state: 'done', added: [...change.added], removed: [...change.removed] })
+      say('dsh 已自动重启完成，信任地址已更新。')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      writeRestartStatus({
+        state: 'failed',
+        added: [...change.added],
+        removed: [...change.removed],
+        error: message,
+      })
+      console.error(`[dsh-remote] 自动重启 dsh 失败：${message}`)
+      console.error('           请右键托盘图标选择「重启」（或手动重启本程序）后重试。')
+    }
+  }
+  const applyTrustChange = (change: TrustChange): void => {
+    if (shuttingDown) return
+    if (restartBusy) {
+      // 重启进行中到达的变更只保留最新的：这轮结束后按它再重启一次。
+      queuedChange = change
+      return
+    }
+    restartBusy = true
+    void (async () => {
+      try {
+        await restartForTrust(change)
+      } finally {
+        restartBusy = false
+        const queued = queuedChange
+        queuedChange = undefined
+        if (queued !== undefined) applyTrustChange(queued)
+      }
+    })()
+  }
+  stopTrustWatcher = watchMembershipTrust({
+    path: membershipPath,
+    initial: trustedHosts,
+    compute: (next) => {
+      const nextHub = isSelfHub(next?.hub) ? undefined : next?.hub
+      return trustedHostsFor({
+        lanAddress: lan,
+        ...publicAuthority === undefined ? {} : { publicAuthority },
+        hubAuthority: nextHub?.browserAuthority,
+      })
+    },
+    onChange: applyTrustChange,
+    onError: error => console.warn(`[dsh-remote] ${error instanceof Error ? error.message : String(error)}`),
+  }).close
 
   // 拒绝配置的 relay 会在几毫秒内退出；此时打印
   // banner 会把唯一有用的错误行埋掉。

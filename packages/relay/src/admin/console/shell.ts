@@ -96,6 +96,13 @@ h2.section:first-of-type{margin-top:20px}
 .warn{margin:0;font-size:13px;line-height:20px;color:var(--ink-2)}
 .hub{margin:12px 0 0;padding:12px 14px;border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;gap:8px}
 .hub h3{margin:0;font-size:14px;line-height:22px;font-weight:500;color:var(--ink)}
+/* launcher 自动重启进度卡（.restart）：边框颜色区分进行中/完成/失败。 */
+.restart{margin:12px 0 0;padding:12px 14px;border:1px solid var(--line);border-radius:12px;font-size:13px;line-height:20px;color:var(--ink-2)}
+.restart strong{font-weight:500;color:var(--ink)}
+.restart[data-state="restarting"]{border-color:var(--warn)}
+.restart[data-state="done"]{border-color:var(--success)}
+.restart[data-state="failed"]{border-color:var(--danger);color:var(--danger)}
+.restart[data-state="failed"] strong{color:var(--danger)}
 .paste{font-family:var(--mono);font-size:13px}
 .card{margin:12px 0 0;padding:12px 14px;border:1px solid var(--line);border-radius:12px}
 .card h3{margin:0;font-size:14px;line-height:22px;font-weight:500;color:var(--ink)}

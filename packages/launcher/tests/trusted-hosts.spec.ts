@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { serializeMembership, type MembershipHub } from '@dsh-remote/protocol'
 import { LauncherError } from '../src/errors.js'
 import { membershipFilePath, readMembership } from '../src/membership.js'
-import { isBareAuthority, trustedHostsFor } from '../src/trusted-hosts.js'
+import { isBareAuthority, trustChange, trustedHostsFor } from '../src/trusted-hosts.js'
 
 const HUB: MembershipHub = {
   relayUrl: 'ws://10.1.2.87:30809',
@@ -101,5 +101,25 @@ describe('trusted hosts', () => {
     expect(() => readMembership(path)).toThrow(LauncherError)
     writeFileSync(path, JSON.stringify({ version: 1, hub: { relayUrl: 'nope', slug: 'pc1', joinedAt: 0 } }))
     expect(() => readMembership(path)).toThrow(LauncherError)
+  })
+})
+
+describe('trust changes', () => {
+  it('reports no change when the sets match, regardless of order or case', () => {
+    expect(trustChange(['127.0.0.1', 'localhost'], ['127.0.0.1', 'localhost'])).toBeUndefined()
+    expect(trustChange(['127.0.0.1', 'PC1.example.com'], ['pc1.example.com', '127.0.0.1'])).toBeUndefined()
+  })
+
+  it('reports added and removed authorities separately', () => {
+    expect(trustChange(['127.0.0.1'], ['127.0.0.1', 'pc1.dsh.example.com']))
+      .toEqual({ added: ['pc1.dsh.example.com'], removed: [] })
+    expect(trustChange(['127.0.0.1', 'old.dsh.example.com'], ['127.0.0.1']))
+      .toEqual({ added: [], removed: ['old.dsh.example.com'] })
+    expect(trustChange(['old.dsh.example.com'], ['new.dsh.example.com']))
+      .toEqual({ added: ['new.dsh.example.com'], removed: ['old.dsh.example.com'] })
+  })
+
+  it('treats a case-only difference as no change, like dsh itself', () => {
+    expect(trustChange(['Hub.Example.COM'], ['hub.example.com'])).toBeUndefined()
   })
 })

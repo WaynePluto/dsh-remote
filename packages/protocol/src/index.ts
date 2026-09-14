@@ -8,5 +8,6 @@
 export * from './codec.js'
 export * from './constants.js'
 export * from './device-challenge.js'
+export * from './dsh-restart.js'
 export * from './frames.js'
 export * from './membership.js'

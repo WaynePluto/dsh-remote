@@ -101,4 +101,52 @@ describe('shutdown order', () => {
     // 主动停止的子进程不算意外退出。
     expect(exits).toEqual([])
   })
+
+  it('keeps the stop order after dsh was restarted by name', async () => {
+    const exits: ChildExit[] = []
+    const supervisor = createSupervisor({ onUnexpectedExit: exit => exits.push(exit), write: () => undefined })
+    for (const name of CHILD_START_ORDER) {
+      supervisor.start({ name, command: 'node', args: ['--version'] })
+    }
+    // harness.children 跨用例累积；这里只认刚刚启动的三个。
+    const firstRound = harness.children.slice(-CHILD_START_ORDER.length)
+    const [firstDsh, relay, connector] = firstRound
+    if (firstDsh === undefined || relay === undefined || connector === undefined) {
+      throw new Error('fake children were not spawned in start order')
+    }
+
+    // 按名重启 dsh：先请求停止，再让它结束，最后以同名启动新进程。
+    const stopping = supervisor.stop('dsh')
+    await waitFor(() => harness.killOrder.includes(firstDsh.pid))
+    firstDsh.close()
+    await stopping
+    expect(supervisor.isRunning('dsh')).toBe(false)
+    supervisor.start({ name: 'dsh', command: 'node', args: ['--version'] })
+    expect(supervisor.isRunning('dsh')).toBe(true)
+    const secondDsh = harness.children.at(-1)
+    if (secondDsh === undefined) throw new Error('the restarted dsh was not spawned')
+
+    const baseKills = harness.killOrder.length
+    const shuttingDown = supervisor.stopAll()
+    const stopped: string[] = []
+    for (let index = 0; index < CHILD_START_ORDER.length; index += 1) {
+      // eslint-disable-next-line no-await-in-loop -- 一次停止一个子进程正是目的
+      await waitFor(() => harness.killOrder.length === baseKills + index + 1)
+      const pid = harness.killOrder.at(-1)
+      const child = harness.children.find(candidate => candidate.pid === pid)
+      if (child === undefined) throw new Error(`no child with pid ${String(pid)}`)
+      stopped.push(
+        child === connector ? 'connector'
+          : child === relay ? 'relay'
+            : child === secondDsh ? 'dsh'
+              : 'unknown',
+      )
+      child.close()
+    }
+    await shuttingDown
+
+    // 替换发生在原位置：重启过的 dsh 仍然最后退出。
+    expect(stopped).toEqual(['connector', 'relay', 'dsh'])
+    expect(exits).toEqual([])
+  })
 })

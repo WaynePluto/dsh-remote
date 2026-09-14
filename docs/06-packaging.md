@@ -59,8 +59,11 @@ concise-mode 携带 manifest、cordis.patch.yml、locator 产物及两个 preset
 4. 校验 Bundle、overlay 和宿主/浏览器产物。
 5. 以 pipe 拉起 dsh、前缀转发日志，等待就绪并截获 token。
 6. 启动 relay 和 connector，打印访问地址。
-7. SIGINT/SIGTERM 按 connector → relay → dsh 逆序关闭，超时强杀。
-8. 任一子进程异常退出，输出诊断并整体退出，由 systemd 等外部管理器决定重启。
+7. 监视 membership：`--trusted-host` 集合实际变化时（加入/改换/取消远程入口）自动重启 dsh
+   并连带重启 connector 上报新 token；进度原子写入 `~/.dsh-remote/dsh-restart-status.json`，
+   本机控制台「远程入口」页读取并展示。集合未变化的重写（token 清理、自挂条目刷新）不触发重启。
+8. SIGINT/SIGTERM 按 connector → relay → dsh 逆序关闭，超时强杀。
+9. 任一子进程异常退出，输出诊断并整体退出，由 systemd 等外部管理器决定重启。
 
 Windows 进程树通过 taskkill /T /F 清理；只调用 child.kill() 不足以结束派生 shell。
 

@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Logger } from 'pino'
 import type { AuditRecorder } from '../../audit/index.js'
 import type { BrowserCookiePolicy } from '../../auth/cookies.js'
+import { DSH_RESTART_STATUS_FILE_NAME, parseDshRestartStatus, type DshRestartStatus } from '@dsh-remote/protocol'
 import type { RelayConfig } from '../../config.js'
 import {
   isSelfHub,
@@ -88,6 +91,12 @@ export interface AdminConsoleRequestContext {
     render: (csrf: string) => string
   }) => Response
   readonly membershipView: () => MembershipView
+  /**
+   * launcher 自动重启 dsh 的最新进度（见 protocol 的 dsh-restart 契约）；
+   * 状态文件缺失或无法解析时为 undefined——它只是「远程入口」页上的
+   * 一条提示，绝不能让页面本身失败。
+   */
+  readonly dshRestartStatus: () => DshRestartStatus | undefined
   readonly adminAccount: (session: AdminConsoleSession) => UserRecord | undefined
   readonly confirmCsrf: (incoming: IncomingMessage, cookieHeader: string | undefined) => {
     csrf: string
@@ -166,6 +175,23 @@ export function createAdminConsoleRequestContext(options: {
     return isSelfHub(hub) ? { kind: 'self', hub } : { kind: 'joined', hub }
   }
 
+  const dshRestartStatusPath = join(config.home, DSH_RESTART_STATUS_FILE_NAME)
+  const dshRestartStatus = (): DshRestartStatus | undefined => {
+    let raw: string | undefined
+    try {
+      raw = readFileSync(dshRestartStatusPath, 'utf8')
+    } catch {
+      // 没有状态文件就是「没有要汇报的重启」；launcher 可能还没写过它。
+      return undefined
+    }
+    try {
+      return parseDshRestartStatus(raw)
+    } catch (error) {
+      logger.warn({ err: error, path: dshRestartStatusPath }, 'could not parse the dsh restart status file')
+      return undefined
+    }
+  }
+
   const adminAccount = (session: AdminConsoleSession): UserRecord | undefined => {
     if (session.userId !== null) return store.getUserById(session.userId)
     const users = store.listUsers()
@@ -209,6 +235,7 @@ export function createAdminConsoleRequestContext(options: {
     appearanceOf,
     page,
     membershipView,
+    dshRestartStatus,
     adminAccount,
     confirmCsrf,
     rejectForgedSubmit,

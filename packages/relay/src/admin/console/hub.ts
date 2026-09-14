@@ -1,4 +1,4 @@
-import { MEMBERSHIP_FILE_NAME, type MembershipHub } from '@dsh-remote/protocol'
+import { MEMBERSHIP_FILE_NAME, type DshRestartStatus, type MembershipHub } from '@dsh-remote/protocol'
 import { escapeHtml, type PageAppearance } from '../shared.js'
 import {
   ADMIN_HUB_PATH,
@@ -79,14 +79,44 @@ function entryCard(view: MembershipView, machine: string): string {
 </div>`
 }
 
+/** 把一次信任集合变化写成页面上的半句话，例如「新增信任 hub.example.com」。 */
+function describeTrustChange(status: DshRestartStatus): string {
+  const parts: string[] = []
+  if (status.added.length > 0) parts.push(`新增信任 ${escapeHtml(status.added.join('、'))}`)
+  if (status.removed.length > 0) parts.push(`移除信任 ${escapeHtml(status.removed.join('、'))}`)
+  return parts.length === 0 ? '地址无变化' : parts.join('，')
+}
+
+/**
+ * launcher 自动重启 dsh 的进度卡（见 protocol 的 dsh-restart 契约）。
+ *
+ * 页面没有脚本，状态不会自己刷新；进行中的文案明确让操作员刷新查看结果，
+ * 失败的文案给出手动恢复动作。
+ * @param status launcher 写入的最新状态。
+ * @param machine 这台机器自己的名称。
+ * @returns 置于远程入口条目下方的 markup；调用方仅在状态存在时渲染。
+ */
+function restartStatusCard(status: DshRestartStatus, machine: string): string {
+  const name = escapeHtml(machine)
+  const what = describeTrustChange(status)
+  if (status.state === 'restarting') {
+    return `<div class="restart" data-state="restarting" role="status"><strong>正在自动重启 dsh</strong>（${what}）。重启期间 ${name} 的本机和远程访问会短暂中断；完成后刷新本页查看结果。</div>`
+  }
+  if (status.state === 'failed') {
+    return `<div class="restart" data-state="failed" role="alert"><strong>自动重启 dsh 失败</strong>（${what}）：${escapeHtml(status.error ?? '未知原因')}。<br>请右键托盘图标选择「重启」（Linux/macOS 重新运行启动脚本），让 ${name} 带上新的信任地址再启动一次。</div>`
+  }
+  return `<div class="restart" data-state="done"><strong>dsh 已自动重启完成</strong>（${what}，${escapeHtml(formatTime(status.at))}）。${name} 现在信任新的地址，已打开的浏览器页面会自动重连。</div>`
+}
+
 /**
  * 远程入口页面：这台机器还可以从哪台机器的地址打开，以及设置它的唯一字段。
- * @param options 当前远程入口、表单携带的 CSRF token、这台机器自己的名称、
- * 登录用户、要渲染的外观以及提交被拒绝时的错误。
+ * @param options 当前远程入口、launcher 最近一次 dsh 自动重启的进度、表单携带的 CSRF token、
+ * 这台机器自己的名称、登录用户、要渲染的外观以及提交被拒绝时的错误。
  * @returns 完整的 HTML 文档。
  */
 export function hubPage(options: {
   view: MembershipView
+  restartStatus?: DshRestartStatus | undefined
   csrf: string
   machine: string
   username: string | null
@@ -98,6 +128,9 @@ export function hubPage(options: {
   const alert = options.error === undefined
     ? ''
     : `<p class="error" role="alert">${escapeHtml(options.error)}</p>`
+  const restart = options.restartStatus === undefined
+    ? ''
+    : restartStatusCard(options.restartStatus, machine)
   return consolePage({
     current: ADMIN_HUB_PATH,
     machine,
@@ -106,9 +139,9 @@ export function hubPage(options: {
     intro: `「机器」那一页是<strong>别的机器挂在 ${name} 上</strong>，在那里停止并移除一台机器，停的是对方那台机器上的 dsh-remote；这一页是 <strong>${name} 挂在别人身上</strong>，取消只影响 ${name} 自己，那边的机器一台都不会掉线。${name} 同时只能有一个远程入口。`,
     username: options.username,
     appearance: options.appearance,
-    body: `${alert}${entryCard(view, machine)}
+    body: `${alert}${entryCard(view, machine)}${restart}
 <h2 class="section">设置远程入口</h2>
-<p class="hint">到你想用作入口的那台机器上，在它控制台的「机器」页签发一个注册令牌，它会给出一条完整命令；把那条命令整个粘到下面。地址、${name} 在那边的机器名、注册令牌都在命令里，不用再分开填。</p>
+<p class="hint">到你想用作入口的那台机器上，在它控制台的「机器」页签发一个注册令牌，它会给出一条完整命令；把那条命令整个粘到下面。地址、${name} 在那边的机器名、注册令牌都在命令里，不用再分开填。粘好后 dsh 会自动重启以信任新的地址，本页会显示重启进度。</p>
 <form method="post" action="${ADMIN_MEMBERSHIP_JOIN_PATH}">
 <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
 <div class="field"><label for="hubCommand">粘贴入口机器给出的 connector 命令</label><input class="paste" id="hubCommand" name="command" required maxlength="2048" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="off" placeholder="dsh-remote-connector --relay wss://… --slug … --enroll-token … --hub-authority …"></div>

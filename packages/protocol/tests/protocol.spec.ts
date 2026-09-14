@@ -7,6 +7,9 @@ import {
   controlFrameSchema,
   decodeControlFrame,
   deviceChallengeMessage,
+  parseDshRestartStatus,
+  serializeDshRestartStatus,
+  type DshRestartStatus,
   dshAuthFrameSchema,
   encodeControlFrame,
   errorFrameSchema,
@@ -287,5 +290,39 @@ describe('membership contract', () => {
     expect(() => parseMembership('{')).toThrow()
     expect(() => parseMembership('{"version":99}')).toThrow()
     expect(() => parseMembership(JSON.stringify({ ...joined, extra: true }))).toThrow()
+  })
+})
+
+describe('dsh restart status contract', () => {
+  const restarting: DshRestartStatus = {
+    state: 'restarting',
+    at: 1_800_000_000_000,
+    added: ['desktop.dsh.example.com'],
+    removed: [],
+  }
+
+  it('round-trips every state the launcher writes', () => {
+    expect(parseDshRestartStatus(serializeDshRestartStatus(restarting))).toEqual(restarting)
+    expect(parseDshRestartStatus(serializeDshRestartStatus({
+      ...restarting,
+      state: 'done',
+      removed: ['old.dsh.example.com'],
+    }))).toEqual({ ...restarting, state: 'done', removed: ['old.dsh.example.com'] })
+    expect(parseDshRestartStatus(serializeDshRestartStatus({
+      ...restarting,
+      state: 'failed',
+      error: 'dsh did not become ready',
+    }))).toEqual({ ...restarting, state: 'failed', error: 'dsh did not become ready' })
+  })
+
+  it('treats a missing or empty file as no restart to report', () => {
+    expect(parseDshRestartStatus(undefined)).toBeUndefined()
+    expect(parseDshRestartStatus('   ')).toBeUndefined()
+  })
+
+  it('throws on malformed contents instead of guessing a state', () => {
+    expect(() => parseDshRestartStatus('{')).toThrow()
+    expect(() => parseDshRestartStatus(JSON.stringify({ ...restarting, state: 'done-again' }))).toThrow()
+    expect(() => parseDshRestartStatus(JSON.stringify({ ...restarting, extra: true }))).toThrow()
   })
 })

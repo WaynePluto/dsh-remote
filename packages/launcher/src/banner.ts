@@ -191,12 +191,12 @@ export function renderBanner(options: BannerOptions): string {
     status.push({ mark: '○', label: '没有远程入口', detail: `${machine} 只能从本机和局域网打开` })
     notes.push(`  想从别的网络打开 ${machine}：先到你想用作入口的那台机器上，在它控制台的「机器」页签发一个注册令牌；`)
     notes.push('  再回到本机控制台的「远程入口」页，把它给出的那条命令整个粘进去。')
-    notes.push('  粘完不用改配置文件，connector 会自动连上；但需要重启本程序，dsh 才会信任入口机器的地址。')
+    notes.push('  粘完不用改配置文件：connector 会自动连上，dsh 也会自动重启以信任入口机器的地址；重启期间本机的 dsh 短暂不可用。')
   } else if (hub.browserAuthority === undefined) {
     status.push({ mark: '✓', label: '已有远程入口', detail: `${hub.relayUrl}（${machine} 在那边的机器名：${hub.slug}）` })
     rows.push({ label: '远程访问', value: '命令里没带入口机器的浏览器地址', note: '暂不可用' })
     notes.push('  粘进来的那条命令里没有 --hub-authority，所以没法告诉 dsh 该信任哪个地址。')
-    notes.push('  回到入口机器重新签一个注册令牌，把它给出的整条命令重新粘一次，再重启本程序。')
+    notes.push('  回到入口机器重新签一个注册令牌，把它给出的整条命令重新粘一次即可。')
   } else {
     status.push({ mark: '✓', label: '已有远程入口', detail: `${hub.relayUrl}（${machine} 在那边的机器名：${hub.slug}）` })
     rows.push({

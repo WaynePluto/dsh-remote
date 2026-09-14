@@ -71,7 +71,8 @@ launcher 的 banner 与 `--trusted-host` 都按「没有远程入口」处理它
 
 转发到目标 dsh 的 Host 是浏览器访问的机器 authority，目标 dsh 必须通过 `--trusted-host` 信任它。
 域名模式下，connector 的控制地址使用公网裸域名（如 `wss://dsh.example.com`），目标 dsh 信任对应机器子域名（如 `pc2.dsh.example.com`）；从入口机器本机控制台签发命令时也必须生成这个可达的公网地址，不能把 `127.0.0.1` 打进命令。
-入口地址变化后需要重启目标 dsh。
+入口地址变化后由 launcher 自动重启目标 dsh（连带 connector 上报新 token，relay 不动），并把进度写进
+dsh-restart-status.json 供「远程入口」页展示；不需要操作员重启整个程序。
 
 ## 2.2 Profile 与插件装载
 

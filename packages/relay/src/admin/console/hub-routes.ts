@@ -45,6 +45,7 @@ export function registerHubRoutes(
     appearanceOf,
     page,
     membershipView,
+    dshRestartStatus,
     machine,
     rejectForgedSubmit,
     membershipPath,
@@ -64,6 +65,7 @@ export function registerHubRoutes(
     status: context.status,
     render: csrf => hubPage({
       view: membershipView(),
+      restartStatus: dshRestartStatus(),
       csrf,
       machine,
       username: context.session.username,
@@ -94,11 +96,13 @@ export function registerHubRoutes(
       ? [
           `${machine} 不再出现在 ${view.hub.relayUrl} 的机器列表里，也不能再从那个地址打开。`,
           `${machine} 保存的注册令牌会被清掉，重新挂上去需要再粘一次对方给的命令。`,
+          `${machine} 的 dsh 会自动重启一次以撤销对入口机器地址的信任，期间短暂中断。`,
           `挂在 ${machine} 上的那些机器不受影响，一台都不会掉线。`,
           `本机和局域网地址不受影响，仍然可以打开 ${machine} 的 dsh。`,
         ]
       : [
           `读不出的 ${MEMBERSHIP_FILE_NAME} 会被清空，${machine} 回到没有远程入口的状态。`,
+          `如果之前的文件里记过入口地址，dsh 会自动重启一次撤销对它的信任，期间短暂中断。`,
           `挂在 ${machine} 上的那些机器不受影响，一台都不会掉线。`,
           `本机和局域网地址不受影响，仍然可以打开 ${machine} 的 dsh。`,
         ]

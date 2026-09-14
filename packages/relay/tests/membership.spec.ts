@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -314,5 +314,66 @@ describe('D16 membership: this machine joining a hub', () => {
       enrollTokenProvided: true,
     })
     expect(JSON.stringify(fixture.store.listAudit())).not.toContain(ENROLL_TOKEN)
+  })
+})
+
+/** 与 launcher 写入的契约一致（protocol 的 dsh-restart schema）。 */
+function writeRestartStatus(fixture: Fixture, status: Record<string, unknown>): void {
+  writeFileSync(join(fixture.home, 'dsh-restart-status.json'), `${JSON.stringify(status, undefined, 2)}\n`)
+}
+
+describe('launcher dsh auto-restart status on the hub page', () => {
+  it('explains an in-progress restart and asks for a refresh', async () => {
+    const fixture = await startFixture()
+    writeRestartStatus(fixture, {
+      state: 'restarting',
+      at: 1_800_000_000_000,
+      added: [HUB_AUTHORITY],
+      removed: [],
+    })
+
+    const { body } = await openConsole(fixture)
+    expect(body).toContain('正在自动重启 dsh')
+    expect(body).toContain(`新增信任 ${HUB_AUTHORITY}`)
+    expect(body).toContain('刷新本页查看结果')
+  })
+
+  it('reports a finished restart with its timestamp', async () => {
+    const fixture = await startFixture()
+    writeRestartStatus(fixture, {
+      state: 'done',
+      at: Date.UTC(2026, 8, 14, 16, 50),
+      added: [HUB_AUTHORITY],
+      removed: [],
+    })
+
+    const { body } = await openConsole(fixture)
+    expect(body).toContain('dsh 已自动重启完成')
+    expect(body).toContain('2026-09-14 16:50 UTC')
+  })
+
+  it('shows the failure reason and the manual recovery action', async () => {
+    const fixture = await startFixture()
+    writeRestartStatus(fixture, {
+      state: 'failed',
+      at: 1_800_000_000_000,
+      added: [],
+      removed: [HUB_AUTHORITY],
+      error: 'dsh did not become ready',
+    })
+
+    const { body } = await openConsole(fixture)
+    expect(body).toContain('自动重启 dsh 失败')
+    expect(body).toContain('dsh did not become ready')
+    expect(body).toContain(`移除信任 ${HUB_AUTHORITY}`)
+    expect(body).toContain('右键托盘图标选择「重启」')
+  })
+
+  it('renders no restart card while the launcher has not written one', async () => {
+    const fixture = await startFixture()
+
+    const { body } = await openConsole(fixture)
+    expect(body).not.toContain('自动重启 dsh')
+    expect(body).not.toContain('正在自动重启')
   })
 })

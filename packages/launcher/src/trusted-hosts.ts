@@ -113,3 +113,24 @@ export function trustedHostsFor(options: {
   return hosts
 }
 
+/**
+ * 两份 `--trusted-host` 列表的实际差异。
+ *
+ * membership 变化只有改变这个集合时才需要重启 dsh：connector 消化
+ * 注册令牌后重写文件、relay 重建自挂条目都不应触发重启。
+ * @param previous - dsh 当前使用的列表。
+ * @param next - 按新 membership 计算出的列表。
+ * @returns 新增与移除的 authority；集合没有变化时为 undefined。
+ */
+export function trustChange(
+  previous: readonly string[],
+  next: readonly string[],
+): { added: string[]; removed: string[] } | undefined {
+  const previousKeys = new Set(previous.map(value => value.toLowerCase()))
+  const nextKeys = new Set(next.map(value => value.toLowerCase()))
+  const added = next.filter(value => !previousKeys.has(value.toLowerCase()))
+  const removed = previous.filter(value => !nextKeys.has(value.toLowerCase()))
+  if (added.length === 0 && removed.length === 0) return undefined
+  return { added, removed }
+}
+

@@ -180,7 +180,7 @@ ssh -L 30809:127.0.0.1:30809 user@服务器地址
 | 提示 Node 版本太低 | 装 22.19 以上 |
 | 局域网打不开，本机能开 | 防火墙没放行。Windows：`New-NetFirewallRule -DisplayName "dsh-remote" -Direction Inbound -LocalPort 30809 -Protocol TCP -Action Allow` |
 | 密码明明是对的却登不上 | 看启动日志有没有「pre-scrypt password hash」告警，有就在本机管理页重设一次密码 |
-| 被开放机器的界面报 403 | 那台机器的 dsh 还不信任入口机器地址，重启一次它的 dsh-remote |
+| 被开放机器的界面报 403 | 那台机器的 dsh 不信任入口机器地址。粘完命令后 dsh 会自动重启并信任新地址；若它的「远程入口」页显示自动重启失败，按页面提示手动重启那台机器的 dsh-remote |
 
 ## 本地开发与调试（开发者向）
 

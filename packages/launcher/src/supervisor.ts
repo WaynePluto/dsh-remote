@@ -44,10 +44,26 @@ export interface SupervisorOptions {
 }
 
 export interface Supervisor {
-  /** 启动一个子进程并开始转发其输出。 */
+  /**
+   * 启动一个子进程并开始转发其输出。
+   *
+   * 同名子进程按原条目的位置替换：按名重启（见 `stop`）不会改变
+   * 停止顺序，dsh 仍然最后退出。替换仍在运行的子进程是调用方
+   * 的错误，此时代码会先杀死旧进程树以免留下孤儿。
+   */
   start(spec: ChildSpec): void
   /** @returns 指定名称的子进程存活时为 true。 */
   isRunning(name: string): boolean
+  /**
+   * 按名停止一个子进程，不视为意外退出。
+   *
+   * 与 `stopAll` 一样先礼后兵：超过 {@link STOP_TIMEOUT_MS} 仍未退出则强制杀死。
+   * 已停止的条目保留在管理列表里：同名 `start` 按原位置替换它，重启不改
+   * 变停止顺序。
+   * @param name - 要停止的子进程名称。
+   * @returns 找到并停止了一个存活子进程时为 true。
+   */
+  stop(name: string): Promise<boolean>
   /**
    * 按反向启动顺序停止所有子进程，逐个等待；如果某个子进程
    * 超过 {@link STOP_TIMEOUT_MS} 仍未退出则杀死它。
@@ -60,6 +76,8 @@ interface SupervisedChild {
   readonly process: ChildProcess
   readonly recent: string[]
   readonly closed: Promise<void>
+  /** 调用方已通过 `stop` 请求停止；其退出不再是意外事件。 */
+  expected: boolean
   finished: boolean
 }
 
@@ -131,9 +149,17 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
         process: spawned,
         recent: [],
         closed: new Promise<void>((resolvePromise) => { markClosed = resolvePromise }),
+        expected: false,
         finished: false,
       }
-      children.push(child)
+      // 同名替换保持条目位置：重启 dsh 或 connector 不改变停止顺序。
+      const previous = children.find(entry => entry.name === spec.name)
+      if (previous === undefined) {
+        children.push(child)
+      } else {
+        if (!previous.finished) killTree(previous.process, true)
+        children[children.indexOf(previous)] = child
+      }
       forward(child, spawned.stdout, spec.onLine)
       forward(child, spawned.stderr, spec.onLine)
       // spawn 失败永远不会发出 'close'，因此按退出报告。
@@ -142,7 +168,9 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
         if (child.finished) return
         child.finished = true
         markClosed?.()
-        if (!stopping) options.onUnexpectedExit({ name: child.name, code: null, signal: null, recent: [...child.recent] })
+        if (!stopping && !child.expected) {
+          options.onUnexpectedExit({ name: child.name, code: null, signal: null, recent: [...child.recent] })
+        }
       })
       // 使用 'close' 而不是 'exit'：必须先转发最后几行输出
       // 再报告退出，否则原因会在结论之后滚入。
@@ -150,13 +178,26 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
         if (child.finished) return
         child.finished = true
         markClosed?.()
-        if (stopping) return
+        if (stopping || child.expected) return
         options.onUnexpectedExit({ name: child.name, code, signal, recent: [...child.recent] })
       })
     },
 
     isRunning(name) {
       return children.some(child => child.name === name && !child.finished)
+    },
+
+    async stop(name) {
+      const child = children.find(entry => entry.name === name && !entry.finished)
+      if (child === undefined) return false
+      child.expected = true
+      killTree(child.process, false)
+      // eslint-disable-next-line no-await-in-loop -- 停止顺序正是目的
+      if (await settledWithin(child.closed, STOP_TIMEOUT_MS)) return true
+      killTree(child.process, true)
+      // eslint-disable-next-line no-await-in-loop -- 同上
+      await settledWithin(child.closed, STOP_TIMEOUT_MS)
+      return true
     },
 
     async stopAll() {
