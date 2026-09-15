@@ -68,6 +68,11 @@ export interface DeviceRecord {
    */
   readonly browserPort: number | null
   readonly revokedAt: number | null
+  /**
+   * 操作员在「机器」页请求过上线的时刻（unix 毫秒）；null 表示没有
+   * 待处理的请求。读取方自行套用 TTL：过期的请求按没有处理。
+   */
+  readonly wakeupRequestedAt: number | null
   readonly createdAt: number
   readonly updatedAt: number
 }

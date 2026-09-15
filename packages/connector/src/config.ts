@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { z } from 'zod'
-import { dshWebTokenSchema, machineIdSchema, machineSlugSchema } from '@dsh-remote/protocol'
+import { dshWebTokenSchema, machineIdSchema, machineSlugSchema, PROBE_INTERVAL_MS } from '@dsh-remote/protocol'
 import { DEVICE_KEY_FILE_NAME } from './device-key.js'
 import { defaultDshRemoteHome } from './membership.js'
 import { CONNECTOR_VERSION } from './version.js'
@@ -94,6 +94,11 @@ const connectorConfigShape = z.strictObject({
    * 交换。启动 dsh 的进程（launcher）负责提供它。
    */
   dshToken: dshWebTokenSchema.optional(),
+  /**
+   * 唤醒探测的周期间隔；生产固定为 PROBE_INTERVAL_MS，作为配置存在
+   * 只是为了让测试不必等待真实的一分钟。
+   */
+  probeIntervalMs: z.number().int().min(1).max(60 * 60 * 1000).default(PROBE_INTERVAL_MS),
   connectorVersion: z.string().min(1).max(64).default(CONNECTOR_VERSION),
 })
 

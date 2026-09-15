@@ -35,6 +35,7 @@ export {
   ADMIN_TOKEN_CREATE_PATH,
   ADMIN_TOTP_CONFIRM_PATH,
   ADMIN_TOTP_RESET_PATH,
+  ADMIN_WAKEUP_PATH,
   renderOfflinePage,
 } from './console/shell.js'
 

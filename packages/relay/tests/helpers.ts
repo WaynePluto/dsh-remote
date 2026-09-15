@@ -43,6 +43,75 @@ export function createDeviceIdentity(): DeviceIdentity {
   }
 }
 
+/**
+ * 完成一次唤醒探测握手：hello 携带 probe 标记并按正常流程认证。
+ * @returns relay 的应答：是否收到 reconnect-offer，以及 socket 以什么码关闭
+ * （没有 offer 时真实 relay 会以 1000 礼貌关闭）。
+ */
+export function probeWakeup(options: {
+  relayPort: number
+  identity: DeviceIdentity
+  machineId: string
+  slug: string
+}): Promise<{ offered: boolean; closeCode: number | undefined }> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${String(options.relayPort)}${TUNNEL_CONTROL_PATH}`)
+    let offered = false
+    let closeCode: number | undefined
+    let nonce: string | undefined
+    ws.on('error', error => reject(error))
+    ws.on('open', () => {
+      ws.send(JSON.stringify({
+        type: 'hello',
+        version: PROTOCOL_VERSION,
+        machineId: options.machineId,
+        slug: options.slug,
+        connectorVersion: '0.0.1-test',
+        probe: true,
+      }))
+    })
+    let settled = false
+    const settle = (): void => {
+      if (settled) return
+      settled = true
+      if (nonce === undefined) reject(new Error('probe closed before the challenge arrived'))
+      else resolve({ offered, closeCode })
+    }
+    ws.on('message', (data) => {
+      const frame = decodeControlFrame(data as Buffer)
+      if (frame.type === 'challenge') {
+        nonce = frame.nonce
+        ws.send(JSON.stringify({
+          type: 'auth',
+          version: PROTOCOL_VERSION,
+          machineId: options.machineId,
+          nonce: frame.nonce,
+          credential: {
+            method: 'ed25519',
+            publicKey: options.identity.publicKey,
+            signature: options.identity.sign(deviceChallengeMessage({
+              nonce: frame.nonce,
+              machineId: options.machineId,
+              slug: options.slug,
+            })),
+          },
+        }))
+        return
+      }
+      if (frame.type === 'reconnect-offer') {
+        // offer 路径的 relay 不关连接（真实 connector 收到后自行离开）。
+        offered = true
+        ws.close(1000)
+        settle()
+      }
+    })
+    ws.on('close', (code) => {
+      closeCode = code
+      settle()
+    })
+  })
+}
+
 export function issueEnrollToken(store: RelayStore, slug: string): string {
   const token = randomBytes(32).toString('base64url')
   store.createEnrollToken({
@@ -54,6 +123,28 @@ export function issueEnrollToken(store: RelayStore, slug: string): string {
 }
 
 /** 按注册流程登记设备，但不实际运行 connector。 */
+/**
+ * 注册一台已知私钥的设备：唤醒探测要签名 challenge，测试必须持有密钥。
+ * @returns 注册时使用的身份。
+ */
+export function registerKnownDevice(
+  store: RelayStore,
+  options: { machineId: string; slug: string },
+): DeviceIdentity {
+  const identity = createDeviceIdentity()
+  const token = issueEnrollToken(store, options.slug)
+  const device = store.consumeEnrollToken({
+    tokenHash: hashOpaqueToken(token),
+    device: {
+      machineId: options.machineId,
+      slug: options.slug,
+      publicKey: identity.publicKey,
+    },
+  })
+  if (device === undefined) throw new Error('test device registration failed')
+  return identity
+}
+
 export function registerTestDevice(store: RelayStore, options: {
   machineId: string
   slug: string

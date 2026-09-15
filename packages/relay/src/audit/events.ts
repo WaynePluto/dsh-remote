@@ -34,6 +34,8 @@ export const AUDIT_EVENTS = {
   membershipJoined: 'membership.joined',
   /** 这台机器已离开自己的 hub，不再能通过该 hub 访问。 */
   membershipLeft: 'membership.left',
+  /** 操作员请求一台断开的机器重新上线；由它的下一次唤醒探测领取。 */
+  machineWakeupRequested: 'machine.wakeup-requested',
 } as const
 
 /** relay 可能记录的所有事件名。 */

@@ -583,3 +583,62 @@ describe('relay store devices and enrollment', () => {
     }
   })
 })
+describe('relay store wakeup requests', () => {
+  function enrolledStore(): RelayStore {
+    const store = memoryStore()
+    const tokenHash = hashOpaqueToken('enroll-secret-pc1')
+    store.createEnrollToken({ tokenHash, requestedSlug: 'pc1', expiresAt: Date.now() + 60_000 })
+    const device = store.consumeEnrollToken({
+      tokenHash,
+      device: { machineId: 'machine-1', slug: 'pc1', publicKey: 'key-one' },
+    })
+    if (device === undefined) throw new Error('device registration failed')
+    return store
+  }
+
+  it('records a wakeup request and clears it on the next online arrival', () => {
+    const store = enrolledStore()
+    try {
+      expect(store.getDeviceByMachineId('machine-1')?.wakeupRequestedAt).toBeNull()
+      expect(store.requestWakeup('machine-1')).toBe(true)
+      const requestedAt = store.getDeviceByMachineId('machine-1')?.wakeupRequestedAt
+      expect(requestedAt).toBeTypeOf('number')
+      // 重复请求只是刷新时刻，不产生第二条记录。
+      expect(store.requestWakeup('machine-1')).toBe(true)
+
+      expect(store.clearWakeup('machine-1')).toBe(true)
+      expect(store.getDeviceByMachineId('machine-1')?.wakeupRequestedAt).toBeNull()
+      expect(store.clearWakeup('machine-1')).toBe(false)
+    } finally {
+      store.close()
+    }
+  })
+
+  it('refuses wakeup requests for unknown or revoked machines', () => {
+    const store = enrolledStore()
+    try {
+      expect(store.requestWakeup('machine-unknown')).toBe(false)
+      store.revokeDevice('machine-1')
+      expect(store.requestWakeup('machine-1')).toBe(false)
+      expect(store.getDeviceByMachineId('machine-1')?.wakeupRequestedAt).toBeNull()
+    } finally {
+      store.close()
+    }
+  })
+
+  it('re-enrollment clears a pending wakeup request', () => {
+    const store = enrolledStore()
+    try {
+      expect(store.requestWakeup('machine-1')).toBe(true)
+      const tokenHash = hashOpaqueToken('enroll-secret-pc1-2')
+      store.createEnrollToken({ tokenHash, requestedSlug: 'pc1', expiresAt: Date.now() + 60_000 })
+      const device = store.consumeEnrollToken({
+        tokenHash,
+        device: { machineId: 'machine-1', slug: 'pc1', publicKey: 'key-rotated' },
+      })
+      expect(device?.wakeupRequestedAt).toBeNull()
+    } finally {
+      store.close()
+    }
+  })
+})

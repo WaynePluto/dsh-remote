@@ -34,3 +34,17 @@ export const RECONNECT_BACKOFF = Object.freeze({
   factor: 2,
   jitterRatio: 0.2,
 })
+
+/**
+ * 断开远程入口后唤醒探测的周期间隔；也是「请求上线」按钮从点击到
+ * 生效的最长等待。首次探测同样等满一个周期：刚断开就立刻报到会
+ * 让「断开」失去意义。
+ */
+export const PROBE_INTERVAL_MS = 60_000
+
+/**
+ * 「请求上线」标记的保留时长。机器真正关机时请求无法送达，标记
+ * 留着等它下次启动后的第一次探测；过期自动失效，避免很久之后的
+ * 一次上线让操作员意外。
+ */
+export const WAKEUP_REQUEST_TTL_MS = 24 * 60 * 60 * 1000

@@ -71,6 +71,13 @@ hub 还认识这台机器时 connector 直接用密钥认证。重连被拒（�
 connector 把条目降回 `lastHub` 并继续运行，而不是让整台机器停机；只有曾经认证成功后被吊销
 仍整体退出，那正是「停止并移除」的既定语义。重新连接或设置新入口都会清掉 `lastHub`。
 
+断开（含本机自挂之外没有入口）的机器以 `PROBE_INTERVAL_MS`（60 秒）周期向 `lastHub` 发送
+带 probe 标记的唤醒探测：不承载流量、不进在线名单；入口有操作员「请求上线」（devices 表的
+`wakeup_requested_at`，24 小时过期）时回 `reconnect-offer`，connector 恢复 `lastHub` 并由
+launcher 自动重启 dsh。这补齐了入口与被断开机器之间唯一的唤醒通道，也让「机器」页能区分
+「已断开·可唤醒」（近期有探测）与「离线」（探测也消失——关机或挂去了别的入口，无法区分）。
+机器已「停止并移除」或 lastHub 被拒绝时探测停止并遗忘该入口。
+
 端口不在 cookie 作用域内，因此同一主机不同端口共享登录态；配置 Cookie Domain 时子域也共享登录态。
 域名模式的公网会话使用 `Domain=.<域名>` 的 Secure Cookie；真实 loopback 请求使用独立的非 Secure、host-only 辅助 Cookie，确保本机 HTTP 的 CSRF、主题和管理表单不依赖公网会话。
 系统按同一管理员控制这些机器设计，不将端口当作用户隔离边界。

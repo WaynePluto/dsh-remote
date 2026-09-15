@@ -353,6 +353,7 @@ export class RelayStore {
         display_name = excluded.display_name,
         public_key = excluded.public_key,
         revoked_at = NULL,
+        wakeup_requested_at = NULL,
         updated_at = excluded.updated_at
     `).run(
       machineId,
@@ -471,6 +472,30 @@ export class RelayStore {
       if (this.#database.isTransaction) this.#database.exec('ROLLBACK')
       throw error
     }
+  }
+
+  /**
+   * 记录操作员对一台离线机器的「请求上线」。机器下一次唤醒探测会收到
+   * reconnect-offer；读取方按 TTL 判定是否仍有效。
+   * @returns 机器存在且未吊销（已记录）时为 true。
+   */
+  requestWakeup(machineId: string, now = Date.now()): boolean {
+    const requestedAt = timestamp(now, 'now')
+    const result = this.#database.prepare(`
+      UPDATE devices SET wakeup_requested_at = ?, updated_at = ? WHERE machine_id = ? AND revoked_at IS NULL
+    `).run(requestedAt, requestedAt, machineId)
+    return changed(result)
+  }
+
+  /**
+   * 清除「请求上线」标记：机器已经通过正常会话上线，请求完成使命。
+   * @returns 实际清除了标记时为 true。
+   */
+  clearWakeup(machineId: string, now = Date.now()): boolean {
+    const result = this.#database.prepare(`
+      UPDATE devices SET wakeup_requested_at = NULL, updated_at = ? WHERE machine_id = ? AND wakeup_requested_at IS NOT NULL
+    `).run(timestamp(now, 'now'), machineId)
+    return changed(result)
   }
 
   /** 清理无人使用且已过期的令牌。 */

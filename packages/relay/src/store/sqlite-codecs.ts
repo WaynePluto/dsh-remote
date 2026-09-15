@@ -98,6 +98,7 @@ export function deviceFromRow(row: Record<string, unknown>): DeviceRecord {
     publicKey: textField(row, 'public_key'),
     browserPort: nullableNumberField(row, 'browser_port'),
     revokedAt: nullableNumberField(row, 'revoked_at'),
+    wakeupRequestedAt: nullableNumberField(row, 'wakeup_requested_at'),
     createdAt: numberField(row, 'created_at'),
     updatedAt: numberField(row, 'updated_at'),
   }

@@ -1,6 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises'
 import pino, { type Logger } from 'pino'
-import type { Membership, MembershipHub } from '@dsh-remote/protocol'
+import type { Membership, MembershipHub, MembershipLastHub } from '@dsh-remote/protocol'
 import { nextBackoffDelay } from './backoff.js'
 import {
   normalizeRelayUrl,
@@ -9,15 +9,18 @@ import {
   type ConnectorConfig,
   type ConnectorConfigInput,
   type HubTarget,
+  type SessionConfig,
 } from './config.js'
 import { loadOrCreateDeviceKey } from './device-key.js'
 import { runControlSession, type SessionOutcome } from './control.js'
 import {
   demoteRejectedHub,
+  forgetLastHub,
   MembershipFileError,
   clearSpentEnrollToken,
   membershipFilePath,
   readMembershipFile,
+  restoreLastHub,
   watchMembershipFile,
 } from './membership.js'
 
@@ -285,6 +288,96 @@ export function createConnector(
       sessionAbort?.abort()
     }
     wakeUp()
+    syncWakeupProbe()
+  }
+
+  /**
+   * 唤醒探测：断开远程入口（或只有自挂条目）且仍记得 lastHub 时，
+   * 与主循环并行、每 {@link PROBE_INTERVAL_MS} 向 lastHub 报到一次。
+   * 探测会话不承载流量；入口有「请求上线」时收到 reconnect-offer，
+   * 恢复 membership 后由主循环正常拨号。被入口拒绝则忘掉 lastHub。
+   */
+  let probeAbort: AbortController | undefined
+  const stopWakeupProbe = (): void => {
+    probeAbort?.abort()
+    probeAbort = undefined
+  }
+  const probeSessionConfig = (remembered: MembershipLastHub): SessionConfig => ({
+    ...config,
+    relayUrl: remembered.relayUrl,
+    slug: remembered.slug,
+    enrollToken: undefined,
+    dshToken: undefined,
+  })
+  const syncWakeupProbe = (): void => {
+    if (controller.signal.aborted) {
+      stopWakeupProbe()
+      return
+    }
+    let state: Membership | undefined
+    try {
+      state = readMembershipFile(membershipPath)
+    } catch {
+      // 文件暂时读不出：保持现状，下一个 membership 事件再同步。
+      return
+    }
+    const external = state?.hub !== undefined && state.hub.selfManaged !== true
+    const lastHubToProbe = state?.lastHub
+    if (external || lastHubToProbe === undefined) {
+      stopWakeupProbe()
+      return
+    }
+    if (probeAbort !== undefined) return
+    const captured = lastHubToProbe
+    const abort = new AbortController()
+    probeAbort = abort
+    logger.info(
+      { relayUrl: captured.relayUrl, probeIntervalMs: config.probeIntervalMs },
+      'probing the remembered hub for wakeup requests while disconnected',
+    )
+    void (async () => {
+      while (!abort.signal.aborted) {
+        // 首次探测同样等满一个周期：刚断开就报到等于没有断开。
+        // eslint-disable-next-line no-await-in-loop -- 探测按定义按周期顺序执行
+        await delay(config.probeIntervalMs, undefined, { signal: abort.signal }).catch(() => undefined)
+        if (abort.signal.aborted) return
+        // eslint-disable-next-line no-await-in-loop -- 一次只保持一个探测会话
+        const outcome = await runControlSession({
+          config: probeSessionConfig(captured),
+          deviceKey,
+          logger,
+          signal: abort.signal,
+          probe: true,
+          onOffer: () => {
+            try {
+              if (restoreLastHub(membershipPath, captured)) {
+                logger.info(
+                  { relayUrl: captured.relayUrl },
+                  'wakeup offer accepted; membership restored, the regular dial loop takes over',
+                )
+              }
+            } catch (error) {
+              logger.error({ err: error, path: membershipPath }, 'could not restore the membership after a wakeup offer')
+            }
+          },
+        })
+        if (abort.signal.aborted) return
+        if (outcome.fatal && outcome.code !== undefined && DEVICE_REJECTION_CODES.has(outcome.code)) {
+          logger.error(
+            { reason: outcome.message, relayUrl: captured.relayUrl },
+            'the remembered hub rejected this device; forgetting last-hub and stopping probes '
+            + '(re-issue a token on the hub and re-join from the console to register again)',
+          )
+          try {
+            forgetLastHub(membershipPath, captured)
+          } catch (error) {
+            logger.error({ err: error, path: membershipPath }, 'could not forget the rejected last-hub')
+          }
+          return
+        }
+        // 被礼貌拒绝（没有待处理请求）与瞬时网络错误一样：睡到下一个周期。
+      }
+    })()
   }
 
   const loop = async (): Promise<void> => {
@@ -307,6 +400,9 @@ export function createConnector(
         // 在读取前设置唤醒，以免读取期间发生的变更丢失。
         const changed = new Promise<void>((resolve) => { wake = resolve })
         const hub = currentHub()
+        // 每轮迭代同步一次唤醒探测：启动时的初始 membership 不会触发
+        // watcher 事件，主会话结束后的状态也要重新评估。
+        syncWakeupProbe()
         if (hub === undefined) {
           dialing = undefined
           if (!idleLogged) {
@@ -402,6 +498,7 @@ export function createConnector(
     },
     async stop() {
       controller.abort()
+      stopWakeupProbe()
       if (running === undefined) return
       await running.catch(() => undefined)
     },

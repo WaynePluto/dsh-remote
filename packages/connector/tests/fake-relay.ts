@@ -35,6 +35,11 @@ export interface FakeRelayOptions {
   /** 接受的 `ed25519-enroll` token；未设置时拒绝注册。 */
   readonly enrollToken?: string
   readonly streamConnectTimeoutMs?: number
+  /**
+   * 唤醒探测行为：'decline'（默认，auth-ok 后礼貌关闭）、'offer'
+   * （回 reconnect-offer）。探测会话不进入在线名单。
+   */
+  readonly probe?: 'decline' | 'offer'
 }
 
 export interface RecordedError {
@@ -47,6 +52,8 @@ export interface FakeRelay {
   /** Connector 报告的错误帧，最新的在最后。 */
   readonly connectorErrors: readonly RecordedError[]
   readonly knownDevices: ReadonlySet<string>
+  /** 收到的唤醒探测次数（按 slug）。 */
+  readonly probes: ReadonlyMap<string, number>
   isOnline(slug: string): boolean
   /** 这台机器通过 `dsh-auth` 报告的 dsh web token（如果有）。 */
   dshTokenOf(slug: string): string | undefined
@@ -132,6 +139,7 @@ export async function startFakeRelay(options: FakeRelayOptions = {}): Promise<Fa
   const streamWss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024 })
   const handshakes = new Map<WebSocket, { hello?: HelloFrame; nonce?: string }>()
   const machines = new Map<string, Machine>()
+  const probes = new Map<string, number>()
   const pending = new Map<string, PendingStream>()
 
 
@@ -205,6 +213,24 @@ export async function startFakeRelay(options: FakeRelayOptions = {}): Promise<Fa
     }
 
     handshakes.delete(ws)
+    if (hello.probe === true) {
+      // 探测会话与真实 relay 一致：不进在线名单，按配置回 offer 或礼貌关闭。
+      probes.set(hello.slug, (probes.get(hello.slug) ?? 0) + 1)
+      ws.send(JSON.stringify({
+        type: 'auth-ok',
+        version: PROTOCOL_VERSION,
+        machineId: hello.machineId,
+        slug: hello.slug,
+        heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
+        heartbeatTimeoutMs: HEARTBEAT_TIMEOUT_MS,
+      }))
+      if (options.probe === 'offer') {
+        ws.send(JSON.stringify({ type: 'reconnect-offer', version: PROTOCOL_VERSION, slug: hello.slug }))
+      } else {
+        ws.close(1000)
+      }
+      return
+    }
     machines.set(hello.slug, { machineId: hello.machineId, slug: hello.slug, control: ws })
     ws.send(JSON.stringify({
       type: 'auth-ok',
@@ -370,6 +396,7 @@ export async function startFakeRelay(options: FakeRelayOptions = {}): Promise<Fa
     port: address.port,
     connectorErrors,
     knownDevices,
+    probes,
     isOnline: slug => machines.has(slug),
     dshTokenOf: slug => machines.get(slug)?.dshToken,
     close: async () => {

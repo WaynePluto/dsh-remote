@@ -60,6 +60,8 @@ export class MachineRegistry {
   readonly #bySlug = new Map<string, RegisteredMachine>()
   readonly #pendingByToken = new Map<string, PendingStream>()
   readonly #streamsByMachineId = new Map<string, Set<Duplex>>()
+  /** 最近一次成功认证的唤醒探测，按 machineId；机器页据此区分「已断开·可唤醒」与「离线」。 */
+  readonly #probeSeenAt = new Map<string, number>()
   readonly #logger: Logger
   readonly #streamConnectTimeoutMs: number
 
@@ -77,6 +79,8 @@ export class MachineRegistry {
     }
     this.#byMachineId.set(machine.machineId, machine)
     this.#bySlug.set(machine.slug, machine)
+    // 在线状态覆盖探测状态；标记清理由调用方（server）在注册前完成。
+    this.#probeSeenAt.delete(machine.machineId)
     this.#logger.info({ machineId: machine.machineId, slug: machine.slug }, 'machine online')
   }
 
@@ -140,6 +144,21 @@ export class MachineRegistry {
 
   getByControl(control: WebSocket): RegisteredMachine | undefined {
     return [...this.#byMachineId.values()].find(machine => machine.control === control)
+  }
+
+  /**
+   * 记录一次成功的唤醒探测。不进在线名单，但机器页用它区分
+   * 「取消了远程入口但服务还在」与「真正离线」。
+   * @param machineId 探测的机器。
+   * @param at 探测完成的时间；默认当前时刻。
+   */
+  noteProbe(machineId: string, at = Date.now()): void {
+    this.#probeSeenAt.set(machineId, at)
+  }
+
+  /** @returns 最近一次唤醒探测的时间；从未探测过时为 undefined。 */
+  lastProbeAt(machineId: string): number | undefined {
+    return this.#probeSeenAt.get(machineId)
   }
 
   machines(): readonly RegisteredMachine[] {

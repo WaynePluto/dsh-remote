@@ -312,6 +312,60 @@ describe('membership contract', () => {
   })
 })
 
+describe('wakeup probe frames', () => {
+  it('accepts a hello with the probe marker and one without', () => {
+    const probeHello = {
+      type: 'hello',
+      version: PROTOCOL_VERSION,
+      machineId: 'machine-01',
+      slug: 'pc1',
+      connectorVersion: 'test',
+      probe: true,
+    }
+    expect(helloFrameSchema.parse(probeHello)).toMatchObject({ probe: true })
+    // zod 的 .optional() 对显式 undefined 通过但会保留键；用 delete 模拟真实序列化。
+    const without = JSON.parse(JSON.stringify({ ...probeHello, probe: undefined }))
+    expect(helloFrameSchema.parse(without)).not.toHaveProperty('probe')
+  })
+
+  it('round-trips a reconnect-offer and keeps it relay-only', () => {
+    const offer = { type: 'reconnect-offer', version: PROTOCOL_VERSION, slug: 'pc1' }
+    expect(decodeControlFrame(encodeControlFrame(offer as never))).toEqual(offer)
+    // connectorToRelay 不包含 reconnect-offer：只有 relay 能发它。
+    expect(() => connectorToRelayFrameSchema.parse(offer)).toThrow()
+    expect(relayToConnectorFrameSchema.parse(offer)).toMatchObject({ type: 'reconnect-offer' })
+  })
+})
+
+describe('membership restore and forget for wakeup offers', () => {
+  const lastHub = {
+    relayUrl: 'wss://hub.dsh.example.com',
+    slug: 'desktop',
+    browserAuthority: 'desktop.dsh.example.com',
+    joinedAt: 1_800_000_000_000,
+  }
+
+  it('restores lastHub as the hub only while no external entry exists', () => {
+    const left: Membership = { version: 1, lastHub }
+    const restored: Membership = { version: 1, hub: { ...lastHub, joinedAt: 1 } }
+    expect(parseMembership(serializeMembership(restored))).toMatchObject({ hub: { slug: 'desktop' } })
+    expect(parseMembership(serializeMembership(left))?.lastHub).toEqual(lastHub)
+    // 自挂条目 + lastHub 的混合状态也是合法的可恢复状态。
+    const selfLeft: Membership = {
+      version: 1,
+      hub: {
+        relayUrl: 'ws://127.0.0.1:30809',
+        slug: 'pc1',
+        browserAuthority: '127.0.0.1:30809',
+        selfManaged: true,
+        joinedAt: 1,
+      },
+      lastHub,
+    }
+    expect(parseMembership(serializeMembership(selfLeft))).toEqual(selfLeft)
+  })
+})
+
 describe('dsh restart status contract', () => {
   const restarting: DshRestartStatus = {
     state: 'restarting',

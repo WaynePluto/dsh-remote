@@ -4,10 +4,10 @@ import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import pino, { type Logger } from 'pino'
 import { afterEach, describe, expect, it } from 'vitest'
-import { serializeMembership, type MembershipHub } from '@dsh-remote/protocol'
+import { serializeMembership, type MembershipHub, type MembershipLastHub } from '@dsh-remote/protocol'
 import { createConnector, type Connector } from '../src/connector.js'
 import { loadOrCreateDeviceKey } from '../src/device-key.js'
-import { MembershipFileError, membershipFilePath, readMembershipFile } from '../src/membership.js'
+import { MembershipFileError, membershipFilePath, readMembershipFile, writeMembershipFile } from '../src/membership.js'
 import { startFakeRelay, type FakeRelay } from './fake-relay.js'
 
 const SLUG = 'pc1'
@@ -73,7 +73,7 @@ interface Started {
 
 function startConnector(
   home: string,
-  overrides: { relayUrl?: string; enrollToken?: string; hubAuthority?: string } = {},
+  overrides: { relayUrl?: string; enrollToken?: string; hubAuthority?: string; probeIntervalMs?: number } = {},
 ): Started {
   const { logger, lines } = recordingLogger()
   const connector = createConnector({ machineId: MACHINE_ID, slug: SLUG, home, ...overrides }, { logger })
@@ -206,6 +206,70 @@ describe('connector membership', () => {
       slug: SLUG,
       browserAuthority: BROWSER_AUTHORITY,
     })
+
+    await connector.stop()
+    expect(await finished).toBe('ok')
+  }, 30_000)
+
+  it('answers a wakeup offer by restoring lastHub as the hub', async () => {
+    const home = newHome()
+    // 机器已断开（membership 只有 lastHub）；lastHub 指向的 relay 知道它的密钥。
+    const publicKey = registerDevice(home)
+    const lastHub: MembershipLastHub = {
+      relayUrl: 'ws://127.0.0.1:1',
+      slug: 'desktop',
+      browserAuthority: BROWSER_AUTHORITY,
+      joinedAt: 1_800_000_000_000,
+    }
+    // 入口提出唤醒时指向的 lastHub 必须真实可达：用它自己的 relay，
+    // 且这台 relay 持有待处理的「请求上线」（probe: 'offer'）。
+    const hub = await startFakeRelay({ knownDevices: [publicKey], probe: 'offer' })
+    relays.push(hub)
+    lastHub.relayUrl = `ws://127.0.0.1:${String(hub.port)}`
+    writeMembershipFile(membershipFilePath(home), { version: 1, lastHub })
+
+    const { connector, lines, finished, isSettled } = startConnector(home, { probeIntervalMs: 200 })
+    const path = membershipFilePath(home)
+
+    await waitFor(() => readMembershipFile(path)?.hub !== undefined, 15_000, 'the offer restoring the hub')
+    await connector.ready()
+    expect(connector.hub?.relayUrl).toBe(lastHub.relayUrl)
+    expect(hub.isOnline('desktop')).toBe(true)
+    // 恢复清掉 lastHub；一次性拨号而不是反复恢复。
+    expect(readMembershipFile(path)?.lastHub).toBeUndefined()
+    expect(count(lines, 'wakeup offer accepted')).toBe(1)
+
+    await connector.stop()
+    expect(await finished).toBe('ok')
+    expect(isSettled()).toBe(true)
+  }, 30_000)
+
+  it('forgets lastHub and stops probing when the remembered hub rejects the device', async () => {
+    const home = newHome()
+    const publicKey = registerDevice(home)
+    const relay = await startFakeRelay({ knownDevices: [publicKey], revokedDevices: [publicKey] })
+    relays.push(relay)
+    writeMembershipFile(membershipFilePath(home), {
+      version: 1,
+      lastHub: {
+        relayUrl: `ws://127.0.0.1:${String(relay.port)}`,
+        slug: 'desktop',
+        joinedAt: 1_800_000_000_000,
+      },
+    })
+
+    const { connector, lines, finished } = startConnector(home, { probeIntervalMs: 200 })
+    const path = membershipFilePath(home)
+
+    await waitFor(
+      () => readMembershipFile(path)?.lastHub === undefined,
+      15_000,
+      'the rejected lastHub being forgotten',
+    )
+    expect(count(lines, 'forgetting last-hub')).toBe(1)
+    await delay(500)
+    // 探测停止：不再产生新的失败日志。
+    expect(count(lines, 'forgetting last-hub')).toBe(1)
 
     await connector.stop()
     expect(await finished).toBe('ok')

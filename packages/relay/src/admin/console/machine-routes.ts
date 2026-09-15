@@ -13,6 +13,7 @@ import {
   ADMIN_PATH_PREFIX,
   ADMIN_REVOKE_PATH,
   ADMIN_TOKEN_CREATE_PATH,
+  ADMIN_WAKEUP_PATH,
   confirmPage,
 } from './shell.js'
 import type { IssuedTokenView } from './machines.js'
@@ -57,6 +58,11 @@ export function registerMachineRoutes(
     render: csrf => machinesPage({
       devices: store.listDevices(),
       online: new Set(registry.machines().map(item => item.machineId)),
+      probes: new Map(
+        store.listDevices()
+          .map(device => [device.machineId, registry.lastProbeAt(device.machineId)] as const)
+          .filter((entry): entry is readonly [string, number] => entry[1] !== undefined),
+      ),
       csrf,
       config,
       machine,
@@ -91,22 +97,38 @@ export function registerMachineRoutes(
       context.env.incoming,
       context.req.header('cookie'),
     )
+    // 离线的机器收不到这个操作：不能宣称停掉一台连不上的机器，
+    // 只作废它在入口的设备身份；文案必须如实说明。
+    const online = registry.getBySlug(device.slug) !== undefined
+    const heading = online
+      ? `停止 ${device.slug} 上的 dsh-remote，并把它从 ${machine} 移除？`
+      : `把 ${device.slug} 从 ${machine} 移除？（当前离线）`
+    const intro = online
+      ? `停的是 ${device.slug} 上的 dsh-remote 和它的设备身份，不是它上面的对话记录。在 ${machine} 上无法撤销。`
+      : `${device.slug} 现在离线，这个操作送达不了那台机器，只在这里作废它的设备身份；它上面运行的服务不会被停掉。`
+    const consequences = online
+      ? [
+          `${device.slug} 上的 connector 会致命退出；用 dsh-remote 启动器跑的话，它的 dsh 进程会被一起停掉。`,
+          `与 ${device.slug} 的隧道立即断开，正在用它的浏览器当场失效。`,
+          '它未使用的注册令牌一并作废，旧令牌再也挂不上来。',
+          '分配给它的浏览器端口会关闭。',
+          `要重新挂回来，得在「机器」页再签一个注册令牌，并由人到 ${device.slug} 跟前重新启动 dsh-remote。`,
+        ]
+      : [
+          `${device.slug} 的设备记录被作废，未使用的注册令牌一并失效，分配给它的浏览器端口关闭。`,
+          `它下次连上来（或唤醒探测）会被拒绝，回到「没有远程入口」的状态；它上面运行的 dsh-remote 不会被停掉。`,
+          `要重新挂回来，得在「机器」页再签一个注册令牌，并由人到 ${device.slug} 跟前重新粘一次。`,
+        ]
     return new Response(confirmPage({
-      title: '停止并移除机器',
+      title: online ? '停止并移除机器' : '移除机器',
       machine,
-      heading: `停止 ${device.slug} 上的 dsh-remote，并把它从 ${machine} 移除？`,
-      intro: `停的是 ${device.slug} 上的 dsh-remote 和它的设备身份，不是它上面的对话记录。在 ${machine} 上无法撤销。`,
-      consequences: [
-        `${device.slug} 上的 connector 会致命退出；用 dsh-remote 启动器跑的话，它的 dsh 进程会被一起停掉。`,
-        `与 ${device.slug} 的隧道立即断开，正在用它的浏览器当场失效。`,
-        '它未使用的注册令牌一并作废，旧令牌再也挂不上来。',
-        '分配给它的浏览器端口会关闭。',
-        `要重新挂回来，得在「机器」页再签一个注册令牌，并由人到 ${device.slug} 跟前重新启动 dsh-remote。`,
-      ],
+      heading,
+      intro,
+      consequences,
       action: ADMIN_REVOKE_PATH,
       csrf,
       machineId: device.machineId,
-      submitLabel: `确认停止并移除 ${device.slug}`,
+      submitLabel: online ? `确认停止并移除 ${device.slug}` : `确认移除 ${device.slug}`,
       cancelPath: ADMIN_PATH_PREFIX,
       cancelLabel: '取消，返回机器列表',
       appearance: appearanceOf(context, `${ADMIN_REVOKE_PATH}?machineId=${encodeURIComponent(device.machineId)}`),
@@ -114,6 +136,36 @@ export function registerMachineRoutes(
       status: 200,
       headers: htmlHeaders([...session.setCookieHeaders, ...setCookieHeaders]),
     })
+  })
+
+  app.post(ADMIN_WAKEUP_PATH, async (context) => {
+    const session = sessionOf(context.env.incoming)
+    const body = await context.req.parseBody()
+    const forged = rejectForgedSubmit(context, body)
+    if (forged !== undefined) return forged
+    const machineId = textField(body.machineId)
+    const device = machineId === '' ? undefined : store.getDeviceByMachineId(machineId)
+    if (device === undefined) return emptyResponse(404, session.setCookieHeaders)
+    // 防御列表页之外的直接提交：本机永远在线，没有可请求的上线。
+    if (device.slug === config.directSlug) {
+      return redirectResponse(ADMIN_PATH_PREFIX, session.setCookieHeaders)
+    }
+    const now = Date.now()
+    let requested = false
+    if (device.revokedAt === null) requested = store.requestWakeup(machineId, now)
+    audit.record({
+      occurredAt: now,
+      event: 'machine.wakeup-requested',
+      success: requested,
+      actorUserId: session.userId,
+      machineId,
+      sourceIp: context.env.incoming.socket.remoteAddress ?? 'unknown',
+      metadata: {
+        slug: device.slug,
+        via: 'admin-console',
+      },
+    })
+    return redirectResponse(ADMIN_PATH_PREFIX, session.setCookieHeaders)
   })
 
   app.post(ADMIN_TOKEN_CREATE_PATH, async (context) => {

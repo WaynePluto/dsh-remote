@@ -83,6 +83,10 @@ export function createRelayServer(
       },
     }),
     logger,
+    // 「请求上线」送达后即完成使命；正常会话上线时清掉过期标记。
+    clearWakeup: (machineId) => {
+      options.store.clearWakeup(machineId)
+    },
     ...config.streamConnectTimeoutMs === undefined
       ? {}
       : { streamConnectTimeoutMs: config.streamConnectTimeoutMs },

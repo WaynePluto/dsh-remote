@@ -47,6 +47,17 @@ export interface ControlSessionOptions {
   /** 中止会话会请求优雅关闭。 */
   readonly signal: AbortSignal
   readonly onReady?: (frame: AuthOkFrame) => void
+  /**
+   * 唤醒探测会话：hello 携带 probe 标记，relay 没有「请求上线」时
+   * 会在 auth-ok 后礼貌关闭。探测会话绝不进入重试退避。
+   */
+  readonly probe?: boolean
+  /**
+   * 探测会话收到 reconnect-offer 时调用（恢复 membership 的写文件在
+   * 这里完成）；随后会话优雅结束，由主循环正常拨号上线。
+   * 只有 probe 会话会收到 offer。
+   */
+  readonly onOffer?: () => void
 }
 
 /**
@@ -274,6 +285,24 @@ export function runControlSession(options: ControlSessionOptions): Promise<Sessi
         })
         return
       }
+      if (frame.type === 'reconnect-offer') {
+        // 只有探测会话会收到；正常会话收到它说明 relay 违反协议。
+        if (!options.probe || phase !== 'ready') {
+          protocolViolation(`unexpected reconnect-offer in ${options.probe ? 'handshake' : 'a regular session'}`)
+          return
+        }
+        logger.info(
+          { relayUrl: config.relayUrl, slug: frame.slug },
+          'the hub offered to reconnect; restoring the membership and handing over to the regular dial loop',
+        )
+        try {
+          options.onOffer?.()
+        } catch (error) {
+          logger.error({ err: error }, 'could not restore the membership after a reconnect offer')
+        }
+        end({ authenticated: true, fatal: false, message: 'reconnect offered' }, 1000)
+        return
+      }
       protocolViolation(`relay cannot send ${frame.type} after authentication`)
     }
 
@@ -284,6 +313,7 @@ export function runControlSession(options: ControlSessionOptions): Promise<Sessi
         machineId: config.machineId,
         slug: config.slug,
         connectorVersion: config.connectorVersion,
+        ...options.probe === true ? { probe: true } : {},
       })
       handshakeTimer = setTimeout(() => {
         end({ authenticated: false, fatal: false, message: 'relay did not finish the handshake in time' }, 1002)

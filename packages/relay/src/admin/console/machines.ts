@@ -1,4 +1,5 @@
 import type { RelayConfig } from '../../config.js'
+import { PROBE_INTERVAL_MS } from '@dsh-remote/protocol'
 import {
   ENROLL_TOKEN_SHOWN_ONCE_NOTICE,
   ENROLL_TOKEN_SINGLE_USE_NOTICE,
@@ -10,6 +11,7 @@ import {
   ADMIN_PATH_PREFIX,
   ADMIN_REVOKE_PATH,
   ADMIN_TOKEN_CREATE_PATH,
+  ADMIN_WAKEUP_PATH,
   consolePage,
   formatTime,
   whereDshRuns,
@@ -70,40 +72,71 @@ function hubBrowserAuthority(options: {
   return hostname
 }
 
+/**
+ * 「已断开·可唤醒」状态的判定窗口：最近一次唤醒探测距今不超过
+ * 三个探测周期，就认为那台机器的服务还在运行、只是断开了远程入口。
+ */
+export const PROBE_FRESH_MS = 3 * PROBE_INTERVAL_MS
+
+/** 机器在列表页上的可达状态。 */
+type Presence = 'online' | 'idle' | 'offline'
+
 function machineItem(options: {
   device: DeviceRecord
   online: boolean
+  probedAt: number | undefined
+  now: number
+  csrf: string
   config: RelayConfig
   hostname: string | undefined
 }): string {
-  const { device, online, config, hostname } = options
+  const { device, online, probedAt, now, csrf, config, hostname } = options
   const revoked = device.revokedAt !== null
   // 本机（directSlug）就是运行这个控制台的机器：停止并移除它会
   // 杀掉它自己的 dsh-remote，这个操作没有意义，也不提供入口。
   const self = device.slug === config.directSlug
+  const presence: Presence = online
+    ? 'online'
+    : probedAt !== undefined && now - probedAt <= PROBE_FRESH_MS
+      ? 'idle'
+      : 'offline'
   const badge = revoked
     ? '<span class="badge gone">已停止并移除</span>'
-    : online
+    : presence === 'online'
       ? `<span class="badge on">在线</span>${self ? '<span class="badge">本机</span>' : ''}`
-      : `<span class="badge off">离线</span>${self ? '<span class="badge">本机</span>' : ''}`
+      : presence === 'idle'
+        ? `<span class="badge idle">已断开 · 可唤醒</span>${self ? '<span class="badge">本机</span>' : ''}`
+        : `<span class="badge off">离线</span>${self ? '<span class="badge">本机</span>' : ''}`
   const entry = revoked ? undefined : machineEntryUrl({ device, config, hostname })
-  const link = entry === undefined || !online
+  const link = entry === undefined || presence !== 'online'
     ? ''
     : `<a class="open" href="${escapeHtml(entry)}">打开 ${escapeHtml(device.slug)} 的 dsh →</a>`
+  // 「请求上线」对断开的机器立即生效（约一个探测周期内连回），对真正
+  // 离线的机器保留等待它回来；两种都值得提供，徽标已经说明区别。
+  const wakeup = revoked || self || presence === 'online'
+    ? ''
+    : `<form method="post" action="${ADMIN_WAKEUP_PATH}">
+<input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+<input type="hidden" name="machineId" value="${escapeHtml(device.machineId)}">
+<button type="submit">请求 ${escapeHtml(device.slug)} 上线</button></form>`
   // 使用链接而不是提交按钮：吊销无法从它所影响的机器上撤销，
-  // 因此要经过同一路径在 GET 上提供的确认页面。
+  // 因此要经过同一路径在 GET 上提供的确认页面。离线的机器收不到
+  // 任何消息——不能宣称「停止」一台连不上的机器，只移除它的设备身份。
+  const revokeLabel = presence === 'online'
+    ? `停止 ${escapeHtml(device.slug)} 并移除…`
+    : `移除 ${escapeHtml(device.slug)}…`
   const action = self
     ? '<span class="hint">本机运行着这个控制台，从这里打开即可。</span>'
     : revoked
       ? '<span class="off">已停止并移除，重新挂上来需要新的注册令牌。</span>'
-      : `<a class="danger-link" href="${ADMIN_REVOKE_PATH}?machineId=${encodeURIComponent(device.machineId)}">停止 ${escapeHtml(device.slug)} 并移除…</a>`
+      : `<a class="danger-link" href="${ADMIN_REVOKE_PATH}?machineId=${encodeURIComponent(device.machineId)}">${revokeLabel}</a>`
   const address = revoked || entry === undefined || entry === '/'
     ? ''
     : `<br>访问地址 ${escapeHtml(entry)}`
   return `<li class="machine">
 <h2>${escapeHtml(device.slug)}${badge}</h2>
 <p class="meta">machineId ${escapeHtml(device.machineId)}<br>注册于 ${escapeHtml(formatTime(device.createdAt))}<br>更新于 ${escapeHtml(formatTime(device.updatedAt))}${address}</p>
-<div class="actions">${link}${action}</div>
+<div class="actions">${link}${wakeup}${action}</div>
 </li>`
 }
 
@@ -185,6 +218,8 @@ function issueForm(options: { csrf: string; machine: string; error: string | und
 export function machinesPage(options: {
   devices: readonly DeviceRecord[]
   online: ReadonlySet<string>
+  /** 每台机器最近一次唤醒探测的时间（unix 毫秒），用于区分「已断开·可唤醒」与「离线」。 */
+  probes: ReadonlyMap<string, number>
   csrf: string
   config: RelayConfig
   machine: string
@@ -194,14 +229,23 @@ export function machinesPage(options: {
   issued?: IssuedTokenView
   error?: string
 }): string {
-  const { devices, online, csrf, config, machine, host } = options
+  const { devices, online, probes, csrf, config, machine, host } = options
   const hostname = consoleHostname(host)
+  const now = Date.now()
   const active = devices.filter(device => device.revokedAt === null)
   const onlineCount = active.filter(device => online.has(device.machineId)).length
   const list = devices.length === 0
     ? `<p class="empty">还没有别的机器挂在 ${escapeHtml(machine)} 上。在下面签发一个注册令牌，把它给想开放的那台机器。</p>`
     : `<ul class="machines">${devices
-      .map(device => machineItem({ device, online: online.has(device.machineId), config, hostname }))
+      .map(device => machineItem({
+        device,
+        online: online.has(device.machineId),
+        probedAt: probes.get(device.machineId),
+        now,
+        csrf,
+        config,
+        hostname,
+      }))
       .join('')}</ul>`
   const panel = options.issued === undefined
     ? ''
@@ -216,7 +260,7 @@ export function machinesPage(options: {
     appearance: options.appearance,
     body: `${panel}
 <h2 class="section">通过 ${escapeHtml(machine)} 开放的机器</h2>
-<p class="hint">这些机器把自己挂在 ${escapeHtml(machine)} 上，所以能从这里打开。「停止并移除」会让对方那台机器上的 dsh-remote 整个退出，并作废它未使用的注册令牌，但不会动 ${escapeHtml(machine)} 自己的远程入口。</p>
+<p class="hint">这些机器把自己挂在 ${escapeHtml(machine)} 上，所以能从这里打开。「已断开 · 可唤醒」表示那台机器的 dsh-remote 还在运行、只是断开了远程入口——点「请求上线」约一分钟内连回；「请求」对已关机的机器会保留 24 小时等它回来。「离线」则可能是关机，也可能挂去了别的入口——这两种从这里无法区分。在线机器的「停止并移除」会让对方 dsh-remote 整个退出并作废令牌；离线机器只能「移除」它的设备身份，停不到它上面运行的服务。</p>
 ${list}
 ${issueForm({ csrf, machine, error: options.error })}`,
   })

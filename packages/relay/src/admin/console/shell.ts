@@ -6,6 +6,8 @@ export const ADMIN_PATH_PREFIX = '/_admin'
 export const ADMIN_HUB_PATH = `${ADMIN_PATH_PREFIX}/hub`
 export const ADMIN_ACCOUNT_PATH = `${ADMIN_PATH_PREFIX}/account`
 export const ADMIN_REVOKE_PATH = `${ADMIN_PATH_PREFIX}/devices/revoke`
+/** 请求一台断开的机器重新上线；由它的下一次唤醒探测领取。 */
+export const ADMIN_WAKEUP_PATH = `${ADMIN_PATH_PREFIX}/machines/wakeup`
 export const ADMIN_TOKEN_CREATE_PATH = `${ADMIN_PATH_PREFIX}/tokens/create`
 export const ADMIN_PASSWORD_PATH = `${ADMIN_ACCOUNT_PATH}/password`
 export const ADMIN_TOTP_RESET_PATH = `${ADMIN_ACCOUNT_PATH}/totp/reset`
@@ -73,6 +75,7 @@ form{margin:16px 0 0}
 .badge{display:inline-flex;align-items:center;gap:6px;padding:1px 8px;border:1px solid var(--line-strong);border-radius:999px;font-size:11px;line-height:16px;font-weight:400;color:var(--ink-2)}
 .badge:before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--ink-3)}
 .badge.on:before{background:var(--success)}
+.badge.idle:before{background:var(--warn)}
 .badge.gone:before{background:var(--danger)}
 .off{color:var(--ink-3)}
 .gone{color:var(--danger)}

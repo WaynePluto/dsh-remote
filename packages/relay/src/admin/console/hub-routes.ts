@@ -63,6 +63,7 @@ export function registerHubRoutes(
     appearance: PageAppearance
     status: number
     error?: string
+    done?: 'leave' | 'reconnect'
   }): Response => page({
     session: context.session,
     status: context.status,
@@ -74,14 +75,20 @@ export function registerHubRoutes(
       username: context.session.username,
       appearance: context.appearance,
       ...context.error === undefined ? {} : { error: context.error },
+      ...context.done === undefined ? {} : { done: context.done },
     }),
   })
 
-  app.get(ADMIN_HUB_PATH, context => renderHub({
-    session: sessionOf(context.env.incoming),
-    appearance: appearanceOf(context, ADMIN_HUB_PATH),
-    status: 200,
-  }))
+  app.get(ADMIN_HUB_PATH, (context) => {
+    // 刚完成断开/重连后的「稍后刷新」提示；只认两个已知值。
+    const done = context.req.query('done')
+    return renderHub({
+      session: sessionOf(context.env.incoming),
+      appearance: appearanceOf(context, ADMIN_HUB_PATH),
+      status: 200,
+      ...done === 'leave' || done === 'reconnect' ? { done } : {},
+    })
+  })
 
   app.get(ADMIN_MEMBERSHIP_LEAVE_PATH, (context) => {
     const session = sessionOf(context.env.incoming)
@@ -98,7 +105,7 @@ export function registerHubRoutes(
     const consequences = view.kind === 'joined'
       ? [
           `${machine} 不再出现在 ${view.hub.relayUrl} 的机器列表里，也不能再从那个地址打开。`,
-          `这个入口会被记住，取消后可以在本页一键「重新连接」，不需要新的注册令牌。`,
+          `这个入口会被记住：取消后可以在本页一键「重新连接」，入口那边的「机器」页也能「请求上线」把 ${machine} 唤醒。`,
           `${machine} 的 dsh 会自动重启一次以撤销对入口机器地址的信任，期间短暂中断。`,
           `挂在 ${machine} 上的那些机器不受影响，一台都不会掉线。`,
           `本机和局域网地址不受影响，仍然可以打开 ${machine} 的 dsh。`,
@@ -254,7 +261,7 @@ export function registerHubRoutes(
         via: 'admin-console',
       },
     })
-    return redirectResponse(ADMIN_HUB_PATH, session.setCookieHeaders)
+    return redirectResponse(`${ADMIN_HUB_PATH}?done=leave`, session.setCookieHeaders)
   })
 
   app.post(ADMIN_MEMBERSHIP_RECONNECT_PATH, async (context) => {
@@ -306,6 +313,6 @@ export function registerHubRoutes(
         via: 'reconnect',
       },
     })
-    return redirectResponse(ADMIN_HUB_PATH, session.setCookieHeaders)
+    return redirectResponse(`${ADMIN_HUB_PATH}?done=reconnect`, session.setCookieHeaders)
   })
 }

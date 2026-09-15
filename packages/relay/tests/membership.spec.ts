@@ -285,7 +285,7 @@ describe('D16 membership: this machine joining a hub', () => {
       csrfPair: reloaded.csrfPair,
     })
     expect(response.status, response.body).toBe(303)
-    expect(response.headers.location).toBe(ADMIN_HUB_PATH)
+    expect(response.headers.location).toBe(`${ADMIN_HUB_PATH}?done=leave`)
     // 文件会保留但不带 hub：connector 必须读取明确的“not a member”。
     expect(membershipFileExists(fixture)).toBe(true)
     expect(storedHub(fixture)).toBeUndefined()
@@ -438,7 +438,7 @@ describe('remembering the last hub for one-click reconnect', () => {
       csrfPair: left.csrfPair,
     })
     expect(response.status, response.body).toBe(303)
-    expect(response.headers.location).toBe(ADMIN_HUB_PATH)
+    expect(response.headers.location).toBe(`${ADMIN_HUB_PATH}?done=reconnect`)
 
     // 恢复的 hub 不带令牌：connector 用设备密钥直接认证。
     expect(storedHub(fixture)).toMatchObject({
@@ -461,6 +461,56 @@ describe('remembering the last hub for one-click reconnect', () => {
     const back = await openConsole(fixture)
     expect(back.body).toContain('挂在一台入口机器上')
     expect(back.body).not.toContain('上次的远程入口')
+  })
+
+  it('tells the operator to refresh after leaving or reconnecting', async () => {
+    const fixture = await startFixture()
+    const joined = await openConsole(fixture)
+    await joinHub(fixture, {
+      csrf: joined.csrf,
+      csrfPair: joined.csrfPair,
+      fields: { command: HUB_COMMAND },
+    })
+    const reloaded = await openConsole(fixture)
+    const left = await post(fixture, ADMIN_MEMBERSHIP_LEAVE_PATH, {
+      csrf: reloaded.csrf,
+      csrfPair: reloaded.csrfPair,
+    })
+    expect(left.headers.location).toBe(`${ADMIN_HUB_PATH}?done=leave`)
+
+    // 断开后的页面：提示正在断开与 dsh 自动重启，稍后刷新。
+    const page = await openCsrfPage(fixture, {
+      path: `${ADMIN_HUB_PATH}?done=leave`,
+      host: HOST,
+      label: 'left',
+    })
+    expect(page.status, page.body).toBe(200)
+    expect(page.body).toContain('已提交取消')
+    expect(page.body).toContain('稍后刷新本页查看最新状态')
+
+    // 重连后的页面：提示正在拨号与恢复信任地址。
+    const consolePage = await openCsrfPage(fixture, {
+      path: ADMIN_HUB_PATH,
+      host: HOST,
+      label: 'reconnect-csrf',
+    })
+    const back = await post(fixture, ADMIN_MEMBERSHIP_RECONNECT_PATH, {
+      csrf: consolePage.csrf,
+      csrfPair: consolePage.csrfPair,
+    })
+    expect(back.headers.location).toBe(`${ADMIN_HUB_PATH}?done=reconnect`)
+    const reconnected = await openCsrfPage(fixture, {
+      path: `${ADMIN_HUB_PATH}?done=reconnect`,
+      host: HOST,
+      label: 'reconnected',
+    })
+    expect(reconnected.body).toContain('已提交重新连接')
+    expect(reconnected.body).toContain('稍后刷新本页查看最新状态')
+
+    // 未知 done 值不渲染提示；普通页面也没有。
+    const plain = await openConsole(fixture)
+    expect(plain.body).not.toContain('已提交取消')
+    expect(plain.body).not.toContain('已提交重新连接')
   })
 
   it('requires the CSRF token and ignores reconnect without a remembered hub', async () => {

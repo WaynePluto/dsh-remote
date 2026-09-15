@@ -35,6 +35,13 @@ export const helloFrameSchema = z.strictObject({
   machineId: machineIdSchema,
   slug: machineSlugSchema,
   connectorVersion: z.string().min(1).max(64),
+  /**
+   * 唤醒探测：connector 断开远程入口后仍按 {@link PROBE_INTERVAL_MS}
+   * 周期向 lastHub 报到。探测会话不进入在线名单；relay 有待处理的
+   * 「请求上线」时回 {@link reconnectOfferFrameSchema}。旧版 relay 的
+   * strictObject 会拒绝携带此字段的 hello——connector 按探测失败处理。
+   */
+  probe: z.literal(true).optional(),
 })
 
 export const challengeFrameSchema = z.strictObject({
@@ -155,12 +162,24 @@ export const errorFrameSchema = z.strictObject({
   fatal: z.boolean(),
 })
 
+/**
+ * Relay 对唤醒探测的应答：操作员在入口机器的「机器」页请求过这台机器上线。
+ * connector 收到后把 lastHub 恢复为 membership 的 hub（launcher 会自动重启
+ * dsh 恢复信任地址），随后结束探测会话，由主循环正常拨号上线。
+ */
+export const reconnectOfferFrameSchema = z.strictObject({
+  type: z.literal('reconnect-offer'),
+  version: frameVersionSchema,
+  slug: machineSlugSchema,
+})
+
 export const controlFrameSchema = z.discriminatedUnion('type', [
   helloFrameSchema,
   challengeFrameSchema,
   authFrameSchema,
   authOkFrameSchema,
   openStreamFrameSchema,
+  reconnectOfferFrameSchema,
   dshAuthFrameSchema,
   pingFrameSchema,
   pongFrameSchema,
@@ -182,6 +201,7 @@ export const relayToConnectorFrameSchema = z.discriminatedUnion('type', [
   challengeFrameSchema,
   authOkFrameSchema,
   openStreamFrameSchema,
+  reconnectOfferFrameSchema,
   pingFrameSchema,
   pongFrameSchema,
   errorFrameSchema,
@@ -193,6 +213,7 @@ export type AuthCredential = z.infer<typeof authCredentialSchema>
 export type AuthFrame = z.infer<typeof authFrameSchema>
 export type AuthOkFrame = z.infer<typeof authOkFrameSchema>
 export type OpenStreamFrame = z.infer<typeof openStreamFrameSchema>
+export type ReconnectOfferFrame = z.infer<typeof reconnectOfferFrameSchema>
 export type DshAuthFrame = z.infer<typeof dshAuthFrameSchema>
 export type PingFrame = z.infer<typeof pingFrameSchema>
 export type PongFrame = z.infer<typeof pongFrameSchema>

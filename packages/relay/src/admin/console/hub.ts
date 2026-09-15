@@ -142,14 +142,28 @@ function restartStatusCard(status: DshRestartStatus, machine: string): string {
 }
 
 /**
+ * 刚完成断开/重连后的「稍后刷新」提示。页面没有脚本，效果要等
+ * connector 重连与 dsh 自动重启完成，提示必须把这一点说清楚。
+ */
+function doneNotice(done: 'leave' | 'reconnect', machine: string): string {
+  const name = escapeHtml(machine)
+  const text = done === 'leave'
+    ? `已提交取消：${name} 的 connector 正在断开与入口的连接，dsh 正在自动重启以撤销对入口地址的信任——稍后刷新本页查看最新状态。`
+    : `已提交重新连接：${name} 的 connector 正在拨向入口机器，dsh 正在自动重启以恢复信任地址——稍后刷新本页查看最新状态。`
+  return `<p class="notice" role="status">${text}</p>`
+}
+
+/**
  * 远程入口页面：这台机器还可以从哪台机器的地址打开，以及设置它的唯一字段。
- * @param options 当前远程入口、launcher 最近一次 dsh 自动重启的进度、表单携带的 CSRF token、
- * 这台机器自己的名称、登录用户、要渲染的外观以及提交被拒绝时的错误。
+ * @param options 当前远程入口、launcher 最近一次 dsh 自动重启的进度、刚完成的操作
+ * （断开/重连，渲染「稍后刷新」提示）、表单携带的 CSRF token、这台机器自己的名称、
+ * 登录用户、要渲染的外观以及提交被拒绝时的错误。
  * @returns 完整的 HTML 文档。
  */
 export function hubPage(options: {
   view: MembershipView
   restartStatus?: DshRestartStatus | undefined
+  done?: 'leave' | 'reconnect' | undefined
   csrf: string
   machine: string
   username: string | null
@@ -161,6 +175,9 @@ export function hubPage(options: {
   const alert = options.error === undefined
     ? ''
     : `<p class="error" role="alert">${escapeHtml(options.error)}</p>`
+  const notice = options.done === undefined
+    ? ''
+    : doneNotice(options.done, machine)
   const restart = options.restartStatus === undefined
     ? ''
     : restartStatusCard(options.restartStatus, machine)
@@ -177,7 +194,7 @@ export function hubPage(options: {
     intro: `「机器」那一页是<strong>别的机器挂在 ${name} 上</strong>，在那里停止并移除一台机器，停的是对方那台机器上的 dsh-remote；这一页是 <strong>${name} 挂在别人身上</strong>，取消只影响 ${name} 自己，那边的机器一台都不会掉线。${name} 同时只能有一个远程入口。`,
     username: options.username,
     appearance: options.appearance,
-    body: `${alert}${entryCard(view, machine)}${reconnect}${restart}
+    body: `${notice}${alert}${entryCard(view, machine)}${reconnect}${restart}
 <h2 class="section">设置远程入口</h2>
 <p class="hint">到你想用作入口的那台机器上，在它控制台的「机器」页签发一个注册令牌，它会给出一条完整命令；把那条命令整个粘到下面。地址、${name} 在那边的机器名、注册令牌都在命令里，不用再分开填。粘好后 dsh 会自动重启以信任新的地址，本页会显示重启进度。</p>
 <form method="post" action="${ADMIN_MEMBERSHIP_JOIN_PATH}">

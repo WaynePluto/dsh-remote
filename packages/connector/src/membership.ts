@@ -8,6 +8,7 @@ import {
   serializeMembership,
   type Membership,
   type MembershipHub,
+  type MembershipLastHub,
 } from '@dsh-remote/protocol'
 
 /**
@@ -157,6 +158,50 @@ export function demoteRejectedHub(path: string, hub: Pick<MembershipHub, 'relayU
 }
 
 /**
+ * 收到 reconnect-offer 后把 lastHub 恢复为 membership 的 hub。
+ *
+ * 只在文件仍处于「没有入口/只有自挂条目」且 lastHub 未变时写入：
+ * offer 在途的几秒里操作员可能粘了新命令，那份新意图优先。
+ * 恢复会清掉 lastHub——它与 relay 控制台的「重新连接」路由等价。
+ * @param path membership 文件路径。
+ * @param lastHub 收到 offer 的那个上次入口。
+ * @returns membership 已恢复时为 true。
+ * @throws MembershipFileError 文件不可读、格式错误或不可写时抛出。
+ */
+export function restoreLastHub(path: string, lastHub: MembershipLastHub): boolean {
+  const membership = readMembershipFile(path)
+  const joined = membership?.hub
+  if (joined !== undefined && joined.selfManaged !== true) return false
+  if (membership?.lastHub === undefined
+    || membership.lastHub.relayUrl !== lastHub.relayUrl
+    || membership.lastHub.slug !== lastHub.slug) return false
+  writeMembershipFile(path, { version: 1, hub: { ...lastHub, joinedAt: Date.now() } })
+  return true
+}
+
+/**
+ * 探测被入口拒绝（设备已吊销或移除）后忘掉 lastHub：这个入口已经
+ * 不可能一键重连，保留它只会让探测永远失败。仍存在的自挂条目原样保留。
+ * @param path membership 文件路径。
+ * @param lastHub 被拒绝的那个上次入口。
+ * @returns lastHub 已被清除时为 true。
+ * @throws MembershipFileError 文件不可读、格式错误或不可写时抛出。
+ */
+export function forgetLastHub(path: string, lastHub: Pick<MembershipLastHub, 'relayUrl' | 'slug'>): boolean {
+  const membership = readMembershipFile(path)
+  const joined = membership?.hub
+  if (membership?.lastHub === undefined
+    || membership.lastHub.relayUrl !== lastHub.relayUrl
+    || membership.lastHub.slug !== lastHub.slug) return false
+  if (joined === undefined) {
+    writeMembershipFile(path, { version: 1 })
+  } else {
+    writeMembershipFile(path, { version: 1, hub: joined })
+  }
+  return true
+}
+
+/**
  * @param a - 一个 membership；“尚未加入”时为 undefined。
  * @param b - 另一个 membership。
  * @returns 两者逐字段描述完全相同的 hub 时为 true；比较每个字段是为了
@@ -165,12 +210,24 @@ export function demoteRejectedHub(path: string, hub: Pick<MembershipHub, 'relayU
 export function sameMembership(a: Membership | undefined, b: Membership | undefined): boolean {
   const left = a?.hub
   const right = b?.hub
-  if (left === undefined || right === undefined) return left === right
-  return left.relayUrl === right.relayUrl
-    && left.slug === right.slug
-    && left.enrollToken === right.enrollToken
-    && left.browserAuthority === right.browserAuthority
-    && left.joinedAt === right.joinedAt
+  const hubSame = left === undefined || right === undefined
+    ? left === right
+    : left.relayUrl === right.relayUrl
+      && left.slug === right.slug
+      && left.enrollToken === right.enrollToken
+      && left.browserAuthority === right.browserAuthority
+      && left.joinedAt === right.joinedAt
+  if (!hubSame) return false
+  // lastHub 参与比较：遗忘/写入它也必须唤醒空闲循环与唤醒探测的重新评估。
+  const leftRemembered = a?.lastHub
+  const rightRemembered = b?.lastHub
+  const lastSame = leftRemembered === undefined || rightRemembered === undefined
+    ? leftRemembered === rightRemembered
+    : leftRemembered.relayUrl === rightRemembered.relayUrl
+      && leftRemembered.slug === rightRemembered.slug
+      && leftRemembered.browserAuthority === rightRemembered.browserAuthority
+      && leftRemembered.joinedAt === rightRemembered.joinedAt
+  return lastSame
 }
 
 export interface MembershipWatcher {

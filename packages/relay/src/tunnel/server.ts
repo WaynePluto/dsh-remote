@@ -15,6 +15,7 @@ import {
   HEARTBEAT_TIMEOUT_MS,
   MAX_CONTROL_FRAME_BYTES,
   PROTOCOL_VERSION,
+  WAKEUP_REQUEST_TTL_MS,
   decodeControlFrame,
   ProtocolDecodeError,
   type ErrorFrame,
@@ -57,10 +58,18 @@ export class TunnelServer {
   readonly #logger: Logger
   readonly #handshakes = new Map<WebSocket, Handshake>()
   readonly #stopHeartbeat: () => void
+  readonly #clearWakeup: ((machineId: string) => void) | undefined
 
-  constructor(options: { devices: DeviceVerifier; logger: Logger; streamConnectTimeoutMs?: number }) {
+  constructor(options: {
+    devices: DeviceVerifier
+    logger: Logger
+    streamConnectTimeoutMs?: number
+    /** 「请求上线」标记送达（发 offer）或机器正常上线时调用，由 server 接 store。 */
+    clearWakeup?: (machineId: string) => void
+  }) {
     this.#devices = options.devices
     this.#logger = options.logger
+    this.#clearWakeup = options.clearWakeup
     this.registry = new MachineRegistry(options.logger, options.streamConnectTimeoutMs)
     this.#stopHeartbeat = this.registry.startHeartbeat()
   }
@@ -145,6 +154,12 @@ export class TunnelServer {
 
       clearTimeout(handshake.timer)
       this.#handshakes.delete(ws)
+      if (handshake.hello.probe === true) {
+        this.#acceptProbe(ws, frame.machineId, handshake.hello, authenticated.device.wakeupRequestedAt)
+        return
+      }
+      // 正常上线：完成使命的「请求上线」标记随手清掉。
+      if (authenticated.device.wakeupRequestedAt !== null) this.#clearWakeup?.(frame.machineId)
       this.registry.register({
         machineId: frame.machineId,
         slug: handshake.hello.slug,
@@ -189,6 +204,36 @@ export class TunnelServer {
     const timer = setTimeout(() => this.#sendError(ws, 'AUTH_FAILED', 'control handshake timed out', true), HANDSHAKE_TIMEOUT_MS)
     timer.unref()
     return timer
+  }
+
+  /**
+   * 处理一次唤醒探测：不进在线名单，只记录时间戳供机器页区分
+   * 「已断开·可唤醒」与「离线」。有待处理的「请求上线」时回
+   * reconnect-offer——标记留给正常上线时清除；offer 未被兑现
+   * （机器恢复失败）时，下一个探测会再次收到 offer，自愈。
+   */
+  #acceptProbe(
+    ws: WebSocket,
+    machineId: string,
+    hello: HelloFrame,
+    wakeupRequestedAt: number | null,
+  ): void {
+    this.registry.noteProbe(machineId)
+    ws.send(JSON.stringify({
+      type: 'auth-ok',
+      version: PROTOCOL_VERSION,
+      machineId,
+      slug: hello.slug,
+      heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
+      heartbeatTimeoutMs: HEARTBEAT_TIMEOUT_MS,
+    }))
+    if (wakeupRequestedAt !== null && Date.now() - wakeupRequestedAt <= WAKEUP_REQUEST_TTL_MS) {
+      this.#logger.info({ machineId, slug: hello.slug }, 'wakeup probe answered with a reconnect offer')
+      ws.send(JSON.stringify({ type: 'reconnect-offer', version: PROTOCOL_VERSION, slug: hello.slug }))
+      return
+    }
+    // 没有待处理请求：礼貌关闭，connector 睡到下一个周期。
+    ws.close(1000)
   }
 
   #sendError(ws: WebSocket, code: ErrorFrame['code'], message: string, fatal: boolean): void {

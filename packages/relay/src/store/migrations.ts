@@ -122,6 +122,15 @@ export const STORE_MIGRATIONS: readonly StoreMigration[] = Object.freeze([
       ALTER TABLE enroll_tokens DROP COLUMN used_at;
     `,
   },
+  {
+    version: 4,
+    name: 'operator wakeup requests for disconnected machines',
+    sql: `
+      -- Set by the machines page and delivered to the machine's next wakeup
+      -- probe; cleared when the machine comes online, expired by TTL.
+      ALTER TABLE devices ADD COLUMN wakeup_requested_at INTEGER;
+    `,
+  },
 ])
 
 export const CURRENT_STORE_VERSION = STORE_MIGRATIONS.at(-1)?.version ?? 0
