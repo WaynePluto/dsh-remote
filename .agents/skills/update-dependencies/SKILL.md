@@ -46,7 +46,8 @@ dsh 是 0.1.x developer preview，**每个 rc / alpha 都可能有破坏性变�
 1. 读 `docs/02-dsh-facts.md` 的当前基线、检查表和 `docs/dsh/` 对应主题。
 2. 加载 skill `dsh-source`（`.agents/skills/dsh-source/SKILL.md`），把本地 dsh checkout 切到对应
    tag，核对下面这些**本项目真正依赖的行为**，逐条给出「变 / 没变」而不是凭记忆：
-   - `--trusted-host` CLI 参数是否还在、格式是否还是裸 `host` / `host:port`（铁律 7、写错是启动即失败）
+   - `--trusted-host` CLI 参数是否还在、格式是否还是裸 `host` / `host:port`（铁律 7、写错是启动即失败）；
+     同时按第 8 步检查上游是否提供了 trustedHosts 的运行时更新契约
    - `/api` 的 Host/Origin 校验逻辑（`packages/client/connection/src/api-request-trust.ts` 一类）
    - ownsHost 与远程设置持久化、浏览器信任围栏是否变化（见 `docs/dsh/transport.md`）
    - 浏览器认证的 token 输出格式、cookie 与认证范围是否变化，会不会让 relay 登录后仍吃 401
@@ -192,6 +193,30 @@ pnpm dev                             # 起 relay + connector + dsh，浏览器�
 
 整理成推荐列表（能力名、dsh 提供了什么、本仓库需要改多少）报告给用户，
 **由用户决定**是否实现，不要擅自加功能或改架构（架构决策见 `docs/01-decisions.md`、`docs/03-architecture.md`）。
+
+### 8. 常设关注：trustedHosts 能否运行时更新（决定是否去掉 dsh 自动重启）
+
+**背景**：membership 变化改变 dsh 必须信任的 Host 集合（切换/取消远程入口）时，launcher 目前
+**自动重启 dsh**（`packages/launcher/src/dsh-restart.ts` + `src/index.ts` 的 `restartForTrust`）。
+重启会打断当时正在进行的任务（生成中的回复、执行中的工具调用；会话历史与 services 常驻服务不受影响）。
+重启的唯一原因是 dsh 的 trustedHosts 在进程内**不可变**，而换入口必然改变 Host 集合，不重启就会 403。
+
+**源码依据（基线 fb2c4b9e69 / dsh 0.1.5-rc.2，升级时逐条复核）**：
+
+- trustedHosts 来自 connection 插件启动配置，加载时一次性解析
+  （`packages/client/connection/src/index.ts` 的 `apply()`，非法条目启动即失败）
+- 存进 `HostConnectionService` 的 `private readonly trustedHosts`（`packages/client/connection/src/rpc-host.ts`），
+  每个请求的 fence 检查只读这个不可变字段
+- web-app 启动时一次性采样（`packages/bundle/web-app/src/index.ts` 的 `resolveLanTrust`，注释写明 sampled once）
+- dsh 没有任何运行时修改接口；铁律 1 禁止改/fork dsh，所以重启是现有约束下的最小区
+
+**每次升级 dsh 时检查**：上游是否提供了 trustedHosts 的运行时更新契约。看三处——
+`HostConnectionService` 的 `trustedHosts` 是否仍是 readonly 构造参数、是否出现 mutator/setter
+或新的 plugin service、web-app 是否仍一次性采样。
+
+**如果上游有了**：向用户提出吸收建议（第 7 步流程），把 launcher 的自动重启替换为运行时更新调用；
+`dsh-restart-status.json` 状态文件与「远程入口」页的重启提示随之简化。**在确认上游契约之前，
+不要动现有重启机制**——它经端到端冒烟验证过，是当前唯一正确的做法。
 
 ## 完成后
 
