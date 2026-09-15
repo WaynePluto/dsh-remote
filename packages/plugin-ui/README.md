@@ -5,6 +5,9 @@
 ## 边界
 
 - 不提供 overlay、Cordis service、Host 入口或独立运行时状态。
-- dialog 几何、pointer 生命周期、设置导航图标、Inspector/dock 样式和共享测试断言由此包提供。
+- dialog 几何、pointer 生命周期、全屏（最大化）开关、设置导航图标、Inspector/dock 样式和共享测试断言由此包提供。
+- 全屏能力（`useDialogFullscreen`、`dialogFullscreenButtonRule`、`DialogFullscreenButton`）由 services 日志弹窗与
+  turn-retry 原因弹窗共用；插件只提供自己的 dialog class、data 属性名与图标，几何通道与拖动 resize 同一组 custom properties。
+  本包不依赖 dsh primitives，图标由调用方传入。
 - 消费插件的 client bundle 会把本包内联；React、`react/jsx-runtime`、Cordis、dsh store/slots/primitives 继续使用页面已有的 external 单例。
 - 改动后运行 `pnpm --filter @dsh-remote/plugin-ui typecheck`、`pnpm --filter @dsh-remote/plugin-ui build`，再构建使用它的插件。

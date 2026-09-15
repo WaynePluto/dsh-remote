@@ -5,6 +5,9 @@ import {
   dialogMoveBounds,
   dialogResizeBounds,
   dialogWidth,
+  DIALOG_FULLSCREEN_RIGHT_PX,
+  DIALOG_FULLSCREEN_TOP_PX,
+  dialogFullscreenButtonRule,
 } from '@dsh-remote/plugin-ui'
 import type {
   DialogMoveBounds,
@@ -28,6 +31,11 @@ export const LOG_DIALOG_MIN_WIDTH_PX = 300
 export const LOG_DIALOG_MIN_BODY_HEIGHT_PX = 110
 export const LOG_DIALOG_HEIGHT = 'min(60vh, calc(100vh - ' + String(LOG_DIALOG_CHROME_PX) + 'px))'
 export const LOG_PATH_MIN_HEIGHT_PX = 16
+/** 全屏按钮紧贴 Modal 自带 close 按钮左侧；几何与样式规则由 plugin-ui 统一提供。 */
+export const LOG_DIALOG_FULLSCREEN_TOP_PX = DIALOG_FULLSCREEN_TOP_PX
+export const LOG_DIALOG_FULLSCREEN_RIGHT_PX = DIALOG_FULLSCREEN_RIGHT_PX
+/** 全屏按钮挂到 dialog 上的 data 属性名。 */
+export const LOG_DIALOG_FULLSCREEN_ATTR = 'data-dsh-services-log-fullscreen'
 
 /** 业务名称继续保留；几何方向和计算统一由 plugin-ui 提供。 */
 export type LogDialogResizeDirection = DialogResizeDirection
@@ -94,7 +102,9 @@ export function logDialogRule(): string {
     ')!important}' +
     '.' +
     LOG_DIALOG_CLASS +
-    ' [data-dsh-services-resize-handle]{pointer-events:auto;touch-action:none;user-select:none}'
+    ' [data-dsh-services-resize-handle]{pointer-events:auto;touch-action:none;user-select:none}' +
+    // 全屏按钮的样式与位置由公共包生成；services 只提供自己的 class 与 data 属性名。
+    dialogFullscreenButtonRule(LOG_DIALOG_CLASS, LOG_DIALOG_FULLSCREEN_ATTR)
   )
 }
 

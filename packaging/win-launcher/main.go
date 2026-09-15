@@ -99,7 +99,11 @@ func runTray() int {
 		return 1
 	}
 
-	resolved := loadSettings(root, os.Args[1:])
+	// --autostart 只属于本程序（自启动条目用它标记登录拉起），
+	// launcher 不认识这个参数，转发前必须去掉。
+	launcherArguments, launchedByAutostart := splitArguments(os.Args[1:])
+
+	resolved := loadSettings(root, launcherArguments)
 	log, err := openLog(resolved.logPath())
 	if err != nil {
 		messageBox(
@@ -118,9 +122,16 @@ func runTray() int {
 	} else {
 		log.printf("已读取配置 %s：dsh 界面 %s，管理界面 %s", resolved.path, resolved.dshWebURL(), resolved.adminURL())
 	}
+	upgradeAutostartEntry(executable, log)
 
-	app = &application{executable: executable, root: root, settings: resolved, log: log}
-	app.stack = newStack(root, node, os.Args[1:], log)
+	app = &application{
+		executable:          executable,
+		root:                root,
+		settings:            resolved,
+		log:                 log,
+		launchedByAutostart: launchedByAutostart,
+	}
+	app.stack = newStack(root, node, launcherArguments, log)
 	app.stack.onLine = app.onChildLine
 	app.stack.onState = app.onStateChange
 
@@ -147,6 +158,20 @@ func runTray() int {
 	app.removeIcon()
 	log.printf("dsh-remote 托盘已退出")
 	return 0
+}
+
+// splitArguments 分离只属于本程序的参数；目前只有 --autostart。
+// 其余参数原样转交给 launcher。
+func splitArguments(arguments []string) (rest []string, autostart bool) {
+	remaining := make([]string, 0, len(arguments))
+	for _, argument := range arguments {
+		if argument == autostartFlag {
+			autostart = true
+			continue
+		}
+		remaining = append(remaining, argument)
+	}
+	return remaining, autostart
 }
 
 // runSelfCheck 在托盘显示图标前验证它所需的一切：

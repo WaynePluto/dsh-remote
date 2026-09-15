@@ -58,11 +58,11 @@ export const listStyle: CSSProperties = {
   minWidth: 0,
 }
 
+/** 单行布局：不允许换行，超长内容由 name/facts 各自的 ellipsis 吸收。 */
 export const rowStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: '8px',
-  flexWrap: 'wrap',
   minWidth: 0,
 }
 
@@ -84,6 +84,14 @@ export const factsStyle: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
+}
+
+/** 行尾操作按钮组；flex:none 保证 facts 超长时按钮不被压缩换行。 */
+export const rowActionsStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  flex: 'none',
 }
 
 /** modal 内的日志 body，固定高度避免日志加载后 dialog 跳变。 */

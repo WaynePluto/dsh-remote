@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 // 使用 dsh primitives 和本插件的 dialog resize helper；布局保持 dock-card 约定。
-import { Button, IconRefreshOutline14, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconFullscreenOutline16, IconRefreshOutline14, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { DialogFullscreenButton, useDialogFullscreen } from '@dsh-remote/plugin-ui'
 import type { RetryResult, TurnRetryState } from '../shared.js'
 import { fill } from './locales.js'
 import type { RetryKey } from './locales.js'
 import {
-  REASON_DIALOG_BODY_HEIGHT_PROP, REASON_DIALOG_CLASS, REASON_DIALOG_HEIGHT, REASON_DIALOG_MIN_BODY_HEIGHT_PX, REASON_DIALOG_MIN_WIDTH_PX, REASON_DIALOG_OFFSET_X_PROP, REASON_DIALOG_OFFSET_Y_PROP, REASON_DIALOG_ROOT_PADDING_PX, REASON_DIALOG_WIDTH_PROP, publishReasonDialogWidth, reasonDialogRule,
+  REASON_DIALOG_BODY_HEIGHT_PROP, REASON_DIALOG_CLASS, REASON_DIALOG_FULLSCREEN_ATTR, REASON_DIALOG_HEIGHT, REASON_DIALOG_MIN_BODY_HEIGHT_PX, REASON_DIALOG_MIN_WIDTH_PX, REASON_DIALOG_OFFSET_X_PROP, REASON_DIALOG_OFFSET_Y_PROP, REASON_DIALOG_ROOT_PADDING_PX, REASON_DIALOG_WIDTH_PROP, publishReasonDialogWidth, reasonDialogRule,
   reasonDialogWidth,
 } from './reason-dialog.js'
 import { ReasonMoveHandle, ReasonResizeHandle, useReasonDialogResize } from './dialog-resize.js'
@@ -186,6 +187,12 @@ export function RetryBanner({ pending, running, onRetry, t }: RetryDockOwnProps)
   const { onPointerDown: onReasonResizePointerDown, onMovePointerDown: onReasonMovePointerDown, reset: resetReasonResize } = useReasonDialogResize(REASON_RESIZE_CONFIG)
   useEffect(() => installReasonDialogStyles(), [])
   const turn = pending?.turn
+  // 全屏开关由公共 hook 管理：进入前保存几何、退出写回、resize 跟随、换轮次或关闭即复位。
+  const { fullscreen: reasonFullscreen, toggle: toggleReasonFullscreen } = useDialogFullscreen({
+    ...REASON_RESIZE_CONFIG,
+    open: reasonOpen,
+    identity: turn === undefined ? undefined : String(turn),
+  })
   useEffect(() => {
     setError(null)
     setBusy(false)
@@ -278,8 +285,16 @@ export function RetryBanner({ pending, running, onRetry, t }: RetryDockOwnProps)
           )}
           {error !== null && <div style={errorStyle}>{error}</div>}
         </div>
-        <ReasonMoveHandle onPointerDown={onReasonMovePointerDown} />
-        {['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'].map(direction => <ReasonResizeHandle key={direction} direction={direction as 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw'} onPointerDown={onReasonResizePointerDown} />)}
+        {/* 全屏开关贴在 Modal 自带 close 按钮左侧；样式由 reasonDialogRule 提供。 */}
+        <DialogFullscreenButton
+          dataAttribute={REASON_DIALOG_FULLSCREEN_ATTR}
+          label={translate(reasonFullscreen ? 'exitFullscreen' : 'enterFullscreen')}
+          onToggle={toggleReasonFullscreen}
+          icon={<IconFullscreenOutline16 size={14} />}
+        />
+        {/* 全屏时尺寸已拉满：拖动与八向 resize 都没有意义，一并隐藏。 */}
+        {!reasonFullscreen && <ReasonMoveHandle onPointerDown={onReasonMovePointerDown} />}
+        {!reasonFullscreen && ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'].map(direction => <ReasonResizeHandle key={direction} direction={direction as 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw'} onPointerDown={onReasonResizePointerDown} />)}
       </Modal>
     </div>
   )

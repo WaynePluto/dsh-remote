@@ -5,30 +5,41 @@ import (
 	"strings"
 	"sync/atomic"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
 const (
 	windowClassName = "DshRemoteTrayWindow"
 
-	// 本程序唯一监视的 launcher 输出。横幅
-	// 会在控制台尚无管理员时打印它
-	//（packages/launcher/src/banner.ts）；这是用户在
-	// 一切可用前唯一需要获知的状态。
+	// 本程序监视的两行 launcher 输出都来自启动横幅
+	//（packages/launcher/src/banner.ts），而横幅只在 dsh 真正
+	// 开始监听后打印，因此此刻点击通知里的地址是安全的：
+	// - 「还没有管理员账号」说明设置向导仍在等待，是
+	//   一切可用前用户唯一需要获知的状态；
+	// - 「dsh 已就绪」说明界面已经可以打开，是回应
+	//   双击之后「好像没反应」的时机。
 	adminMissingMarker = "还没有管理员账号"
+	readyMarker        = "dsh 已就绪"
+
+	// 新装机器的横幅同时包含两个标记，只隔几毫秒；推迟
+	// 一秒再决定发不发「已启动」，更重要的设置通知就
+	// 有机会先标记自己、独占屏幕。
+	startedNoticeDelay = time.Second
 )
 
 // 私有消息。Shell_NotifyIcon 回传到 wmTrayCallback；
 // 另外两个用于把工作 goroutine 完成的任务转为 UI
 // 并在拥有窗口的线程上处理。
 const (
-	wmTrayCallback = wmApp + 1
-	wmStateChanged = wmApp + 2
-	wmSetupNotice  = wmApp + 3
+	wmTrayCallback  = wmApp + 1
+	wmStateChanged  = wmApp + 2
+	wmSetupNotice   = wmApp + 3
+	wmStartedNotice = wmApp + 4
 )
 
 // 菜单命令标识符。TrackPopupMenu 直接返回它们
-//（TPM_RETURNCMD），所以后面不需要处理 WM_COMMAND。
+// （TPM_RETURNCMD），所以后面不需要处理 WM_COMMAND。
 const (
 	idOpenDsh uintptr = iota + 1
 	idOpenAdmin
@@ -49,9 +60,13 @@ type application struct {
 	settings   settings
 	log        *rotatingLog
 	stack      *stack
-	// 每次运行只显示一次设置气球通知：launcher 每次重启都会重新打印横幅，
-	// 每次重启都通知只会造成打扰，而不是帮助。
-	setupNoticeShown atomic.Bool
+	// 开机自启动拉起的这次运行不弹「已启动」通知：登录时的
+	// 通知没有对应的用户动作，只会造成打扰。
+	launchedByAutostart bool
+	// 两条气球通知都每次运行最多显示一次：launcher 每次重启
+	// 都会重新打印横幅，每次重启都通知只会造成打扰，而不是帮助。
+	setupNoticeShown   atomic.Bool
+	startedNoticeShown atomic.Bool
 }
 
 var (
@@ -95,6 +110,9 @@ func wndProc(hwnd syscall.Handle, message uint32, wParam uintptr, lParam uintptr
 		return 0
 	case wmSetupNotice:
 		app.showSetupBalloon()
+		return 0
+	case wmStartedNotice:
+		app.showStartedBalloon()
 		return 0
 	case wmClose:
 		procDestroyWindow.Call(uintptr(hwnd))
@@ -145,7 +163,7 @@ func createWindow() (syscall.Handle, error) {
 }
 
 // loadTrayIcon 从本可执行文件自己的资源中取出图标
-//（packaging/win-launcher/rsrc_windows_amd64.syso，由
+// （packaging/win-launcher/rsrc_windows_amd64.syso，由
 // packaging/make-icons.mjs 生成），失败时回退到系统默认应用图标：
 // 如果程序完全没有图标，用户就失去唯一的操作入口。
 //
@@ -215,9 +233,8 @@ func (a *application) updateTooltip() {
 	procShellNotifyIconW.Call(uintptr(nimModify), uintptr(unsafe.Pointer(&data)))
 }
 
-// showSetupBalloon 是本程序唯一主动发出的通知。它
-// 说明缺少什么并提供页面，但不会打开页面（D6）；用户
-// 必须自行点击。
+// showSetupBalloon 说明缺少什么并提供页面，但不会
+// 打开页面（D6）；用户必须自行点击。
 func (a *application) showSetupBalloon() {
 	data := a.baseIconData()
 	data.uFlags = nifInfo
@@ -227,16 +244,39 @@ func (a *application) showSetupBalloon() {
 	procShellNotifyIconW.Call(uintptr(nimModify), uintptr(unsafe.Pointer(&data)))
 }
 
+// showStartedBalloon 回应双击之后的「好像没反应」：说明图标落在
+// 哪里、怎么打开界面。新装机器上让位给设置通知——那一条更可
+// 行动，而且只晚几毫秒。
+func (a *application) showStartedBalloon() {
+	if a.setupNoticeShown.Load() {
+		return
+	}
+	data := a.baseIconData()
+	data.uFlags = nifInfo
+	data.dwInfoFlags = niifInfo
+	setUTF16(data.szInfoTitle[:], "dsh-remote 已启动")
+	setUTF16(data.szInfo[:], "图标在任务栏右下角的通知区域（可能折叠在「^」里）。点这条通知打开 dsh 界面；右键图标可停止或退出。")
+	procShellNotifyIconW.Call(uintptr(nimModify), uintptr(unsafe.Pointer(&data)))
+}
+
+// onChildLine 运行在读取子进程输出的 goroutine 上，而所有
+// shell 调用都必须属于拥有窗口的线程，因此这里只投递消息。
 func (a *application) onChildLine(line string) {
-	if !strings.Contains(line, adminMissingMarker) {
+	if strings.Contains(line, adminMissingMarker) {
+		if a.setupNoticeShown.Swap(true) {
+			return
+		}
+		procPostMessageW.Call(uintptr(a.hwnd), uintptr(wmSetupNotice), 0, 0)
 		return
 	}
-	if a.setupNoticeShown.Swap(true) {
+	if a.launchedByAutostart {
 		return
 	}
-	// 使用投递而不是直接调用：此代码运行在读取子进程
-	// 输出的 goroutine 上，而所有 shell 调用都必须属于拥有窗口的线程。
-	procPostMessageW.Call(uintptr(a.hwnd), uintptr(wmSetupNotice), 0, 0)
+	if strings.Contains(line, readyMarker) && !a.startedNoticeShown.Swap(true) {
+		time.AfterFunc(startedNoticeDelay, func() {
+			procPostMessageW.Call(uintptr(a.hwnd), uintptr(wmStartedNotice), 0, 0)
+		})
+	}
 }
 
 func (a *application) onStateChange() {

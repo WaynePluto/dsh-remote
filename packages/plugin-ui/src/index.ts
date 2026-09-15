@@ -39,6 +39,26 @@ export type {
 } from './dialog-pointer.js'
 
 export {
+  DialogFullscreenButton,
+  DIALOG_FULLSCREEN_RIGHT_PX,
+  DIALOG_FULLSCREEN_TOP_PX,
+  dialogFullscreenButtonRule,
+  dialogFullscreenGeometry,
+  findDialog,
+  readDialogGeometry,
+  useDialogFullscreen,
+  writeDialogGeometry,
+} from './dialog-fullscreen.js'
+export type {
+  DialogFullscreenBounds,
+  DialogFullscreenButtonProps,
+  DialogFullscreenConfig,
+  DialogFullscreenState,
+  DialogGeometry,
+  DialogGeometryConfig,
+} from './dialog-fullscreen.js'
+
+export {
   installNavigationGlyph,
   navigationGlyphStylesheet,
 } from './navigation-glyph.js'

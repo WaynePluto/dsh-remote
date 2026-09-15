@@ -152,6 +152,33 @@ line-height:1.4; white-space:nowrap`，SVG `display:block; flex:none`。这样�
 
 需要让预览路径/操作栏在内容滚动时留在顶部时，`position: sticky; top: 0` 必须写在实际滚动容器的后代上，并配不透明的 `var(--dsw-alias-bg-base)` 背景和足够的 `z-index`，否则正文会穿过表头。滚动容器在表头上方不要保留 padding：sticky 会停在 padding edge，正文仍可能从表头上方露出；把上方留白移到 sticky 表头自身的 `padding-top`。不要改成 `position: fixed`，那会脱离 Sidebar pane 的滚动坐标和宽度。实例是 `packages/plugins/files/src/client/styles.ts` 的 `.dsh-files-preview` / `.dsh-files-preview-head`；真实 dsh 页面滚动预览区 500px 后，表头 `getBoundingClientRect().top` 与滚动容器顶部一致。
 
+### Modal 弹窗内自绘头部按钮
+
+dsh Modal（`packages/client/ui-primitives/src/Modal.tsx`）没有自定义 header 插槽；插件传的
+`className` 落在 `.dialog` 卡片上（`position:relative; overflow:hidden`）。要在关闭按钮旁加按钮，
+只能作为 Modal children 绝对定位：close 按钮是 28×28、右距 14、header padding-top 22
+（`Modal.module.css` 的 `.header`/`.close`），紧贴其左侧即 `top:22px; right:50px`（14+28+8）。
+按钮样式复刻 `.close`：transparent 背景、`--dsw-alias-label-secondary` 图标色、hover 用
+`--dsw-alias-interactive-bg-hover`（浅色实测 rgba(38,49,72,0.06)、深色 rgba(255,255,255,0.08)），不写死颜色、保留 UA 焦点轮廓；
+base 与 :hover 放同一局部 stylesheet 规则，不用 inline style。若卡片上还有自绘移动热区
+（z-index 2）与 resize 手柄（3），按钮要取更高层才能先收到点击（公共实现用 4）。dsh 图标集只有
+`IconFullscreenOutline16`（展开方向），无收缩图标，两种状态共用图标、切换 aria-label 即可。
+**第二次复用时就该提取**：services 与 turn-retry 的弹窗结构相同，全屏能力现由
+`packages/plugin-ui/src/dialog-fullscreen.ts` 提供（`useDialogFullscreen` 负责保存/写回几何、
+窗口 resize 跟随、按 `open`/`identity` 复位；`dialogFullscreenButtonRule` 生成样式；`DialogFullscreenButton`
+接收调用方传入的图标，本包不依赖 dsh primitives）。插件只保留自己的 dialog class、data 属性名与 class 前缀。
+真实页面实测两个弹窗按钮均与关闭按钮逐像素同高（28×28）、全屏 1872×815 对应 viewport−48、
+退出后精确恢复原尺寸与位移，深浅主题下图标色跟随 `--dsw-alias-label-secondary`。
+
+### Dock 列表行的单行省略
+
+dock 列表行要保证任何内容长度下都单行：行容器去掉 `flexWrap`，可变长文本格给
+`min-width:0` + `overflow:hidden; text-overflow:ellipsis; white-space:nowrap`；行尾按钮组必须
+包一层 `flex:none` 容器——dsh `Button`（`Button.module.css`）没有 `flex-shrink:0`，直接平铺
+会被长文本压缩导致按钮文字换行。悬停全文用 `title` 补充。实例：
+`packages/plugins/services/src/client/ServiceRow.tsx`、`styles.ts` 的 `rowActionsStyle`；
+真实页面实测长命令行 28px 单行、facts scrollWidth 1045 > clientWidth 641 出省略号。
+
 ## 验证闭环
 
 1. 运行目标插件 test/typecheck/build 和仓库 lint；读实际 diff，确认没有改业务写入逻辑。

@@ -30,6 +30,9 @@ type ResizeConfig = Pick<DialogPointerConfig<LogDialogResizeDirection>, 'dialogC
   minBodyHeightPx: number
 }
 
+/** 全屏能力的配置形状：几何通道加边界，与 resize 用同一组 custom properties。 */
+export type FullscreenConfig = Pick<ResizeConfig, 'dialogClass' | 'bodySelector' | 'widthProp' | 'bodyHeightProp' | 'offsetXProp' | 'offsetYProp' | 'rootPaddingPx' | 'minWidthPx' | 'minBodyHeightPx'>
+
 /**
  * 适配器只读取 services 的 custom properties 并把业务几何回调交给公共 pointer hook。
  * 公共 UI 的既有结构契约包括 `touchAction: 'none'`、`zIndex: 3`、`HANDLE_SIZE_PX = 12`、`HANDLE_CORNER_SIZE_PX = 14`。

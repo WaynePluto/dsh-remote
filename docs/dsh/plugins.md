@@ -236,6 +236,24 @@ token 拼写和实际值是两件事，需用真实页面 getComputedStyle 检�
 - Portal 首帧隐藏以测量尺寸；自动聚焦需等定位提交后（如可清理的下一帧），不能在同轮父 layout effect 中直接 focus。
 - Portal 的 React 键盘事件仍到达字段 owner，局部 Escape 应阻止冒泡，避免同时关闭父设置窗口。
 
+### Modal 弹窗
+
+出处：`packages/client/ui-primitives/src/Modal.tsx`、`Modal.module.css`。
+
+- 插件传给 Modal 的 `className` 落在 `.dialog` 卡片上：`position:relative`、`overflow:hidden`，
+  Modal 不提供自定义 header 插槽；要在关闭按钮旁加自绘按钮，只能绝对定位在卡片内。
+- header 布局：padding `22px 14px 12px 24px`，close 按钮 28×28、圆角 8、右侧 14px；
+  紧贴其左侧的新按钮用 `top:22px; right:50px`（14+28+8），样式复刻 `.close`：
+  transparent 背景、`--dsw-alias-label-secondary`、hover `--dsw-alias-interactive-bg-hover`，保留 UA 焦点轮廓。
+- 自绘按钮必须压过插件自己的移动热区（z-index 2）与 resize 手柄（3），公共实现取 `z-index: 4`；全屏图标用
+  `IconFullscreenOutline16`（仅有展开方向，无收缩图标，两种状态共用并切换 aria-label）。
+- 全屏能力由 `packages/plugin-ui/src/dialog-fullscreen.ts` 提供：`useDialogFullscreen`（进入前保存几何、
+  退出写回、窗口 resize 跟随、按 `open`/`identity` 复位）、`dialogFullscreenButtonRule`、`DialogFullscreenButton`。
+  几何写入与拖动 resize 共用同一组 custom properties；全屏时插件隐藏拖动与八向手柄。
+- 实例：services 日志弹窗（`packages/plugins/services/src/client/log-dialog.ts`）与
+  turn-retry 原因弹窗（`packages/plugins/turn-retry/src/client/reason-dialog.ts`）共用同一实现，
+  只有 dialog class、data 属性名和图标不同。
+
 ## Dock 约定
 
 出处：`packages/client/ui-conversation/src/client/skeleton/TodoPanel.module.css`、`TodoPanel.tsx`、
@@ -248,6 +266,7 @@ token 拼写和实际值是两件事，需用真实页面 getComputedStyle 检�
 | 圆角 | 12px |
 | 表头 | 整行 button、aria-expanded、gap:10px、padding:8px 12px；嵌套 flex 居中 |
 | 标题与摘要 | 13px，标题 500/primary，摘要 tertiary；ellipsis 放内层 span |
+| 列表行 | 单行不换行；可变长文本给 `min-width:0` + ellipsis，行尾按钮组包在 `flex:none` 容器里不被压缩（实例：services 的 ServiceRow） |
 | 图标 | ui-primitives 的 outline 图标；services 与 terminal 共用 IconApiOutline14 |
 | 箭头 | 收起状态 IconChevronUpOutline14，展开状态 IconChevronDownOutline14 |
 | 滚动条 | --dsh-scrollbar-thumb 与 hover 使用 scrollbar-bg-l2、scrollbar-hover-l2 |

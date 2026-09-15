@@ -5,6 +5,9 @@ import {
   applyLogDialogResize,
   LOG_DIALOG_BODY_HEIGHT_PROP,
   LOG_DIALOG_CHROME_PX,
+  LOG_DIALOG_FULLSCREEN_ATTR,
+  LOG_DIALOG_FULLSCREEN_RIGHT_PX,
+  LOG_DIALOG_FULLSCREEN_TOP_PX,
   LOG_DIALOG_HEIGHT,
   LOG_PATH_MIN_HEIGHT_PX,
   logDialogMoveBounds,
@@ -12,6 +15,7 @@ import {
   logDialogRule,
   logDialogWidth,
 } from '../src/client/log-dialog.js'
+import { dialogFullscreenGeometry } from '@dsh-remote/plugin-ui'
 import { en, fill, zh } from '../src/client/locales.js'
 import { assertDialogGeometry } from '@dsh-remote/plugin-ui/test'
 /** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`node`、`ServicesDock.tsx`、`@deepseek-ai/dsh-client-ui-primitives`、`log-dialog.ts`） */
@@ -50,6 +54,36 @@ describe('log dialog stylesheet', () => {
   })
   it('never lets the dialog exceed the viewport', () => {
     expect(rule).toContain('max-width:100%')
+  })
+})
+describe('log fullscreen', () => {
+  it('maximizes the card inside the root padding and re-centers it', () => {
+    const chrome = 174
+    const geometry = dialogFullscreenGeometry(1920, 1080, chrome, 24, 300, 110)
+    expect(geometry).toEqual({ width: 1920 - 48, bodyHeight: 1080 - 48 - chrome, offsetX: 0, offsetY: 0 })
+  })
+  it('keeps a minimum readable body height on tiny viewports', () => {
+    const geometry = dialogFullscreenGeometry(320, 240, 174, 24, 300, 110)
+    expect(geometry.bodyHeight).toBe(110)
+    expect(geometry.width).toBe(300)
+  })
+  it('ships the toggle button rule with a hover state on the dialog token', () => {
+    const rule = logDialogRule()
+    expect(rule).toContain('[' + LOG_DIALOG_FULLSCREEN_ATTR + ']{')
+    expect(rule).toContain('[' + LOG_DIALOG_FULLSCREEN_ATTR + ']:hover')
+    expect(rule).toContain('--dsw-alias-interactive-bg-hover')
+  })
+  it('places the toggle beside the Modal close button (header pad 22 + 14 + 28 + 8)', () => {
+    expect(LOG_DIALOG_FULLSCREEN_TOP_PX).toBe(22)
+    expect(LOG_DIALOG_FULLSCREEN_RIGHT_PX).toBe(50)
+  })
+  it('renders the public toggle and hides drag handles while fullscreen', () => {
+    const dialogSource = readFileSync(new URL('../src/client/ServiceLogDialog.tsx', import.meta.url), 'utf8')
+    expect(dialogSource).toContain('IconFullscreenOutline16')
+    expect(dialogSource).toContain('DialogFullscreenButton')
+    expect(dialogSource).toContain('dataAttribute={LOG_DIALOG_FULLSCREEN_ATTR}')
+    expect(dialogSource).toMatch(/\{!fullscreen && <LogMoveHandle/u)
+    expect(dialogSource).toMatch(/\{!fullscreen && directions\.map/u)
   })
 })
 describe('log dialog height', () => {

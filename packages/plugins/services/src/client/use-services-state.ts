@@ -22,6 +22,7 @@ import {
 } from './log-dialog.js'
 import type { LogDialogResizeDirection } from './log-dialog.js'
 import { useLogDialogResize } from './dialog-resize.js'
+import { useDialogFullscreen } from '@dsh-remote/plugin-ui'
 import { publishWidth } from './styles.js'
 import type { Busy, ServicesDockInjected } from './types.js'
 
@@ -68,6 +69,9 @@ export interface ServicesState {
   act: (name: string, kind: 'stop' | 'restart') => void
   showLog: (name: string) => void
   closeLog: () => void
+  /** 日志 dialog 是否处于全屏态；全屏时隐藏拖动与八向 resize。 */
+  logFullscreen: boolean
+  toggleLogFullscreen: () => void
   onLogResizePointerDown: (event: ReactPointerEvent<HTMLDivElement>, direction: LogDialogResizeDirection) => void
   onLogMovePointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void
 }
@@ -162,6 +166,13 @@ export function useServicesState({ sessionId, actions, translate }: UseServicesS
     return () => { clearInterval(timer) }
   }, [collapsed, snapshot])
 
+  // 全屏开关由公共 hook 管理：进入前保存几何、退出写回、resize 跟随、换服务或关闭即复位。
+  const { fullscreen: logFullscreen, toggle: toggleLogFullscreen } = useDialogFullscreen({
+    ...LOG_RESIZE_CONFIG,
+    open: openLog !== null,
+    identity: openLog ?? undefined,
+  })
+
   const act = useCallback((name: string, kind: 'stop' | 'restart'): void => {
     const verb = kind === 'stop' ? actions?.onStop : actions?.onRestart
     if (verb === undefined) return
@@ -185,6 +196,7 @@ export function useServicesState({ sessionId, actions, translate }: UseServicesS
 
   /** 打开一个服务的日志 dialog，或刷新当前已打开的 dialog。 */
   const showLog = useCallback((name: string): void => {
+    // 换服务等于换一份内容：清掉上一个 dialog 的几何，全屏态由 hook 按 identity 复位。
     if (openLog !== null && openLog !== name) resetLogResize()
     // 现在测量而不是 mount 时测量：sidebar 折叠或拖动宽度时 column 会变化，而此刻才真正需要该数字。
     const measured = rootRef.current?.getBoundingClientRect().width ?? 0
@@ -248,6 +260,8 @@ export function useServicesState({ sessionId, actions, translate }: UseServicesS
     act,
     showLog,
     closeLog,
+    logFullscreen,
+    toggleLogFullscreen,
     onLogResizePointerDown,
     onLogMovePointerDown,
   }

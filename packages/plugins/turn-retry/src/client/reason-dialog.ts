@@ -5,6 +5,9 @@ import {
   dialogMoveBounds,
   dialogResizeBounds,
   dialogWidth,
+  DIALOG_FULLSCREEN_RIGHT_PX,
+  DIALOG_FULLSCREEN_TOP_PX,
+  dialogFullscreenButtonRule,
 } from '@dsh-remote/plugin-ui'
 import type {
   DialogMoveBounds,
@@ -27,6 +30,11 @@ export const REASON_DIALOG_ROOT_PADDING_PX = 24
 export const REASON_DIALOG_MIN_WIDTH_PX = 300
 export const REASON_DIALOG_MIN_BODY_HEIGHT_PX = 110
 export const REASON_DIALOG_HEIGHT = 'min(60vh, calc(100vh - ' + String(REASON_DIALOG_CHROME_PX) + 'px))'
+/** 全屏按钮紧贴 Modal 自带 close 按钮左侧；几何与样式规则由 plugin-ui 统一提供。 */
+export const REASON_DIALOG_FULLSCREEN_TOP_PX = DIALOG_FULLSCREEN_TOP_PX
+export const REASON_DIALOG_FULLSCREEN_RIGHT_PX = DIALOG_FULLSCREEN_RIGHT_PX
+/** 全屏按钮挂到 dialog 上的 data 属性名。 */
+export const REASON_DIALOG_FULLSCREEN_ATTR = 'data-dsh-turn-retry-reason-fullscreen'
 
 /** 业务名称继续保留；reason 只负责适配公共 dialog geometry。 */
 export type ReasonDialogResizeDirection = DialogResizeDirection
@@ -93,7 +101,9 @@ export function reasonDialogRule(): string {
     ')!important}' +
     '.' +
     REASON_DIALOG_CLASS +
-    ' [data-dsh-turn-retry-resize-handle]{pointer-events:auto;touch-action:none;user-select:none}'
+    ' [data-dsh-turn-retry-resize-handle]{pointer-events:auto;touch-action:none;user-select:none}' +
+    // 全屏按钮的样式与位置由公共包生成；turn-retry 只提供自己的 class 与 data 属性名。
+    dialogFullscreenButtonRule(REASON_DIALOG_CLASS, REASON_DIALOG_FULLSCREEN_ATTR)
   )
 }
 

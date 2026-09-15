@@ -56,6 +56,8 @@ export function ServicesPanel({ sessionId, actions, t }: ServicesPanelProps) {
     act,
     showLog,
     closeLog,
+    logFullscreen,
+    toggleLogFullscreen,
     onLogResizePointerDown,
     onLogMovePointerDown,
   } = state
@@ -105,6 +107,8 @@ export function ServicesPanel({ sessionId, actions, t }: ServicesPanelProps) {
         translate={translate}
         onClose={closeLog}
         onRefresh={() => { if (openLog !== null) showLog(openLog) }}
+        fullscreen={logFullscreen}
+        onToggleFullscreen={toggleLogFullscreen}
         onLogResizePointerDown={onLogResizePointerDown}
         onLogMovePointerDown={onLogMovePointerDown}
         directions={LOG_RESIZE_DIRECTIONS}

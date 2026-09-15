@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { dialogFullscreenGeometry } from '@dsh-remote/plugin-ui'
 import { assertDialogGeometry } from '@dsh-remote/plugin-ui/test'
 import {
   applyReasonDialogMove,
@@ -7,6 +9,9 @@ import {
   REASON_DIALOG_BODY_HEIGHT_PROP,
   REASON_DIALOG_CHROME_PX,
   REASON_DIALOG_CLASS,
+  REASON_DIALOG_FULLSCREEN_ATTR,
+  REASON_DIALOG_FULLSCREEN_RIGHT_PX,
+  REASON_DIALOG_FULLSCREEN_TOP_PX,
   REASON_DIALOG_HEIGHT,
   REASON_DIALOG_WIDTH_PROP,
   reasonDialogMoveBounds,
@@ -31,6 +36,31 @@ describe('retry reason dialog', () => {
     expect(rule).toContain('var(' + REASON_DIALOG_WIDTH_PROP)
     expect(rule).toContain(REASON_DIALOG_BODY_HEIGHT_PROP)
     expect(rule).toContain('!important')
+  })
+})
+describe('reason dialog fullscreen', () => {
+  it('maximizes the card inside the root padding and re-centers it', () => {
+    const chrome = 174
+    const geometry = dialogFullscreenGeometry(1920, 1080, chrome, 24, 300, 110)
+    expect(geometry).toEqual({ width: 1920 - 48, bodyHeight: 1080 - 48 - chrome, offsetX: 0, offsetY: 0 })
+  })
+  it('ships the toggle button rule with a hover state on the dialog token', () => {
+    const rule = reasonDialogRule()
+    expect(rule).toContain('[' + REASON_DIALOG_FULLSCREEN_ATTR + ']{')
+    expect(rule).toContain('[' + REASON_DIALOG_FULLSCREEN_ATTR + ']:hover')
+    expect(rule).toContain('--dsw-alias-interactive-bg-hover')
+  })
+  it('places the toggle beside the Modal close button (header pad 22 + 14 + 28 + 8)', () => {
+    expect(REASON_DIALOG_FULLSCREEN_TOP_PX).toBe(22)
+    expect(REASON_DIALOG_FULLSCREEN_RIGHT_PX).toBe(50)
+  })
+  it('renders the public toggle and hides drag handles while fullscreen', () => {
+    const source = readFileSync(new URL('../src/client/RetryDock.tsx', import.meta.url), 'utf8')
+    expect(source).toContain('IconFullscreenOutline16')
+    expect(source).toContain('DialogFullscreenButton')
+    expect(source).toContain('dataAttribute={REASON_DIALOG_FULLSCREEN_ATTR}')
+    expect(source).toMatch(/\{!reasonFullscreen && <ReasonMoveHandle/u)
+    expect(source).toMatch(/\{!reasonFullscreen && \['n', 'ne'/u)
   })
 })
 describe('shared dialog geometry', () => {
