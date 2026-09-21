@@ -117,6 +117,9 @@ dsh 的 approval/asked、approval/decided 等审批事件属于 dsh 会话日志
 
 固定 YOLO 详情见 [插件说明](../packages/plugins/yolo-mode/README.md)。停用并重启后才恢复原生权限服务，
 已有会话仍保留策略历史，需重新选择原生权限预设。
+（规划，见 [插件计划](plugin-optional-plan.md) 第四批）固定 YOLO 与远程设置转为默认受管 Bundle 后，
+用户可在 dsh 插件页停用：停用固定 YOLO 即恢复 dsh 原生权限审批，托盘或 `--restore-bundle` 可再启用
+（启用是提权动作，只能主动触发）；停用远程设置（ownsHost）则经 relay 地址访问时设置页回到受限形态。
 常驻服务的 approvalInConfinedSandbox 配置可以关闭受限模式批准门，意味着显式接受该服务的沙箱逃逸。
 默认 YOLO 下使用 danger-full-access，服务无需人工批准。
 

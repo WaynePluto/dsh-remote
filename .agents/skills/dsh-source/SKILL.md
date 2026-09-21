@@ -14,7 +14,7 @@ D:\github\deepseek-harness
 ```
 
 - 若该路径不存在，**先问用户**新位置，不要在别处猜测或搜索。
-- 本仓库的结论文档（`docs/02-dsh-facts.md`）当前核实于 `git fb2c4b9e69` / tag `dsh-v0.1.5-rc.2`；本地 checkout 可能已经更新（用 `git -C D:\github\deepseek-harness rev-parse --short HEAD` 确认）。**版本不一致时，以源码为准，并提示用户回写 `docs/02-dsh-facts.md`。**
+- 本仓库的结论文档（`docs/02-dsh-facts.md`）当前核实于 `git ddefc45fbc` / tag `dsh-v0.1.6-alpha.2`；本地 checkout 可能已经更新（用 `git -C D:\github\deepseek-harness rev-parse --short HEAD` 确认）。**版本不一致时，以源码为准，并提示用户回写 `docs/02-dsh-facts.md`。**
 
 ```powershell
 # 确认版本

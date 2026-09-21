@@ -20,14 +20,14 @@
     "@dsh-remote/protocol": "workspace:*",
     "@hono/node-server": "1.19.17",
     "commander": "15.0.0",
-    "hono": "4.13.5",
-    "jose": "6.2.10",
+    "hono": "4.13.8",
+    "jose": "6.2.12",
     "otplib": "13.5.0",
     "pino": "10.3.1",
     "qrcode": "1.5.4",
-    "rate-limiter-flexible": "11.2.0",
+    "rate-limiter-flexible": "11.2.1",
     "ws": "8.21.3",
-    "zod": "4.5.4"
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/qrcode": "1.5.6",

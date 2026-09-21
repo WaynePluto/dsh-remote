@@ -26,9 +26,10 @@
 | D14 | 共用标准 DSH_HOME，仅隔离 dsh-remote-web profile | 共享 settings、credentials、sessions 与用户全局 patch |
 | D15 | 非 loopback 浏览器请求统一登录 | 仅 loopback socket 与 loopback Host 同时成立才免登录 |
 | D16 | 每台机器运行 dsh、relay、connector | 任意机器可作为远程入口，关系单向且每机最多一个入口 |
-| D17 | 扩展放在 packages/plugins，各包自行说明 | 普通运行插件使用 overlay；精简预设使用专属 Profile Bundle |
+| D17 | 扩展放在 packages/plugins，各包自行说明 | 普通运行插件使用 overlay；简洁模式预设使用专属 Profile Bundle |
 | D18 | Linux systemd 以个人普通用户运行整套 dsh-remote | 默认 `~/.dsh-remote` 保存 relay 运行数据，`~/.dsh` 保存官方 dsh 数据；普通操作使用用户权限，管理员操作由用户在交互终端输入 sudo，保留系统缓存；不主动建立 root shell |
 | D19 | 公网使用泛子域名，本机保留 loopback，裸域名只进管理入口 | `https://<机器名>.<域名>` 保持每台机器独立 origin；`http://127.0.0.1:<端口>` 始终是本机入口；域名模式默认关闭成员端口，新增机器不改 DNS、证书或 TLS 反代；域名模式的公网 Cookie 与本机 HTTP 的 host-only 辅助 Cookie 分开 |
+| D20 | 插件全部转为仓库内默认受管 Bundle（可停用）；npm 发布暂缓（本仓库可直接发） | 22 个插件（含简洁模式）转为 Profile Bundle：默认全开，用户可在 dsh 插件页停用（含停用 yolo 恢复 dsh 原生审批），托盘/`--restore-bundle` 补回；connection 的 webServer 注入是全部插件 RPC 的地基，自 remote-privileged 拆出为壳级常驻 overlay 不可停；npm 发布暂缓且路径为本仓库直接发布（无需拆仓，独立仓库仅组织性选项），等 Bundle 化与版本纪律就绪后再考虑；分批见 [插件可选化计划](plugin-optional-plan.md) |
 
 ## 2.05 术语
 
@@ -96,8 +97,10 @@ locator 根据 `import.meta.url` 计算包内 preset root，不能依赖当前�
 普通运行插件使用包根 `dsh-overlay.yml`，入口写 `./dist/index.js`，launcher 以 `--patch` 传入。
 dsh 将相对路径锚定到 overlay 目录。宿主或浏览器构建产物缺失即拒绝启动。
 
-launcher 为不存在的 profile 创建模板；已有 profile 只非破坏性补入缺少的 concise Bundle，
-保留用户其他 bundle、依赖、reload 策略和 patch。第三方 Bundle 管理沿用官方 `dsh plugin --profile`。
+launcher 为不存在的 profile 创建模板；受管 Bundle（当前只有简洁模式）只确保一次，
+记录在 profile 内 `dsh-remote-bundles-state.json`——用户在 dsh 插件页停用后不再自动补回，
+补回入口是托盘菜单「补回简洁模式」与 `--restore-bundle`。
+第三方 Bundle 管理沿用官方 `dsh plugin --profile`。
 内置插件不修改 home 全局 patch 或官方 `web` profile。
 
 远程浏览器设置由 `remote-privileged` 注入 `ownsHost: true` 开放；它不替代 relay 认证，

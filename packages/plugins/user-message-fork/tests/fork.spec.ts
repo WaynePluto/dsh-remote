@@ -54,10 +54,10 @@ describe('forkAndSeedUserMessage', () => {
         return CHILD
       }),
       scope: vi.fn(() => scope),
-      open: vi.fn(id => { order.push(`open:${String(id)}`) }),
     }
+    const openSession = vi.fn((id: SessionId) => { order.push(`open:${String(id)}`) })
 
-    await expect(forkAndSeedUserMessage(sessions, SOURCE, 42, '修改后再发')).resolves.toBe(CHILD)
+    await expect(forkAndSeedUserMessage(sessions, openSession, SOURCE, 42, '修改后再发')).resolves.toBe(CHILD)
     expect(sessions.fork).toHaveBeenCalledWith({ sessionId: SOURCE, atSeq: 42, increaseTitle: true })
     expect(setDraft).toHaveBeenCalledWith('修改后再发')
     expect(order).toEqual(['fork:42', 'draft:修改后再发', 'open:session-child'])
@@ -67,9 +67,9 @@ describe('forkAndSeedUserMessage', () => {
     const sessions: ForkSessions = {
       fork: vi.fn(async () => CHILD),
       scope: vi.fn(() => ({ get: vi.fn(() => undefined) })),
-      open: vi.fn(),
     }
-    await expect(forkAndSeedUserMessage(sessions, SOURCE, 42, '内容')).rejects.toThrow('conversation service')
-    expect(sessions.open).not.toHaveBeenCalled()
+    const openSession = vi.fn()
+    await expect(forkAndSeedUserMessage(sessions, openSession, SOURCE, 42, '内容')).rejects.toThrow('conversation service')
+    expect(openSession).not.toHaveBeenCalled()
   })
 })

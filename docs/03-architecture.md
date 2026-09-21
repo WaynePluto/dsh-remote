@@ -27,6 +27,7 @@ flowchart LR
 | `packages/relay` | 浏览器认证、设备认证、管理页、机器路由与字节转发 |
 | `packages/launcher` | 配置、profile、产物检查、启动和监督三个子进程 |
 | `packages/plugins` | 通过 dsh 插件扩展功能；见 [插件索引](plugins.md) |
+| `packages/plugins`（规划） | 全部插件转为可停用的默认受管 Bundle（简洁模式已完成）；connection 注入地基拆归壳级常驻；独立发布暂缓，见 [计划](plugin-optional-plan.md)（D20） |
 
 dsh 是官方 npm 依赖，不 fork、不改源码。浏览器使用 dsh 自带 UI，relay 提供自己的登录和管理页。
 
@@ -41,7 +42,7 @@ dsh-base → dsh-web-app → dsh-plugin-concise-mode
 ```
 
 launcher 对已有 profile 只补入缺失的 concise Bundle，保留其他配置。
-预设能力见 [精简模式](../packages/plugins/concise-mode/README.md)。
+预设能力见 [简洁模式](../packages/plugins/concise-mode/README.md)。
 
 ### 普通插件装载
 

@@ -16,6 +16,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // oxlint-disable-next-line unicorn/require-module-specifiers -- 激活 Session Context 合并
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+// oxlint-disable-next-line unicorn/require-module-specifiers -- 激活 uiWorkspace Context 合并（openSession 导航）
+import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import { SELF_NAMESPACE } from '../shared.js'
@@ -53,7 +55,7 @@ export type UserMessageForkNodeProps =
   & PropsLocale<typeof NS>
 
 /** browser half 使用的 service。 */
-export const inject = ['slots', 'locale', 'sessions', 'uiConversation']
+export const inject = ['slots', 'locale', 'sessions', 'uiConversation', 'uiWorkspace']
 
 /** keyed shadow priority；dsh 自己的 user renderer 位于默认 priority 0。 */
 export const USER_RENDERER_PRIORITY = -1
@@ -85,7 +87,7 @@ export function apply(ctx: Context): void {
             return snapshot === undefined ? undefined : snapshot.timeline
           },
         )
-        await forkAndSeedUserMessage(ctx.sessions, sessionId, anchor, text)
+        await forkAndSeedUserMessage(ctx.sessions, id => ctx.uiWorkspace.openSession(id), sessionId, anchor, text)
       },
     }),
   }, UserMessageForkNodeView))

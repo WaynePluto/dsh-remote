@@ -3,7 +3,6 @@ import fs, {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  readdirSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
@@ -16,6 +15,7 @@ import {
   ensureProfile,
   profileDirectory,
   resolveDshHome,
+  restoreManagedBundle,
 } from '../src/profile.js'
 
 const homes: string[] = []
@@ -31,6 +31,13 @@ function createProfile(home: string, manifestText: string): string {
   mkdirSync(directory, { recursive: true })
   writeFileSync(join(directory, 'package.json'), manifestText)
   return directory
+}
+
+function readBundles(directory: string): string[] {
+  const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')) as {
+    dsh: { profile: { bundles: string[] } }
+  }
+  return manifest.dsh.profile.bundles
 }
 
 const managedBundles = [CONCISE_MODE_BUNDLE]
@@ -56,7 +63,7 @@ describe('profile bootstrap', () => {
   it('writes the default template with concise mode when the profile does not exist', () => {
     const home = newHome()
     expect(CONCISE_MODE_BUNDLE).toBe('@dsh-remote/dsh-plugin-concise-mode')
-    expect(ensureProfile({ home, profile: 'dsh-remote-web' })).toBe('created')
+    expect(ensureProfile({ home, profile: 'dsh-remote-web' })).toEqual({ bootstrap: 'created', skippedManaged: [] })
 
     const directory = profileDirectory(home, 'dsh-remote-web')
     expect(directory).toBe(join(home, 'profiles', 'dsh-remote-web'))
@@ -81,12 +88,12 @@ describe('profile bootstrap', () => {
     const manifestPath = join(directory, 'package.json')
     const before = readFileSync(manifestPath, 'utf8')
 
-    expect(ensureProfile({ home, profile: 'dsh-remote-web' })).toBe('existing')
+    expect(ensureProfile({ home, profile: 'dsh-remote-web' })).toEqual({ bootstrap: 'existing', skippedManaged: [] })
     expect(readFileSync(manifestPath, 'utf8')).toBe(before)
     expect(existsSync(join(directory, 'pnpm-workspace.yaml'))).toBe(false)
   })
 
-  it('inserts a missing managed bundle after web-app and preserves the rest of the manifest', () => {
+  it('inserts a managed bundle absent from a state-less profile once, after web-app, preserving the rest', () => {
     const home = newHome()
     const original = {
       name: 'custom-profile-name',
@@ -106,7 +113,7 @@ describe('profile bootstrap', () => {
     writeFileSync(join(directory, 'cordis.patch.yml'), 'custom patch\n')
     writeFileSync(join(directory, 'pnpm-workspace.yaml'), 'custom workspace\n')
 
-    expect(ensureProfile({ home, profile: 'dsh-remote-web', managedBundles })).toBe('updated')
+    expect(ensureProfile({ home, profile: 'dsh-remote-web', managedBundles })).toEqual({ bootstrap: 'updated', skippedManaged: [] })
 
     const updated = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')) as typeof original
     expect(updated).toEqual({
@@ -134,22 +141,27 @@ describe('profile bootstrap', () => {
       dsh: { profile: { bundles: ['@user/first', '@user/last'] } },
     }))
 
-    expect(ensureProfile({ home, profile: 'dsh-remote-web', managedBundles })).toBe('updated')
-    const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')) as {
-      dsh: { profile: { bundles: string[] } }
-    }
-    expect(manifest.dsh.profile.bundles).toEqual(['@user/first', '@user/last', CONCISE_MODE_BUNDLE])
+    expect(ensureProfile({ home, profile: 'dsh-remote-web', managedBundles }).bootstrap).toBe('updated')
+    expect(readBundles(directory)).toEqual(['@user/first', '@user/last', CONCISE_MODE_BUNDLE])
   })
 
-  it('is byte-for-byte idempotent when the managed bundle already exists', () => {
+  it('is byte-for-byte idempotent on the manifest when the managed bundle already exists', () => {
     const home = newHome()
     const exactManifest = `{ "custom": true, "dsh": { "profile": { "patchReload": true, "bundles": ["${CONCISE_MODE_BUNDLE}", "@user/other"] } } }`
     const directory = createProfile(home, exactManifest)
     const manifestPath = join(directory, 'package.json')
 
-    expect(ensureProfile({ home, profile: 'dsh-remote-web', managedBundles })).toBe('existing')
+    // 第一次运行把已在列表里的受管 Bundle 记入状态文件；manifest 本身逐字节不变。
+    expect(ensureProfile({ home, profile: 'dsh-remote-web', managedBundles })).toEqual({ bootstrap: 'existing', skippedManaged: [] })
     expect(readFileSync(manifestPath, 'utf8')).toBe(exactManifest)
-    expect(readdirSync(directory)).toEqual(['package.json'])
+
+    // 第二次起连状态文件也稳定：字节不变、不再写入。
+    const statePath = join(directory, 'dsh-remote-bundles-state.json')
+    const stateBefore = readFileSync(statePath, 'utf8')
+    const stateStats = fs.statSync(statePath)
+    expect(ensureProfile({ home, profile: 'dsh-remote-web', managedBundles })).toEqual({ bootstrap: 'existing', skippedManaged: [] })
+    expect(readFileSync(statePath, 'utf8')).toBe(stateBefore)
+    expect(fs.statSync(statePath).mtimeMs).toBe(stateStats.mtimeMs)
   })
 
   it.each([
@@ -163,7 +175,6 @@ describe('profile bootstrap', () => {
 
     expect(() => ensureProfile({ home, profile: 'dsh-remote-web', managedBundles })).toThrow()
     expect(readFileSync(join(directory, 'package.json'), 'utf8')).toBe(manifestText)
-    expect(readdirSync(directory)).toEqual(['package.json'])
   })
 
   it('removes the same-directory temporary file when atomic rename fails', () => {
@@ -178,12 +189,116 @@ describe('profile bootstrap', () => {
 
     expect(() => ensureProfile({ home, profile: 'dsh-remote-web', managedBundles })).toThrow('rename failed')
     expect(readFileSync(join(directory, 'package.json'), 'utf8')).toBe(manifestText)
-    expect(readdirSync(directory)).toEqual(['package.json'])
   })
 
   it('does not touch the official web profile when bootstrapping dsh-remote-web', () => {
     const home = newHome()
     ensureProfile({ home, profile: 'dsh-remote-web' })
     expect(existsSync(profileDirectory(home, 'web'))).toBe(false)
+  })
+})
+
+describe('managed bundle removal ledger', () => {
+  it('respects a user removal recorded by a previous run and does not re-insert', () => {
+    const home = newHome()
+    const directory = createProfile(home, JSON.stringify({
+      dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', CONCISE_MODE_BUNDLE] } },
+    }))
+
+    // 第一次运行：Bundle 在列表里，记入状态文件。
+    expect(ensureProfile({ home, profile: 'dsh-remote-web', managedBundles }).bootstrap).toBe('existing')
+
+    // 用户在 dsh 插件页停用：包名从数组里移走。
+    const manifestPath = join(directory, 'package.json')
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { dsh: { profile: { bundles: string[] } } }
+    manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter(bundle => bundle !== CONCISE_MODE_BUNDLE)
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, undefined, 2)}\n`)
+    const afterRemoval = readFileSync(manifestPath, 'utf8')
+
+    // 下一次启动：跳过、不补回、manifest 不动。
+    expect(ensureProfile({ home, profile: 'dsh-remote-web', managedBundles })).toEqual({
+      bootstrap: 'existing',
+      skippedManaged: [CONCISE_MODE_BUNDLE],
+    })
+    expect(readFileSync(manifestPath, 'utf8')).toBe(afterRemoval)
+  })
+
+  it('grandfathers a state-less profile by its current list, then inserts absent bundles once', () => {
+    const home = newHome()
+    const directory = createProfile(home, JSON.stringify({
+      dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'] } },
+    }))
+
+    // 没有状态文件的旧 profile：不在列表的受管 Bundle 允许补插一次（未来新增 Bundle 的到达路径）。
+    expect(ensureProfile({ home, profile: 'dsh-remote-web', managedBundles }).bootstrap).toBe('updated')
+    expect(readBundles(directory)).toContain(CONCISE_MODE_BUNDLE)
+
+    // 之后再停用即被尊重（同上一用例的语义）。
+    const manifestPath = join(directory, 'package.json')
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { dsh: { profile: { bundles: string[] } } }
+    manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter(bundle => bundle !== CONCISE_MODE_BUNDLE)
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, undefined, 2)}\n`)
+    expect(ensureProfile({ home, profile: 'dsh-remote-web', managedBundles }).skippedManaged).toEqual([CONCISE_MODE_BUNDLE])
+  })
+
+  it('inserts a newly managed bundle for a profile whose state predates it', () => {
+    const home = newHome()
+    const directory = createProfile(home, JSON.stringify({
+      dsh: { profile: { bundles: ['@deepseek-ai/dsh-web-app'] } },
+    }))
+    writeFileSync(join(directory, 'dsh-remote-bundles-state.json'), JSON.stringify({ ensured: [CONCISE_MODE_BUNDLE] }))
+
+    // 状态文件里没有记录的新受管 Bundle：补插一次并记录；
+    // CONCISE_MODE_BUNDLE 不在列表但已有记录，视为用户停用、跳过。
+    const futureBundle = '@dsh-remote/dsh-plugin-future'
+    const result = ensureProfile({ home, profile: 'dsh-remote-web', managedBundles: [CONCISE_MODE_BUNDLE, futureBundle] })
+    expect(result).toEqual({ bootstrap: 'updated', skippedManaged: [CONCISE_MODE_BUNDLE] })
+    expect(readBundles(directory)).toEqual(['@deepseek-ai/dsh-web-app', futureBundle])
+    const state = JSON.parse(readFileSync(join(directory, 'dsh-remote-bundles-state.json'), 'utf8')) as { ensured: string[] }
+    expect(state.ensured).toContain(futureBundle)
+  })
+
+  it('treats a corrupt state file as absent', () => {
+    const home = newHome()
+    const directory = createProfile(home, JSON.stringify({
+      dsh: { profile: { bundles: ['@deepseek-ai/dsh-web-app'] } },
+    }))
+    writeFileSync(join(directory, 'dsh-remote-bundles-state.json'), '{ not json')
+
+    expect(ensureProfile({ home, profile: 'dsh-remote-web', managedBundles }).bootstrap).toBe('updated')
+    expect(readBundles(directory)).toContain(CONCISE_MODE_BUNDLE)
+  })
+})
+
+describe('restoreManagedBundle', () => {
+  it('re-inserts a removed bundle after web-app and marks it ensured', () => {
+    const home = newHome()
+    const directory = createProfile(home, JSON.stringify({
+      dsh: { profile: { bundles: ['@deepseek-ai/dsh-web-app', '@user/other'] } },
+    }))
+
+    expect(restoreManagedBundle({ home, profile: 'dsh-remote-web', bundle: CONCISE_MODE_BUNDLE })).toBe('restored')
+    expect(readBundles(directory)).toEqual(['@deepseek-ai/dsh-web-app', CONCISE_MODE_BUNDLE, '@user/other'])
+    const state = JSON.parse(readFileSync(join(directory, 'dsh-remote-bundles-state.json'), 'utf8')) as { ensured: string[] }
+    expect(state.ensured).toContain(CONCISE_MODE_BUNDLE)
+
+    // 补回后的下一次启动照常（present → 不写 manifest）。
+    expect(ensureProfile({ home, profile: 'dsh-remote-web', managedBundles }).bootstrap).toBe('existing')
+  })
+
+  it('answers already-present without touching the manifest', () => {
+    const home = newHome()
+    const manifestText = JSON.stringify({
+      dsh: { profile: { bundles: [CONCISE_MODE_BUNDLE] } },
+    })
+    const directory = createProfile(home, manifestText)
+
+    expect(restoreManagedBundle({ home, profile: 'dsh-remote-web', bundle: CONCISE_MODE_BUNDLE })).toBe('already-present')
+    expect(readFileSync(join(directory, 'package.json'), 'utf8')).toBe(manifestText)
+  })
+
+  it('answers no-profile when the profile has not been created yet', () => {
+    const home = newHome()
+    expect(restoreManagedBundle({ home, profile: 'dsh-remote-web', bundle: CONCISE_MODE_BUNDLE })).toBe('no-profile')
   })
 })

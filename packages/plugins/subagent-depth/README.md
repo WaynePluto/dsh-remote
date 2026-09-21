@@ -11,7 +11,7 @@
 
 设置是实时的，但只影响下一次创建子代理。已经运行的子代理不会被终止；当下一次委派会超过上限时，工具调用会返回拒绝结果。
 
-本插件使用 `dsh-plugin-subagent-depth` settings 命名空间。浏览器半注册到 dsh 原有的 `settings.plugin.item` keyed slot，因此不会新增设置导航页面，也不覆盖 dsh 自带的模型选择卡片。
+本插件使用 `dsh-plugin-subagent-depth` settings 命名空间。浏览器半注册到 dsh Plugins 页的 `plugins.item` list slot（0.1.6 前为 `settings.plugin.item` keyed slot），因此不会新增设置导航页面，也不覆盖 dsh 自带的模型选择卡片。
 
 ## 当前限制
 

@@ -13,9 +13,9 @@
 
 profile patch 执行时，末尾 overlay 插入的行还不存在，所以覆盖普通项目插件 config 需要更靠后的 patch，
 且目标行必须有稳定 id。用户可编辑的配置通常应使用设置命名空间，不依赖 Cordis config。
-插件配置页编辑的是 settings.plugin.item 对应的 namespace，不直接编辑 Cordis entry config。
+插件配置页（0.1.6 起 Plugins 页的 plugins.item list slot，取代 settings.plugin.item keyed slot）编辑的是设置命名空间对应的值，不直接编辑 Cordis entry config。
 
-## 精简预设 Bundle
+## 简洁模式预设 Bundle
 
 出处：`packages/bundle/web-app/cordis.patch.yml`、`packages/preset/agent-presets/src/{preset,discovery}.ts`、
 `packages/preset/persona/src/index.ts`、`packages/core/agent-tool-presentation/src/index.ts`、
@@ -87,9 +87,11 @@ namespace 统一为 dsh-plugin-<名字>，全局提示词正文直接保存文�
 - keyed/single/list 槽同一 cell 可以按 priority 影子覆盖，数值最小者渲染；同 cell + 同 priority 才冲突。
 - 接管现有 renderer 使用 priority:-1；并列添加用 list 或插件定义的子槽。
 - `ctx.slots.onEntryError` 观察被错误边界捕获的 slot renderer 异常；它只覆盖渲染边界，不等于全局
+  （0.1.6 起回调参数是 StoredEntry | StoredFactory 联合，Factory 没有 options 字段，需 `'options' in entry` 收窄）
   `window.error` 或 Promise 拒绝监听。监听器随插件 fiber 清理，来源为 `packages/client/ui-renderer/src/client/registry.ts`。
 - settings.models.provider-card 是 keyed，llm-pi-ai 的入口由 copilot-auth 负责组合。
   model-capabilities 使用其项目子槽，models-catalog 使用 settings.models.footer。
+  0.1.6 起 ISessions.list 不再携带 current（SessionListState 只是目录）；根作用域组件要当前会话，订阅 ctx.uiSession.adapter.current 并读快照的 key。
 - conversation.view 是 session-scoped list，label 必须是 thunk，才能随语言切换。
 - conversation.chat.node 是 keyed；新增消息行需要自己的 ConversationNodeDefinition 和新 key。
 - conversation.input.dock 是输入框上方的 list；conversation.composer.dock 在下方。
@@ -109,7 +111,7 @@ React 重建或旧 WebKit flex 布局中丢失。升级检查包含 `navCell`/`n
 出处：`packages/client/ui-sidebar-right/src/client/tab-registry.ts`、`contract/slots.ts`、`service.ts`，
 文件树实例见 `packages/client/ui-sidebar-files/src/client/{definition,index,FilesBody}.ts`。
 
-- 页面类型通过 `ctx.sidebarRightTabs.register({ id, kind, priority, title, guide })` 注册；不声明 `patterns` 的类型是页面，入口由 guide box 的 `order/title/description/icon` 提供。
+- 页面类型通过 `ctx.sidebarRightTabs.register({ id, kind, priority, title, guide })` 注册；不声明 `patterns` 的类型是页面，入口由 guide box 的 `id/order/title/description/icon` 提供（0.1.6 起 `id` 必填，为 provider 内稳定标识）。
 - 页面正文必须以同一 `id` 注册 keyed slot `sidebar.right.pane.tab`；组件通过标准 props 的 `useTabInfo()` 读取当前 tab 与 `tab.actions`，并由 session scope 自动得到 `sessionId`。
 - `ctx.sidebarRight.openTab(kind)` 打开页面；条目内部应使用 `tab.actions.openTab/openResource`，不要自己拼 `sidebar://` 地址。files 增强只 shadow 原生 `files` body，不另注册用户可见 kind；其他外部插件仍使用独立 kind，只有明确接管 builtin kind 时才用 `priority: 'extension'` 同 kind 注册。
 - 页面包的 `package.json` 用 `dsh.client.inject` 声明对 `@deepseek-ai/dsh-client-ui-sidebar-right` 的模块关系；Cordis 运行时仍把 `sidebarRightTabs` 放进插件 `inject`，两者不是同一种依赖。

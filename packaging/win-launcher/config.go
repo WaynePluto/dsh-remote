@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -16,13 +17,18 @@ const (
 	// 默认值复制自 packages/launcher/src/config.ts。刚解压的
 	// 软件包可能完全没有配置文件，而两个打开
 	// 浏览器的菜单项仍必须指向正确的端口。
-	defaultRelayPort = 30809
-	homeDirName      = ".dsh-remote"
+	defaultRelayPort  = 30809
+	defaultDshProfile = "dsh-remote-web"
+	homeDirName       = ".dsh-remote"
 
 	// 两个 URL 都只使用 loopback：控制台也能从局域网访问，
 	// 但菜单运行在本机；按铁律 11，127.0.0.1 是唯一
 	// 不需要登录的访问入口。
 	loopbackHost = "127.0.0.1"
+
+	// 与 packages/launcher/src/profile.ts 的 CONCISE_MODE_BUNDLE
+	// 保持一致；菜单据此判断简洁模式是否被用户停用。
+	conciseModeBundle = "@dsh-remote/dsh-plugin-concise-mode"
 )
 
 // settings 是 tray 需要的 launcher 配置子集：两个菜单
@@ -30,8 +36,9 @@ const (
 // dsh 自己的端口不在这里：菜单不直连 dsh，直连只
 // 认 launcher 从 dsh 输出截获的 token 交换结果。
 type settings struct {
-	relayPort int
-	home      string
+	relayPort  int
+	home       string
+	dshProfile string
 	// 已读取的配置文件；使用内置默认值时为空。
 	path string
 }
@@ -44,6 +51,9 @@ type rawConfig struct {
 		Port *int `json:"port"`
 	} `json:"relay"`
 	Home *string `json:"home"`
+	Dsh  *struct {
+		Profile *string `json:"profile"`
+	} `json:"dsh"`
 }
 
 // dshWebURL 打开的是 dsh 界面。relay 只把 /_admin、/auth、setup
@@ -70,7 +80,7 @@ func (s settings) logPath() string {
 // 如果因此拒绝显示托盘图标，用户就没有办法读取
 // 这条消息。
 func loadSettings(root string, arguments []string) settings {
-	resolved := settings{relayPort: defaultRelayPort, home: defaultHome(root)}
+	resolved := settings{relayPort: defaultRelayPort, home: defaultHome(root), dshProfile: defaultDshProfile}
 	path := configPath(root, arguments)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -86,6 +96,9 @@ func loadSettings(root string, arguments []string) settings {
 	}
 	if raw.Home != nil && *raw.Home != "" {
 		resolved.home = expandHome(*raw.Home, root)
+	}
+	if raw.Dsh != nil && raw.Dsh.Profile != nil && *raw.Dsh.Profile != "" {
+		resolved.dshProfile = *raw.Dsh.Profile
 	}
 	return resolved
 }
@@ -137,4 +150,58 @@ func expandHome(path string, root string) string {
 		return filepath.Clean(path)
 	}
 	return filepath.Join(root, path)
+}
+
+// dshHomeDir 与 packages/launcher/src/profile.ts 的 resolveDshHome 一致：
+// $DSH_HOME（空白视为未设置）优先，否则 ~/.dsh。无法确定时返回空串，
+// 调用方按「状态未知」处理（不显示补回菜单项）。
+func dshHomeDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	configured := strings.TrimSpace(os.Getenv("DSH_HOME"))
+	if configured == "" {
+		return filepath.Join(home, ".dsh")
+	}
+	if configured == "~" {
+		return home
+	}
+	if strings.HasPrefix(configured, "~/") || strings.HasPrefix(configured, `~\`) {
+		return filepath.Join(home, configured[2:])
+	}
+	if !filepath.IsAbs(configured) {
+		// resolveDshHome 会 resolve() 相对路径；托盘以工作目录不可预测为由
+		// 不做此推断，按未知处理。
+		return ""
+	}
+	return filepath.Clean(configured)
+}
+
+// conciseModeDisabled 报告简洁模式 Bundle 是否已不在 dsh profile 的
+// bundles 列表里（用户在 dsh 插件页停用了它）。任何读取或解析失败都
+// 返回 false：状态未知时不显示「补回」菜单项，绝不凭猜测改写 profile。
+func conciseModeDisabled(dshHome string, profile string) bool {
+	if dshHome == "" || profile == "" {
+		return false
+	}
+	data, err := os.ReadFile(filepath.Join(dshHome, "profiles", profile, "package.json"))
+	if err != nil {
+		return false
+	}
+	var manifest struct {
+		Dsh *struct {
+			Profile *struct {
+				Bundles []string `json:"bundles"`
+			} `json:"profile"`
+		} `json:"dsh"`
+	}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return false
+	}
+	bundles := manifest.Dsh.Profile.Bundles
+	if bundles == nil {
+		return false
+	}
+	return !slices.Contains(bundles, conciseModeBundle)
 }

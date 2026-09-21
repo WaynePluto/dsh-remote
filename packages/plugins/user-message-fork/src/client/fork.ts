@@ -11,7 +11,6 @@ export interface ForkConversationScope {
 /** controller 和测试使用的最小 client session 接口。 */
 export interface ForkSessions {
   fork(options: { sessionId: SessionId; atSeq: number; increaseTitle: boolean }): Promise<SessionId>
-  open(id: SessionId): void
   scope(id: SessionId): { get(name: 'conversation'): ForkConversationScope | undefined } | undefined
 }
 
@@ -54,6 +53,7 @@ export async function resolvePreviousTurnEnd(
  */
 export async function forkAndSeedUserMessage(
   sessions: ForkSessions,
+  openSession: (id: SessionId) => void,
   sessionId: SessionId,
   atSeq: number,
   text: string,
@@ -66,6 +66,6 @@ export async function forkAndSeedUserMessage(
     throw new Error(`user-message-fork: child "${String(childId)}" has no conversation service`)
   }
   conversation.input.for(scope).setDraft(text)
-  sessions.open(childId)
+  openSession(childId)
   return childId
 }

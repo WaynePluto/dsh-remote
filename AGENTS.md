@@ -23,8 +23,9 @@
   不写 home 级 patch、不修改官方 web profile，不实现第二套插件管理器。
 - 普通插件位于 packages/plugins/<名字>，包名 @dsh-remote/dsh-plugin-<名字>，
   包根 overlay 用 ./dist/index.js；launcher、dev-stack、pack 都要检查宿主和浏览器产物。
-- concise-mode 是专属 Profile Bundle，位于 dsh-web-app 后；locator 以 import.meta.url 定位 preset root。
-  launcher 对已有 profile 只非破坏性补入缺少的 Bundle，保留其他配置。
+- concise-mode（用户文案「简洁模式」）是专属 Profile Bundle，位于 dsh-web-app 后；locator 以 import.meta.url 定位 preset root。
+  launcher 对受管 Bundle 只确保一次（记录在 profile 内 dsh-remote-bundles-state.json）；用户在 dsh 插件页停用后不再自动补回，
+  补回入口是托盘菜单「补回简洁模式」与 `--restore-bundle`，见 packages/launcher/src/profile.ts。
 - 中文文案使用决策中的词表，页面使用机器真名；hub、membership、slug 等代码标识符不随文案改名。
 - 完成 roadmap 条目立即勾选，未做实机验收不能按自动测试结果勾选。
 

@@ -49,7 +49,7 @@ export function apply(ctx: Context): void {
       id: 'dsh-remote-files-initial-guide-sentinel',
       kind: 'dsh-remote-files-initial-guide-sentinel',
       title: () => t('directoryGuideTitle'),
-      guide: [{ order: 11, title: () => '' }],
+      guide: [{ id: 'dsh-remote-files-initial-guide-sentinel-entry', order: 11, title: () => '' }],
     })
     const disposeGuide = ctx.slots.inject('sidebar.right.tab.guide', () => ctx.slots.register(
       { name: 'sidebar.right.tab.guide', registrant: 'dsh-remote-files-directory-guide', priority: -1, select: () => ({}) },

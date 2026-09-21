@@ -60,7 +60,7 @@ models.dev 提供 reasoning_options，但 effort/toggle/budget_tokens 形态不�
 models 是持久的整份替换，卸载插件不会自动撤销配置。切回未加载该插件的官方 profile 前，
 应使用“删除本插件添加的模型”，避免未知混合协议模型无法恢复。
 
-在 dsh `0.1.5-rc.2` 中，`llm-pi-ai` 读取已存但因目录漂移而不可服务的模型配置时，会保留该路由和编辑入口，
+在 dsh `0.1.6-alpha.2` 中，`llm-pi-ai` 读取已存但因目录漂移而不可服务的模型配置时，会保留该路由和编辑入口，
 并在提供方目录显示诊断；只有新建或实际变更的路由仍按完整目录严格校验。项目 models-catalog 的恢复流程仍须先于
 写入校验运行，copilot-auth 使用的 `llm-pi-ai/github-copilot` 凭据格式不变。升级后的项目构建与冒烟验证见
 [源码依据](../02-dsh-facts.md)。

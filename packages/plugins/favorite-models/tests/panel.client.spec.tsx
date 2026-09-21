@@ -60,14 +60,12 @@ function setup(rejectWrite: boolean) {
     store: createSnapshotStore(directoryState),
     load: vi.fn(async () => directoryState),
   }
-  const sessionSnapshot = { current: 'session-1' }
-  const sessions = {
-    list: {
-      getSnapshot: () => sessionSnapshot,
-      subscribe: () => () => {},
-    },
+  const sessionSnapshot = { key: 'session-1' }
+  const session = {
+    getSnapshot: () => sessionSnapshot,
+    subscribe: () => () => {},
   }
-  return { scope, directory, sessions }
+  return { scope, directory, session }
 }
 
 describe('FavoriteModelsPanel settings persistence', () => {
@@ -75,7 +73,7 @@ describe('FavoriteModelsPanel settings persistence', () => {
     const fixture = setup(false)
     render(<FavoriteModelsPanel
       scope={fixture.scope}
-      sessions={fixture.sessions}
+      session={fixture.session}
       getDirectory={() => fixture.directory}
       t={t}
     />)
@@ -93,7 +91,7 @@ describe('FavoriteModelsPanel settings persistence', () => {
     const fixture = setup(false)
     render(<FavoriteModelsPanel
       scope={fixture.scope}
-      sessions={fixture.sessions}
+      session={fixture.session}
       getDirectory={() => fixture.directory}
       t={t}
     />)
@@ -115,7 +113,7 @@ describe('FavoriteModelsPanel settings persistence', () => {
     const fixture = setup(true)
     render(<FavoriteModelsPanel
       scope={fixture.scope}
-      sessions={fixture.sessions}
+      session={fixture.session}
       getDirectory={() => fixture.directory}
       t={t}
     />)

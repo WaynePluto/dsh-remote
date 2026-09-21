@@ -21,7 +21,7 @@
     "commander": "15.0.0",
     "pino": "10.3.1",
     "ws": "8.21.3",
-    "zod": "4.5.4"
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@dsh-remote/relay": "workspace:*",

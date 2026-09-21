@@ -27,6 +27,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
 export const inject = [
   'slots', 'locale', 'settingsScope', 'sessions', 'modelDirectories',
+  'uiSession',
   'remote', 'remote.session',
 ]
 
@@ -45,7 +46,7 @@ export function apply(ctx: Context): void {
     locale: NAMESPACE,
     inject: () => ({
       scope,
-      sessions: ctx.sessions,
+      session: ctx.uiSession.adapter.current,
       getDirectory,
       t,
     }),

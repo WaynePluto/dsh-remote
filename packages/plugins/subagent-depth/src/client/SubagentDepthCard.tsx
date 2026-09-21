@@ -5,6 +5,7 @@ import type { CSSProperties, ReactNode } from 'react'
 import { Button, IconChevronDownOutline14, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import {
   DEFAULT_SETTINGS,
@@ -22,7 +23,7 @@ export interface SubagentDepthCardInjected {
 
 /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 export type SubagentDepthCardProps =
-  PropsRuntime<'settings.plugin.item'>
+  PropsRuntime<'plugins.item'>
   & PropsLocale<typeof NAMESPACE>
   & InjectFace<SubagentDepthCardInjected>
 

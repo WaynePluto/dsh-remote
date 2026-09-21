@@ -1,6 +1,7 @@
 /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -28,11 +29,14 @@ export function apply(ctx: Context): void {
     () => ctx.locale.register(NAMESPACE, { zh, en }),
     'subagent-depth: copy dictionaries',
   )
+  const t = ctx.locale.bind(NAMESPACE)
   const scope: SettingsScope<SubagentDepthSettings> = ctx.settingsScope.bind<SubagentDepthSettings>({ namespace: NAMESPACE })
 
-  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
-    name: 'settings.plugin.item',
-    key: NAMESPACE,
+  ctx.slots.inject('plugins.item', () => ctx.slots.register({
+    name: 'plugins.item',
+    id: NAMESPACE,
+    order: 50,
+    label: () => t('title'),
     locale: NAMESPACE,
     inject: () => ({ scope }),
   }, SubagentDepthCard))

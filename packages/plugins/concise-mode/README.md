@@ -1,6 +1,6 @@
-# 精简模式
+# 简洁模式
 
-`@dsh-remote/dsh-plugin-concise-mode` 为 `dsh-remote-web` 提供两个精简 Agent 预设。
+`@dsh-remote/dsh-plugin-concise-mode` 为 `dsh-remote-web` 提供两个简洁 Agent 预设。
 新建会话时选择对应预设即可使用，不影响官方 `web` profile。
 
 ## 两个预设
@@ -20,7 +20,10 @@ PTC 的规则、SDK、执行器和 UI 均复用 dsh。工具状态页和执行�
 ## 装载与限制
 
 本包是 Profile Bundle，放在 `@deepseek-ai/dsh-web-app` 后，不使用普通插件的末尾 overlay。
-launcher 只向已有 profile 非破坏性补入缺失的 Bundle，保留用户其他配置。
+launcher 首次把本 Bundle 补入已有 profile 后记录在 profile 内的
+`dsh-remote-bundles-state.json`；用户在 dsh 插件页停用（把包名移出 `dsh.profile.bundles`）后，
+launcher 不再自动补回——右键托盘图标选「补回简洁模式」，或运行
+`node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-concise-mode` 补回。
 包内 locator 根据 `import.meta.url` 定位 presets，因此发行包可以移动目录。
 
 `concise-ptc` 的 persona 必须使用 `complete: false`，否则 dsh 生成的 PTC 工具说明会被过滤。

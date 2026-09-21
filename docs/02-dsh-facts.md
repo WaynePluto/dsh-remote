@@ -1,6 +1,6 @@
 # 02 · dsh 源码依据
 
-当前适配基线：`@deepseek-ai/dsh@0.1.5-rc.2`，对应 git `fb2c4b9e69`。
+当前适配基线：`@deepseek-ai/dsh@0.1.6-alpha.2`，对应 git `ddefc45fbc`。
 本目录保留当前实现依赖的契约与已有核实结论，不表示每次文档整理都重新运行过所有实机检查。
 升级 dsh 时加载 `dsh-source` skill，按主题复核；源码路径均相对于 dsh 仓库根。
 
@@ -21,7 +21,7 @@
 | 主题 | 检查入口 |
 |---|---|
 | 传输 | relay/connector 集成测试；[联调验收](reference/acceptance.md) |
-| 精简预设 | node scripts/concise-mode-check.mjs |
+| 简洁模式 | node scripts/concise-mode-check.mjs |
 | 模型 | node scripts/copilot-auth-check.mjs；node scripts/favorite-models-check.mjs |
 | 代理 | node scripts/proxy-check.mjs |
 | 重试与消息 | node scripts/turn-retry-check.mjs；node scripts/exec-process-check.mjs；node scripts/user-message-fork-check.mjs；node scripts/chat-scroll-check.mjs |

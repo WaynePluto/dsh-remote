@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { Button, IconChevronDownOutline14, Input, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { ModelDirectory, ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { staleFavorites } from '../filter.js'
@@ -13,9 +12,15 @@ import { fill } from './locales.js'
 import type { FavoriteModelsKey } from './locales.js'
 import * as css from './styles.js'
 
+/** dsh 0.1.6 起 sessions.list 不再携带当前会话；视图侧当前绑定来自 `ctx.uiSession.adapter.current`（key 为会话 id）。 */
+interface SessionBindingSource {
+  getSnapshot(): { key: string | undefined }
+  subscribe(listener: () => void): () => void
+}
+
 export interface FavoriteModelsPanelProps {
   scope?: SettingsScope<FavoriteModelsSettings>
-  sessions?: { list: ObservableSnapshot<{ current: string | undefined }> }
+  session?: SessionBindingSource
   getDirectory?: (sessionId: string) => Pick<ModelDirectory, 'store' | 'load'>
   t?: (key: FavoriteModelsKey) => string
 }
@@ -30,11 +35,14 @@ const EMPTY_DIRECTORY: ModelDirectoryState = {
 }
 const noopSubscribe = (): (() => void) => () => {}
 
+/** 缺省快照必须是稳定引用，否则 useSyncExternalStore 会无限重渲染。 */
+const NO_SESSION_BINDING = { key: undefined }
+
 function textOf(t: ((key: FavoriteModelsKey) => string) | undefined, key: FavoriteModelsKey): string {
   return t?.(key) ?? key
 }
 
-export function FavoriteModelsPanel({ scope, sessions, getDirectory, t }: FavoriteModelsPanelProps): ReactNode {
+export function FavoriteModelsPanel({ scope, session, getDirectory, t }: FavoriteModelsPanelProps): ReactNode {
   const settingsSnapshot = useSyncExternalStore(
     listener => scope?.subscribe(listener) ?? noopSubscribe(),
     () => scope?.getSnapshot() ?? {
@@ -56,12 +64,12 @@ export function FavoriteModelsPanel({ scope, sessions, getDirectory, t }: Favori
       mode: 'memory' as const,
     },
   )
-  const sessionList = useSyncExternalStore(
-    listener => sessions?.list.subscribe(listener) ?? noopSubscribe(),
-    () => sessions?.list.getSnapshot() ?? { current: undefined },
-    () => sessions?.list.getSnapshot() ?? { current: undefined },
+  const sessionBinding = useSyncExternalStore(
+    listener => session?.subscribe(listener) ?? noopSubscribe(),
+    () => session?.getSnapshot() ?? NO_SESSION_BINDING,
+    () => session?.getSnapshot() ?? NO_SESSION_BINDING,
   )
-  const sessionId = sessionList.current
+  const sessionId = sessionBinding.key
   const directory = sessionId === undefined || getDirectory === undefined ? undefined : getDirectory(sessionId)
   const directoryState = useSyncExternalStore(
     listener => directory?.store.subscribe(listener) ?? noopSubscribe(),

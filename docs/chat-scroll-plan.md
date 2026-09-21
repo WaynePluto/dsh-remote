@@ -25,7 +25,7 @@
 
 ## 2. 已查证的上游约束
 
-基线：dsh `0.1.5-rc.2` / `fb2c4b9e69`。以下路径均相对于上游根目录。
+基线：dsh `0.1.6-alpha.2` / `ddefc45fbc`。以下路径均相对于上游根目录。
 
 - `packages/client/ui-chat/src/client/chat/ChatView.tsx`：
   - `402–414`：`toBottom` 除了直接写 scrollTop，还清除分页锚点与 pending jump、

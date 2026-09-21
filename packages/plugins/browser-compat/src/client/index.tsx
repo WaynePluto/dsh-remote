@@ -57,7 +57,9 @@ export function apply(ctx: Context): void {
 
   if (bridge !== undefined) {
     ctx.effect(() => ctx.slots.onEntryError((key, entry, error, info) => {
-      const entryId = entry.options.id ?? entry.options.key ?? entry.registrant ?? 'unknown'
+      const entryId = 'options' in entry
+        ? entry.options.id ?? entry.options.key ?? entry.registrant ?? 'unknown'
+        : entry.name ?? entry.registrant ?? 'unknown'
       const context = `${key} / ${entryId}${info.abdicated ? ' / abdicated' : ''}`
       bridge.recordError('slot.error', error, context)
     }), 'browser-compat: observe slot errors')

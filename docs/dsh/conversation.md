@@ -120,6 +120,7 @@ Definition 必须匹配 assistant/chunk 等事件才会在流式期间重建；p
 fork(sessionId,atSeq) 找 atSeq 后的完整 turn/end 前缀，创建带 parentSession 的子会话，源会话不变。
 要从用户消息之前重做，传该 turn 之前最后一个已完成 turn/end 的 seq，不能传用户消息自身 seq。
 子会话通过 scoped SessionInput.setDraft 回填文本，标题由 increaseTitle 递增。
+客户端导航：0.1.6 起 ISessions 不再有 open/openSubagent（导航归 view owner），打开子会话用 ctx.uiWorkspace.openSession(id)。
 没有普通 user-actions 子槽，项目以 user keyed renderer 影子覆盖并保留复制/时间操作。
 首轮、空文本、附件或未知内容块不能无损回填时禁用动作；历史不全先分页补齐。
 

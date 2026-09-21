@@ -183,8 +183,11 @@ const trustedHosts = ['127.0.0.1', 'localhost', ...lanIp === undefined ? [] : [l
 // dsh 拒绝启动没有模板的 profile，因此开发栈必须像 launcher 一样（D14）
 // 引导共享 DSH_HOME：仅在目录缺失时创建最小模板，绝不重写。
 const dshHome = resolveDshHome()
-const profileBootstrap = ensureProfile({ home: dshHome, profile: DSH_PROFILE, managedBundles: [CONCISE_MODE_BUNDLE] })
+const { bootstrap: profileBootstrap, skippedManaged } = ensureProfile({ home: dshHome, profile: DSH_PROFILE, managedBundles: [CONCISE_MODE_BUNDLE] })
 console.log(`[dsh-remote] ${profileBootstrap === 'created' ? '已创建' : profileBootstrap === 'updated' ? '已更新' : '使用已有的'} dsh profile ${profileDirectory(dshHome, DSH_PROFILE)}`)
+if (skippedManaged.length > 0) {
+  console.log(`[dsh-remote] ${skippedManaged.join('、')} 此前已在 dsh 插件页停用，本次不自动补回；--restore-bundle 可补回。`)
+}
 
 const enrollToken = needsEnrollment() ? createEnrollToken() : undefined
 

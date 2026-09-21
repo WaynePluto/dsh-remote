@@ -201,7 +201,7 @@ pnpm dev                             # 起 relay + connector + dsh，浏览器�
 重启会打断当时正在进行的任务（生成中的回复、执行中的工具调用；会话历史与 services 常驻服务不受影响）。
 重启的唯一原因是 dsh 的 trustedHosts 在进程内**不可变**，而换入口必然改变 Host 集合，不重启就会 403。
 
-**源码依据（基线 fb2c4b9e69 / dsh 0.1.5-rc.2，升级时逐条复核）**：
+**源码依据（基线 ddefc45fbc / dsh 0.1.6-alpha.2，升级时逐条复核）**：
 
 - trustedHosts 来自 connection 插件启动配置，加载时一次性解析
   （`packages/client/connection/src/index.ts` 的 `apply()`，非法条目启动即失败）
@@ -217,6 +217,25 @@ pnpm dev                             # 起 relay + connector + dsh，浏览器�
 **如果上游有了**：向用户提出吸收建议（第 7 步流程），把 launcher 的自动重启替换为运行时更新调用；
 `dsh-restart-status.json` 状态文件与「远程入口」页的重启提示随之简化。**在确认上游契约之前，
 不要动现有重启机制**——它经端到端冒烟验证过，是当前唯一正确的做法。
+
+### 9. 常设关注：dsh 自带远程能力与本项目隧道的重叠
+
+**背景**：本项目的产品定位是「带认证的反向隧道 + 远程操作 dsh」（见 docs/01-decisions.md）。
+dsh 从 0.1.6-alpha 起在发展自己的远程能力（ssh 流认证与 remote providers、
+agent-team profile、headless 等）。一旦官方出现「跨机器安全访问 dsh」的成熟能力，
+本项目的某层（甚至整体定位）可能变薄或重叠——这是产品级决策，不由升级流程擅自处理。
+
+**每次升级 dsh 时检查**：翻 `git log 旧tag..新tag` 里 ssh / remote / tunnel / server 相关的
+feat 提交，重点看：
+
+- `packages/ssh/*`（ssh 传输、fs-ssh、sandbox-ssh）与 remote providers 系
+  （进程暴露、认证、端口转发能力），说明文档在 `docs/subsystems/ssh.md`
+- 官方是否有「公网/跨网访问 + 认证」的完整方案（而不只是局域网 ssh 直连）
+- agent-team / headless 对多端访问的新要求
+
+**发现重叠时**：写进升级报告的推荐列表，说清 dsh 提供了什么、覆盖本项目哪一层
+（relay 转发 / 认证 / 入口管理）、替代成本估计，**由用户决定**是否调整架构；
+确认架构调整前不要动现有分层。
 
 ## 完成后
 

@@ -48,7 +48,7 @@ describe('user-message-fork client wiring', () => {
   it('shadows only dsh ordinary user messages at a lower priority', () => {
     const world = fakeContext()
     apply(world.ctx as never)
-    expect(inject).toEqual(['slots', 'locale', 'sessions', 'uiConversation'])
+    expect(inject).toEqual(['slots', 'locale', 'sessions', 'uiConversation', 'uiWorkspace'])
     expect(world.locales).toEqual(['dsh-plugin-user-message-fork'])
     expect(world.injected).toEqual(['conversation.chat.node'])
     expect(world.registrations).toHaveLength(1)

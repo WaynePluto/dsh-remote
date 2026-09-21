@@ -46,6 +46,7 @@ const (
 	idStart
 	idStop
 	idRestart
+	idRestoreConcise
 	idLog
 	idAutostart
 	idExit
@@ -324,6 +325,12 @@ func (a *application) showMenu() {
 	appendItem(menu, idStart, "启动", state == stackStopped)
 	appendItem(menu, idStop, "停止", state == stackRunning || state == stackStarting)
 	appendItem(menu, idRestart, "重启", state == stackRunning)
+	// 简洁模式被用户在 dsh 插件页停用后才出现：它是唯一的恢复入口
+	//（停用后 dsh 的插件页不再列出该 Bundle）。菜单每次右键都重新
+	// 读取 profile manifest，因此停用/补回后状态即时反映。
+	if conciseModeDisabled(dshHomeDir(), a.settings.dshProfile) {
+		appendItem(menu, idRestoreConcise, "补回简洁模式", true)
+	}
 	appendSeparator(menu)
 	appendItem(menu, idLog, "查看日志", true)
 	appendCheckItem(menu, idAutostart, "开机自启动", autostartEnabled())
@@ -367,6 +374,8 @@ func (a *application) invoke(command uintptr) {
 		go a.stack.stop()
 	case idRestart:
 		go a.stack.restart()
+	case idRestoreConcise:
+		go a.restoreConciseMode()
 	case idLog:
 		a.openLog()
 	case idAutostart:
@@ -378,6 +387,35 @@ func (a *application) invoke(command uintptr) {
 
 func (a *application) openDsh() {
 	a.open(a.settings.dshWebURL())
+}
+
+// restoreConciseMode 把简洁模式 Bundle 写回 dsh profile 并在 stack
+// 运行中时重启使它生效。文件改写交给 launcher 的一次性命令完成
+// （--restore-bundle），托盘不复制 profile manifest 的合并逻辑；
+// 补回后该菜单项随下次右键自然消失。
+func (a *application) restoreConciseMode() {
+	a.log.printf("正在补回简洁模式（%s）", conciseModeBundle)
+	output, err := a.stack.runOneShot([]string{"--restore-bundle=" + conciseModeBundle})
+	for _, line := range strings.Split(strings.TrimRight(output, "\r\n"), "\n") {
+		if line != "" {
+			a.log.printf("[launcher] %s", strings.TrimPrefix(line, "[dsh-remote] "))
+		}
+	}
+	if err != nil {
+		a.log.printf("补回简洁模式失败：%v", err)
+		messageBox(
+			"补回简洁模式失败：\n\n"+err.Error()+"\n\n详情见日志：\n"+a.settings.logPath(),
+			appName,
+			mbIconError,
+		)
+		return
+	}
+	if a.stack.currentState() == stackRunning {
+		a.log.printf("补回完成，正在重启 dsh-remote 使其生效")
+		a.stack.restart()
+		return
+	}
+	a.log.printf("补回完成；下次启动时生效")
 }
 
 func (a *application) openAdmin() {
