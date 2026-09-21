@@ -1,6 +1,6 @@
 {
   "name": "dsh-remote-root",
-  "version": "0.0.1",
+  "version": "0.0.2-20260922",
   "license": "MIT",
   "private": true,
   "type": "module",
