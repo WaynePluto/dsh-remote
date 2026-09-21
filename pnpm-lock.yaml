@@ -285,7 +285,7 @@ importers:
         specifier: 0.1.6-alpha.2
         version: 0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2)
       '@dsh-remote/plugin-ui':
-        specifier: workspace:0.0.1
+        specifier: workspace:0.0.2-20260922
         version: link:../../plugin-ui
     devDependencies:
       '@deepseek-ai/cordis':
@@ -325,7 +325,7 @@ importers:
   packages/plugins/browser-compat:
     dependencies:
       '@dsh-remote/plugin-ui':
-        specifier: workspace:0.0.1
+        specifier: workspace:0.0.2-20260922
         version: link:../../plugin-ui
     devDependencies:
       '@deepseek-ai/cordis':
@@ -720,7 +720,7 @@ importers:
         specifier: 3.18.2
         version: 3.18.2
       '@dsh-remote/plugin-ui':
-        specifier: workspace:0.0.1
+        specifier: workspace:0.0.2-20260922
         version: link:../../plugin-ui
     devDependencies:
       '@deepseek-ai/cordis':
@@ -784,7 +784,7 @@ importers:
         specifier: 3.18.2
         version: 3.18.2
       '@dsh-remote/plugin-ui':
-        specifier: workspace:0.0.1
+        specifier: workspace:0.0.2-20260922
         version: link:../../plugin-ui
       undici:
         specifier: 8.10.2
@@ -893,7 +893,7 @@ importers:
         specifier: 0.1.6-alpha.2
         version: 0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-agent@0.1.6-alpha.2(44110910133b3cc261ea9dfdcaed39ee))(@deepseek-ai/dsh-brand@0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-invariants@0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-llm@0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-scope@0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2)))(@deepseek-ai/dsh-session@0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-scope@0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2))))(@deepseek-ai/dsh-system-prompt@0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-llm@0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-scope@0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2))))
       '@dsh-remote/plugin-ui':
-        specifier: workspace:0.0.1
+        specifier: workspace:0.0.2-20260922
         version: link:../../plugin-ui
       '@types/react':
         specifier: 18.3.31
@@ -908,7 +908,7 @@ importers:
   packages/plugins/skills-inspector:
     dependencies:
       '@dsh-remote/plugin-ui':
-        specifier: workspace:0.0.1
+        specifier: workspace:0.0.2-20260922
         version: link:../../plugin-ui
     devDependencies:
       '@deepseek-ai/cordis':
@@ -1015,7 +1015,7 @@ importers:
         specifier: 3.18.2
         version: 3.18.2
       '@dsh-remote/plugin-ui':
-        specifier: workspace:0.0.1
+        specifier: workspace:0.0.2-20260922
         version: link:../../plugin-ui
     devDependencies:
       '@deepseek-ai/cordis':
@@ -1070,7 +1070,7 @@ importers:
   packages/plugins/tools-inspector:
     dependencies:
       '@dsh-remote/plugin-ui':
-        specifier: workspace:0.0.1
+        specifier: workspace:0.0.2-20260922
         version: link:../../plugin-ui
     devDependencies:
       '@deepseek-ai/cordis':
@@ -1159,7 +1159,7 @@ importers:
         specifier: 0.1.6-alpha.2
         version: 0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-session@0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-scope@0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.6-alpha.2(@deepseek-ai/cordis@4.0.2))))
       '@dsh-remote/plugin-ui':
-        specifier: workspace:0.0.1
+        specifier: workspace:0.0.2-20260922
         version: link:../../plugin-ui
       '@types/react':
         specifier: 18.3.31

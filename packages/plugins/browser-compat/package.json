@@ -23,7 +23,7 @@
     "cordis.patch.yml"
   ],
   "dependencies": {
-    "@dsh-remote/plugin-ui": "workspace:0.0.1"
+    "@dsh-remote/plugin-ui": "workspace:0.0.2-20260922"
   },
   "scripts": {
     "build": "tsdown",
