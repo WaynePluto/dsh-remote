@@ -1,6 +1,7 @@
-# dsh-remote 的 dsh 插件叠加层，由 launcher 用 `dsh --patch <这个文件>` 传给 dsh。
+# dsh-remote 的受管 Bundle patch 层；package.json 的 dsh.bundle.patch 指向本文件，
+# 由 profile 的 bundles 数组装载（层序：Bundle → profile patch → home patch → --patch）。
 #
-# `id` 让后续 `--patch` 可按 id 覆盖 config；本插件没有 config，
+# `id` 让更靠后的 patch 层可按 id 覆盖 config；本插件没有 config，
 # 只为 `$DSH_HOME/AGENTS.md` 提供编辑界面，不创建 settings namespace。
 #
 # 双面插件：insert 加载宿主半 `dist/index.js`；dsh 客户端模块系统依据

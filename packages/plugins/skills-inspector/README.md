@@ -29,3 +29,6 @@ node scripts/skills-inspector-check.mjs
 ```
 
 修改插件后必须构建并重启 dsh。
+## 停用与补回
+
+本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：会话里的「技能」tab 消失；技能本身不受影响。launcher 不再自动补回；右键托盘图标选「补回技能状态」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-skills-inspector` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。

@@ -78,3 +78,7 @@ node scripts/files-check.mjs
 
 `dsh-remote-web` 没有 HMR。修改宿主、浏览器代码或样式后，必须重新构建并重启 dsh；只刷新页面不会
 重新加载冻结的浏览器产物。
+
+## 停用与补回
+
+本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：右侧栏「文件」增强（Git 状态、目录右键菜单、预览增强）消失，回到 dsh 原生文件树；本插件不提供写入接口的性质不变。launcher 不再自动补回；右键托盘图标选「补回文件浏览」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-files` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。

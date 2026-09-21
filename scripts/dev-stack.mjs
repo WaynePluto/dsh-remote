@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { DatabaseSync } from 'node:sqlite'
 import process from 'node:process'
-import { CONCISE_MODE_BUNDLE, ensureProfile, profileDirectory, resolveDshHome } from '../packages/launcher/src/profile.ts'
+import { MANAGED_PLUGIN_BUNDLES, ensureProfile, profileDirectory, resolveDshHome } from '../packages/launcher/src/profile.ts'
 import { issueDeviceEnrollToken, openRelayStore } from '../packages/relay/src/store/index.ts'
 import {
   DEVICE_KEY_FILE,
@@ -182,8 +182,9 @@ const trustedHosts = ['127.0.0.1', 'localhost', ...lanIp === undefined ? [] : [l
 
 // dsh 拒绝启动没有模板的 profile，因此开发栈必须像 launcher 一样（D14）
 // 引导共享 DSH_HOME：仅在目录缺失时创建最小模板，绝不重写。
+// 受管 Bundle 与 launcher 完全同清单：开发栈必须验证发行形态。
 const dshHome = resolveDshHome()
-const { bootstrap: profileBootstrap, skippedManaged } = ensureProfile({ home: dshHome, profile: DSH_PROFILE, managedBundles: [CONCISE_MODE_BUNDLE] })
+const { bootstrap: profileBootstrap, skippedManaged } = ensureProfile({ home: dshHome, profile: DSH_PROFILE, managedBundles: MANAGED_PLUGIN_BUNDLES })
 console.log(`[dsh-remote] ${profileBootstrap === 'created' ? '已创建' : profileBootstrap === 'updated' ? '已更新' : '使用已有的'} dsh profile ${profileDirectory(dshHome, DSH_PROFILE)}`)
 if (skippedManaged.length > 0) {
   console.log(`[dsh-remote] ${skippedManaged.join('、')} 此前已在 dsh 插件页停用，本次不自动补回；--restore-bundle 可补回。`)
@@ -201,7 +202,8 @@ let dshTokenSeen = false
 start('dsh', process.execPath, [
   DSH_BIN,
   '--profile', DSH_PROFILE,
-  // dsh-remote 自有 dsh 插件（D17）。--patch 是 launcher 标志，因此必须
+  // 壳级常驻 overlay（connection 注入，D20）：普通插件已是受管 Bundle，
+  // 随上面的 profile 装载。--patch 是 launcher 标志，因此必须
   // 与 --profile 放在一起，并置于 web app 自行解析的所有参数之前。
   ...dshPluginOverlays().flatMap(overlay => ['--patch', overlay]),
   '--no-open',

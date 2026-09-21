@@ -16,7 +16,7 @@ dsh 已经具备登录流程与凭据支持（核实结论见 [模型与代理](
 
 | 半边 | 文件 | 作用 |
 |---|---|---|
-| 宿主 | `dist/index.js`（由 `dsh-overlay.yml` 的 `--patch` 加载） | 跑 pi-ai 的登录流程，把凭据写进 `ctx.credentials`，登录成功后写 `llm-pi-ai.providers['github-copilot']` |
+| 宿主 | `dist/index.js`（由 `cordis.patch.yml` 的 Bundle 层装载） | 跑 pi-ai 的登录流程，把凭据写进 `ctx.credentials`，登录成功后写 `llm-pi-ai.providers['github-copilot']` |
 | 浏览器 | `dist/client.js`（由 dsh 的客户端模块系统按 `dsh.client` + `exports["./client"]` 下发） | 占用模型页官方扩展槽 `settings.models.provider-card`（key = `llm-pi-ai`），只在 `github-copilot` 那张卡上渲染登录区；同时声明 provider-card 子槽，供同一适配器的模型能力插件挂入原生展开行 |
 
 两半通过 `ctx.connection.rpc` 上的 `/copilot-auth` 通道通信，dsh 会给它套上和 `/api` 一样的 Host/Origin 围栏与浏览器认证；在 dsh-remote 部署里，外面还叠着 relay 的登录。
@@ -52,3 +52,7 @@ node scripts/copilot-auth-check.mjs
 3. 凭据记录仍是 `llm-pi-ai/github-copilot` + `{kind:'grant', payload:<pi-ai 凭据>}`，且 pi-ai 的 copilot 提供方仍在内置目录里（`packages/llm/llm-pi-ai/src/auth.ts`）。
 
 另外：`@earendil-works/pi-ai` 的版本要跟 dsh 依赖的那个保持一致，否则凭据格式可能对不上。
+
+## 停用与补回
+
+本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：设置里的 Copilot 登录页消失；已保存的凭据与账号模型条目保留，但无法重新登录或同步。launcher 不再自动补回；右键托盘图标选「补回Copilot 登录」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-copilot-auth` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。

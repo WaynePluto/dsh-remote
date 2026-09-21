@@ -59,7 +59,7 @@ JSON 数据，serve 形态渲染进 index.html 文本，静态 worker 形态由 
 按同一顺序执行。行类型：`global`（先于后续 script 行给 globalThis 赋值）、`script`
 （内联经典脚本，text 不得含 `</script`）、`script-src`/`script-preload`、`style`、`html`。
 
-head 位置的经典脚本 parser-blocking，先于页面 combo 模块求值。remote-privileged 用
+head 位置的经典脚本 parser-blocking，先于页面 combo 模块求值。remote-settings 用
 global 行注入 `__DSH_TRANSPORT__`；browser-compat 用 head script 行在旧 WebKit 上垫平
 Iterator/AbortSignal/Promise 能力，并建立当前页面内存中的诊断桥（函数体 `toString()` 序列化，
 必须自包含、不引用模块作用域）。client 半读取该桥显示临时日志，不向 Host 发 RPC。

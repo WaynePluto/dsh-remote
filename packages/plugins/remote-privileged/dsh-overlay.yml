@@ -1,14 +1,10 @@
-# dsh-remote 的 dsh 插件叠加层，由 launcher 用 `dsh --patch <这个文件>` 传给 dsh。
+# dsh-remote 的壳级常驻 overlay，由 launcher 以 `dsh --patch <这个文件>` 传给 dsh，
+# 固定在 overlay 列表首位。它是全部插件 RPC 通道的地基，与远程无关，
+# 本机使用同样需要，因此不可停用；ownsHost 的远程设置部分在
+# remote-settings 受管 Bundle 里。
 #
-# profile 属于用户，launcher 只在 profile 不存在时写模板，因此插件不能改用户的
+# profile 属于用户，launcher 只在 profile 不存在时写模板，因此不能改用户的
 # cordis.patch.yml；`--patch` 在 profile 层之后应用（`apps/cli/src/args.ts`）。
-# `./` insert 名字由 dsh 锚定本文件目录并转成 file:// URL，故必须使用相对路径，不能写绝对路径。
-# connection 继续注入 webRuntime 与 webServer，让 RPC 注册使用相同的 WebServer context。
-#
-# 无 id 的 insert 由 `applyEntryPatches` 追加到条目表末尾；它只订阅每次渲染
-# index.html 时收集的事件表，所以加载顺序不影响结果。
+# connection 注入 webRuntime 与 webServer，让 RPC 注册使用相同的 WebServer context。
 - id: connection
   inject: [webRuntime, webServer]
-
-- insert:
-    - name: './dist/index.js'

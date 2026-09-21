@@ -1,0 +1,11 @@
+# dsh-remote 的受管 Bundle patch 层；package.json 的 dsh.bundle.patch 指向本文件，
+# 由 profile 的 bundles 数组装载（层序：Bundle → profile patch → home patch → --patch）。
+#
+# 自 remote-privileged 拆出的 ownsHost 部分；connection 的 webServer 注入留在
+# 壳级常驻 overlay（不可停），那不是本 Bundle 的职责。
+#
+# `./` insert 名字由 dsh 锚定本文件目录并转成 file:// URL，故必须使用相对路径，不能写绝对路径。
+# 无 id 的 insert 由 `applyEntryPatches` 追加到条目表末尾；它只订阅每次渲染
+# index.html 时收集的事件表，所以加载顺序不影响结果。
+- insert:
+    - name: './dist/index.js'

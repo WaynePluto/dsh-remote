@@ -1,7 +1,9 @@
 /**
- * dsh-remote 插件：让已认证的远程浏览器获得与机器本地浏览器相同的 dsh surface。dsh 在浏览器端依据 loopback 判断 settings 是否可持久化；relay 已先完成认证，本插件通过 `ClientTransportHooks.ownsHost` 告知页面可以使用宿主状态。它不触碰 `/api` trust fence、不伪造 header，也不改变 relay 转发。
+ * dsh-remote 插件（自 remote-privileged 拆出的 ownsHost 部分）：让已认证的远程浏览器获得与机器本地浏览器相同的 dsh surface。dsh 在浏览器端依据 loopback 判断 settings 是否可持久化；relay 已先完成认证，本插件通过 `ClientTransportHooks.ownsHost` 告知页面可以使用宿主状态。它不触碰 `/api` trust fence、不伪造 header，也不改变 relay 转发。
  *
- * @module @dsh-remote/dsh-plugin-remote-privileged
+ * Cordis 插件名保留拆分前的 dsh-remote-remote-privileged，插件树与诊断里的身份不变。
+ *
+ * @module @dsh-remote/dsh-plugin-remote-settings
  */
 
 import type { Context } from '@deepseek-ai/cordis'

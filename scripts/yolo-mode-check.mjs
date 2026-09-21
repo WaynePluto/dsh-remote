@@ -1,19 +1,22 @@
 /**
  * 固定 YOLO 模式升级/冒烟检查。
- * 先在进程内检查 Host 产物，再用全部 dsh-remote overlay 加载隔离真实 dsh 和临时探针；探针不发模型请求，检查实时 Agent 工具 schema，用无害 shell 调用验证冗余提权字段，并在完整配对 test turn 发起一次明确 approval。
+ * 先在进程内检查 Host 产物与 Bundle patch 层，再用壳级 overlay 加载隔离真实 dsh 和临时探针；
+ * yolo-mode 经 profile 的 bundles 数组以 Bundle 装载（不再走 --patch overlay），探针不发模型请求，
+ * 检查实时 Agent 工具 schema，用无害 shell 调用验证冗余提权字段，并在完整配对 test turn 发起一次明确 approval。
  * 升级 dsh 或修改此插件后运行：`node scripts/yolo-mode-check.mjs [--port 3101]`。
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DSH_BIN, DSH_PROFILE, DEV_DIRECTORY, ROOT, dshPluginOverlays } from './local-config.mjs'
+import { DSH_BIN, DSH_PROFILE, DEFAULT_PROFILE_BUNDLES, DEV_DIRECTORY, ROOT, dshPluginOverlays } from './local-config.mjs'
 import { cleanupCheckHome, withCheckHome } from './lib/check-home.mjs'
 import { createCheckContext, runLiveDshCheck } from './lib/check-context.mjs'
 import { inspectHostBundle as inspectHostArtifact } from './lib/check-client-bundle.mjs'
 
 const PACKAGE_DIRECTORY = join(ROOT, 'packages', 'plugins', 'yolo-mode')
 const HOST_BUNDLE = join(PACKAGE_DIRECTORY, 'dist', 'index.js')
-const OVERLAY = join(PACKAGE_DIRECTORY, 'dsh-overlay.yml')
+const BUNDLE_PATCH = join(PACKAGE_DIRECTORY, 'cordis.patch.yml')
+const YOLO_BUNDLE = '@dsh-remote/dsh-plugin-yolo-mode'
 const portArgument = process.argv.indexOf('--port')
 const PORT = portArgument === -1 ? 3101 : Number(process.argv[portArgument + 1])
 const HOME = join(DEV_DIRECTORY, 'yolo-mode-check-home')
@@ -106,18 +109,14 @@ function prepareHome() {
   cleanupCheckHome(HOME)
   const profile = join(HOME, 'profiles', DSH_PROFILE)
   mkdirSync(profile, { recursive: true })
-  // 这是 launcher/profile.ts 写入的同一个最小 profile 模板；
-  // 使用生成的隔离 profile 可让检查不依赖用户的 home，
-  // 也能证明普通 overlay 路径，而不是复制的用户 patch。
+  // 与 launcher/profile.ts 的默认模板同一份 Bundle 清单（local-config 复制，
+  // launcher 为权威）：yolo-mode 以 Bundle 层装载，验证的正是发行装载路径，
+  // 而不是 --patch overlay。yolo-mode 排在受管清单末位。
   writeFileSync(join(profile, 'package.json'), `${JSON.stringify({
     name: `dsh-profile-${DSH_PROFILE}`,
     private: true,
     dependencies: {},
-    dsh: { profile: { bundles: [
-      '@deepseek-ai/dsh-base',
-      '@deepseek-ai/dsh-web-app',
-      '@dsh-remote/dsh-plugin-concise-mode',
-    ] } },
+    dsh: { profile: { bundles: DEFAULT_PROFILE_BUNDLES } },
   }, null, 2)}\n`)
   writeFileSync(join(profile, 'cordis.patch.yml'), '[]\n')
   writeFileSync(join(profile, 'pnpm-workspace.yaml'), 'packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n')
@@ -125,14 +124,16 @@ function prepareHome() {
 
 async function checkHostArtifact() {
   check(existsSync(HOST_BUNDLE), 'Host bundle dist/index.js 存在', HOST_BUNDLE)
-  check(existsSync(OVERLAY), 'dsh-overlay.yml 存在', OVERLAY)
+  check(existsSync(BUNDLE_PATCH), 'cordis.patch.yml 存在', BUNDLE_PATCH)
   check(!existsSync(join(PACKAGE_DIRECTORY, 'dist', 'client.js')), 'Host-only 插件没有生成 dist/client.js')
-  const overlay = readFileSync(OVERLAY, 'utf8')
-  check(overlay.includes('mode: danger-full-access'), 'overlay 固定 danger-full-access')
-  check(overlay.includes('policy: ask'), 'overlay 固定 approval policy ask')
-  check(overlay.includes('- id: permission') && overlay.includes('disabled: true'), 'overlay 禁用 permission Host service')
-  check(overlay.includes('- id: ui-permission') && overlay.includes('disabled: true'), 'overlay 禁用 permission client UI')
-  check(overlay.indexOf("name: './dist/index.js'") !== -1, 'overlay 使用相对 Host bundle 路径')
+  const manifest = JSON.parse(readFileSync(join(PACKAGE_DIRECTORY, 'package.json'), 'utf8'))
+  check(manifest.dsh?.bundle?.patch === './cordis.patch.yml', 'package.json 声明 dsh.bundle.patch 指向 cordis.patch.yml')
+  const overlay = readFileSync(BUNDLE_PATCH, 'utf8')
+  check(overlay.includes('mode: danger-full-access'), 'Bundle patch 固定 danger-full-access')
+  check(overlay.includes('policy: ask'), 'Bundle patch 固定 approval policy ask')
+  check(overlay.includes('- id: permission') && overlay.includes('disabled: true'), 'Bundle patch 禁用 permission Host service')
+  check(overlay.includes('- id: ui-permission') && overlay.includes('disabled: true'), 'Bundle patch 禁用 permission client UI')
+  check(overlay.indexOf("name: './dist/index.js'") !== -1, 'Bundle patch 使用相对 Host bundle 路径')
   if (!existsSync(HOST_BUNDLE)) return
 
   const listeners = new Map()
@@ -188,7 +189,7 @@ async function checkLiveDsh() {
     })
     await runLiveDshCheck(context, {
       startedAssertions: () => {
-        check(true, '真实 dsh 带全部 overlay 与临时 probe 正常启动')
+        check(true, `真实 dsh 以 Bundle 装载（含 ${YOLO_BUNDLE}）与壳级 overlay + 临时 probe 正常启动`)
       },
       exchangeAssertions: ({ exchange, cookie }) => {
         check(cookie !== '', 'dsh token 换到了浏览器 cookie', `status ${exchange.status}`)

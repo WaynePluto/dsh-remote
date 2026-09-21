@@ -48,3 +48,7 @@ RPC、文件或数据库；不上传、不跨设备同步，刷新或关闭页�
 - 日志只在当前页面内存中存在；设置页关闭不清空，刷新/关闭整个页面才清空。
 - 加载体积增加一条小型自包含启动脚本和一个按需加载的设置 client bundle；documentpreview
   的 bundle 照常下载，本插件不复制上游组件。
+
+## 停用与补回
+
+本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：现代浏览器无感；旧 WebKit（旧 Safari / 手机 WebView）可能白屏，设置里的「浏览器日志」页也随之消失。launcher 不再自动补回；右键托盘图标选「补回浏览器兼容」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-browser-compat` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。

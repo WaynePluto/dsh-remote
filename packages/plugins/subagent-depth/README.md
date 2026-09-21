@@ -43,3 +43,7 @@ pnpm --filter @dsh-remote/dsh-plugin-subagent-depth build
 触发器样式参照 dsh `packages/client/ui-settings-plugins/src/client/fields.module.css`，
 弹层参照 `packages/client/locale/src/client/LanguageRow.tsx` 与 `ui-primitives/src/Menu.tsx`。
 `tests/styles.spec.ts` 只防止样式契约退化，不能代替真实浏览器的主题与交互验收。
+
+## 停用与补回
+
+本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：子代理深度上限设置消失，回到 dsh 发布的默认 maxDepth=3。launcher 不再自动补回；右键托盘图标选「补回子代理深度」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-subagent-depth` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。

@@ -1,0 +1,29 @@
+# dsh-remote 的固定 YOLO 受管 Bundle patch 层。
+#
+# 本 Bundle 必须是受管 Bundle 的最后一项：它把部署默认固定为 full-access + ask，
+# 并禁用会误导用户的权限选择器。`config` 是整段替换，
+# sandbox-policy 的 workspaceRoot 不能省略。
+#
+# 用户停用本 Bundle 即恢复 dsh 原生权限审批；用户 profile patch 也可以覆盖这里的
+# 行，那只会更严或恢复原生审批，安全方向成立。
+# `./dist/index.js` 是相对本文件的路径，dsh 会在加载时锚定它；不要写开发机绝对路径。
+- id: sandbox-policy
+  config:
+    mode: danger-full-access
+    workspaceRoot: !!js process.cwd()
+
+# `never` 的含义是自动拒绝，不是自动允许；YOLO answerer 必须收到请求。
+- id: approval
+  config:
+    policy: ask
+
+# YOLO 接管权限策略，不再给用户展示实际无效的权限选择。
+- id: permission
+  disabled: true
+
+- id: ui-permission
+  disabled: true
+
+- insert:
+    - id: yolo-mode
+      name: './dist/index.js'

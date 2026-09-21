@@ -39,12 +39,12 @@ import {
   writeDshRestartStatus,
   type TrustChange,
 } from './dsh-restart.js'
-import { DSH_PLUGIN_PACKAGE_NAMES, resolveDshPluginOverlays } from './dsh-plugins.js'
+import { checkManagedPluginBundles, resolveDshPluginOverlays, SHELL_PLUGIN_PACKAGE_NAMES } from './dsh-plugins.js'
 import { LauncherError } from './errors.js'
 import { JWT_SECRET_ENV_NAME, jwtSecretFilePath, loadOrCreateJwtSecret } from './jwt-secret.js'
 import { isSelfHub, membershipFilePath, readMembership } from './membership.js'
 import { assertSupportedNodeVersion } from './node-version.js'
-import { CONCISE_MODE_BUNDLE, ensureProfile, profileDirectory, resolveDshHome, restoreManagedBundle } from './profile.js'
+import { ensureProfile, MANAGED_PLUGIN_BUNDLES, profileDirectory, resolveDshHome, restoreManagedBundle } from './profile.js'
 import { relayArguments, resolveRelayEntry } from './relay.js'
 import { relayAdminInitialized } from './relay-admin.js'
 import { createSupervisor, type ChildExit } from './supervisor.js'
@@ -139,7 +139,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   const { bootstrap, skippedManaged } = ensureProfile({
     home: dshHome,
     profile: config.dsh.profile,
-    ...config.dsh.profile === 'dsh-remote-web' ? { managedBundles: [CONCISE_MODE_BUNDLE] } : {},
+    ...config.dsh.profile === 'dsh-remote-web' ? { managedBundles: MANAGED_PLUGIN_BUNDLES } : {},
   })
   say(bootstrap === 'created'
     ? `已创建 dsh profile ${profileDirectory(dshHome, config.dsh.profile)}`
@@ -147,7 +147,7 @@ export async function run(argv: readonly string[]): Promise<number> {
       ? `已更新 dsh profile ${profileDirectory(dshHome, config.dsh.profile)}`
       : `使用已有的 dsh profile ${profileDirectory(dshHome, config.dsh.profile)}`)
   if (skippedManaged.length > 0) {
-    say(`${skippedManaged.join('、')} 此前已在 dsh 插件页停用，本次不自动补回；右键托盘图标可选「补回简洁模式」（或用 --restore-bundle）。`)
+    say(`${skippedManaged.join('、')} 此前已在 dsh 插件页停用，本次不自动补回；右键托盘图标可选「补回」（或用 --restore-bundle）。`)
   }
 
   // Mode A：relay 原样转发浏览器的 Host，因此 dsh 必须信任
@@ -169,9 +169,10 @@ export async function run(argv: readonly string[]): Promise<number> {
   // 必须在尚无运行中进程可清理时报告。
   const dshBin = resolveDshBin()
   const dshPatchFiles = resolveDshPluginOverlays()
+  checkManagedPluginBundles()
   const relayEntry = resolveRelayEntry()
   const connectorEntry = resolveConnectorEntry()
-  say(`dsh 插件：${DSH_PLUGIN_PACKAGE_NAMES.join('、')}`)
+  say(`dsh 插件：壳级注入 ${SHELL_PLUGIN_PACKAGE_NAMES.join('、')}；受管 Bundle ${String(MANAGED_PLUGIN_BUNDLES.length)} 个`)
 
   // 从不写入日志：此密钥会签名每个控制台会话。
   const jwtSecret = loadOrCreateJwtSecret(

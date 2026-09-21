@@ -35,7 +35,7 @@
 | 插件 | 使用入口 | 用途 |
 |---|---|---|
 | [简洁模式](../packages/plugins/concise-mode/README.md) | 新建会话时选择预设 | 提供 concise 与 concise-ptc 两个简洁预设 |
-| [远程设置](../packages/plugins/remote-privileged/README.md) | 自动生效 | 让已认证的远程浏览器使用完整设置页 |
+| [远程设置](../packages/plugins/remote-settings/README.md) | 自动生效 | 让已认证的远程浏览器使用完整设置页（自 remote-privileged 拆出；connection 注入留在壳级 overlay 不可停） |
 | [浏览器兼容](../packages/plugins/browser-compat/README.md) | 自动生效；设置 → 浏览器日志 | 为旧 WebKit 垫平 Iterator/AbortSignal/Promise 缺口，并提供当前页面临时错误日志与能力清单 |
 | [网页目录选择](../packages/plugins/directory-picker-browse/README.md) | 打开工作区 | 在浏览器内选择运行 dsh 的机器上的目录 |
 | [固定 YOLO](../packages/plugins/yolo-mode/README.md) | 自动生效 | 固定全权限并自动允许权限请求；用户提问仍需回答 |
@@ -43,9 +43,14 @@
 ## 使用与维护
 
 - 内置扩展只加载到 `dsh-remote-web` profile；官方 `web` profile 不加载它们。
-- 功能插件转可停用 Bundle 的分批计划见 [插件可选化计划](plugin-optional-plan.md)（独立仓库发布暂缓）。
-- 普通插件由 launcher 传入 `--patch`；简洁模式是排在 `dsh-web-app` 后的 Profile Bundle，用户可在 dsh 插件页停用它（launcher 不再自动补回，右键托盘可选「补回简洁模式」，或用 `--restore-bundle`）。
+- 全部插件（含简洁模式与固定 YOLO）都是默认受管的 Profile Bundle（D20）：默认全开，
+  用户可在 dsh 插件页停用（把包名移出 `dsh.profile.bundles`，对应功能随之消失），
+  launcher 不再自动补回；右键托盘图标会列出全部缺失受管项、逐个「补回」，
+  或用 `node dist/index.js --restore-bundle <包名>`。停用后果逐插件见各包 README
+  「停用与补回」一节。
+- 唯一随 launcher 以 `--patch` 常驻传入的是 connection 注入
+  （[remote-privileged](../packages/plugins/remote-privileged/README.md)，不可停）。
 - 改动插件后，重新构建并重启 dsh。该 profile 没有 HMR，刷新页面不会加载新产物。
 - 带浏览器半的插件依赖 `dist/client.js`；缺失时应修复构建或重新解压，不能跳过检查启动。
 - 固定 YOLO 会取消模型执行前的交互式权限边界，请阅读 [安全说明](04-security.md)。
-- 新增或删除插件时，同步维护本索引和包根 README；已完成实现的细节不追加到路线图。
+- 新增或删除插件时，同步维护本索引、launcher 受管清单与包根 README；已完成实现的细节不追加到路线图。

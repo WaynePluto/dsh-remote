@@ -163,3 +163,7 @@ pnpm --filter @dsh-remote/dsh-plugin-exec-process build      # 两半
 pnpm --filter @dsh-remote/dsh-plugin-exec-process test
 pnpm --filter @dsh-remote/dsh-plugin-exec-process typecheck  # 宿主程序 + 浏览器程序各一次
 ```
+
+## 停用与补回
+
+本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：「执行过程」折叠行消失，回到 dsh 原生 turn-process 展示。launcher 不再自动补回；右键托盘图标选「补回执行过程」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-exec-process` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。

@@ -168,12 +168,12 @@ async function buildTarget(key) {
     )
   }
 
-  const missingConciseProfileBundleFiles = context.conciseProfileBundleFiles
+  const missingBundleFiles = context.profileBundleFiles
     .filter(relative => !existsSync(inPackage(context, relative)))
-  if (missingConciseProfileBundleFiles.length !== 0) {
+  if (missingBundleFiles.length !== 0) {
     fail(
-      `产物里缺少 concise-mode profile bundle 文件：${missingConciseProfileBundleFiles.join('、')}`,
-      'concise-mode 不是 launcher overlay；请确认 workspace 依赖已被 deploy，且 profile bundle 的 dist/index.js 已构建。',
+      `产物里缺少受管 profile bundle 文件：${missingBundleFiles.join('、')}`,
+      '插件靠 packages/launcher/package.json 里的 workspace 依赖被 deploy 进来；缺了 launcher 会拒绝启动 dsh。',
     )
   }
 

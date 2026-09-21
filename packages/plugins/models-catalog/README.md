@@ -56,7 +56,7 @@ pi-ai 目录更新后让插件自动交还原生条目。协议与能力限制�
 配置 `sourceUrl` 的三种途径，按推荐顺序：
 
 1. 保持默认，代理在「设置 → 代理」里配；
-2. 本包 `dsh-overlay.yml` 的 `config:`（产品默认值）；
+2. 本包 `cordis.patch.yml` 的 `config:`（产品默认值）；
 3. 再挂一个更靠后的 `--patch`，按 id 覆盖：
    ```yaml
    - id: models-catalog
@@ -84,7 +84,7 @@ pi-ai 目录更新后让插件自动交还原生条目。协议与能力限制�
 
 ## 两半与装载
 
-和 `copilot-auth` 同形：宿主半 `dist/index.js` 由包根的 `dsh-overlay.yml` 经 `--patch` 插入，
+和 `copilot-auth` 同形：宿主半 `dist/index.js` 由包根的 `cordis.patch.yml` 以 Bundle 层插入，
 浏览器半 `dist/client.js` 由 dsh 的客户端模块系统按 `dsh.client` + `exports["./client"]` 下发。
 **缺 `dist/client.js` 会让 dsh 的 web UI 整个起不来**，不是少一块面板。
 
@@ -95,3 +95,7 @@ pnpm --filter @dsh-remote/dsh-plugin-models-catalog build
 # 沙箱/受限环境里 vitest 的 forks 池会 spawn EPERM，用 threads 池：
 pnpm --filter @dsh-remote/dsh-plugin-models-catalog exec vitest run --pool=threads
 ```
+
+## 停用与补回
+
+本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：设置里的「模型目录更新」消失；已应用的模型条目保留，「删除本插件添加的模型」按钮也随之消失（改用 dsh 原生模型编辑）。launcher 不再自动补回；右键托盘图标选「补回模型目录更新」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-models-catalog` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。

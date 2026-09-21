@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   CONCISE_MODE_BUNDLE,
   DSH_REMOTE_PROFILE_BUNDLES,
+  MANAGED_PLUGIN_BUNDLES,
   ensureProfile,
   profileDirectory,
   resolveDshHome,
@@ -60,9 +61,15 @@ describe('dsh home', () => {
 })
 
 describe('profile bootstrap', () => {
-  it('writes the default template with concise mode when the profile does not exist', () => {
+  it('writes the default template with every managed bundle when the profile does not exist', () => {
     const home = newHome()
     expect(CONCISE_MODE_BUNDLE).toBe('@dsh-remote/dsh-plugin-concise-mode')
+    // 全部插件都是受管 Bundle（D20）：yolo-mode 固定末位，代理在出网插件之前。
+    expect(MANAGED_PLUGIN_BUNDLES).toContain(CONCISE_MODE_BUNDLE)
+    expect(MANAGED_PLUGIN_BUNDLES.at(-1)).toBe('@dsh-remote/dsh-plugin-yolo-mode')
+    expect(MANAGED_PLUGIN_BUNDLES.indexOf('@dsh-remote/dsh-plugin-proxy'))
+      .toBeLessThan(MANAGED_PLUGIN_BUNDLES.indexOf('@dsh-remote/dsh-plugin-copilot-auth'))
+    expect(MANAGED_PLUGIN_BUNDLES.indexOf('@dsh-remote/dsh-plugin-remote-settings')).toBe(0)
     expect(ensureProfile({ home, profile: 'dsh-remote-web' })).toEqual({ bootstrap: 'created', skippedManaged: [] })
 
     const directory = profileDirectory(home, 'dsh-remote-web')
@@ -75,7 +82,7 @@ describe('profile bootstrap', () => {
     expect(manifest.dsh.profile.bundles).toEqual([
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
-      '@dsh-remote/dsh-plugin-concise-mode',
+      ...MANAGED_PLUGIN_BUNDLES,
     ])
     expect(manifest.dsh.profile.bundles).toEqual([...DSH_REMOTE_PROFILE_BUNDLES])
     expect(existsSync(join(directory, 'cordis.patch.yml'))).toBe(true)

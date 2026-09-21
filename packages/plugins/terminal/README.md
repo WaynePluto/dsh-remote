@@ -58,3 +58,6 @@ node scripts/terminal-check.mjs
 ```
 
 live 测试需真实 PTY，验证等待用户输入、发送与回显。修改插件后必须构建并重启 dsh。
+## 停用与补回
+
+本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：交互终端工具与输入框入口消失；Linux 上经交互终端的 sudo 管理入口随之不可用（需要时补回）。launcher 不再自动补回；右键托盘图标选「补回交互终端」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-terminal` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。

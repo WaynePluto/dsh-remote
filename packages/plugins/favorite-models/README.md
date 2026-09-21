@@ -19,4 +19,8 @@ pnpm --filter @dsh-remote/dsh-plugin-favorite-models test
 pnpm --filter @dsh-remote/dsh-plugin-favorite-models build
 ```
 
-本插件通过 `dsh-overlay.yml` 由 launcher 加载。当前 `dsh-remote-web` profile 没有 HMR；修改插件后必须重新构建并重启 dsh，单纯刷新页面不会加载新产物。
+本插件是受管 Profile Bundle，随 profile 的 bundles 数组装载。当前 `dsh-remote-web` profile 没有 HMR；修改插件后必须重新构建并重启 dsh，单纯刷新页面不会加载新产物。
+
+## 停用与补回
+
+本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：常用模型筛选与收藏入口消失；已收藏列表保留在设置里，聊天模型选择器回到 dsh 原生 /model 目录。launcher 不再自动补回；右键托盘图标选「补回常用模型」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-favorite-models` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。

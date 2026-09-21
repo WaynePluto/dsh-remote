@@ -66,7 +66,7 @@ relay 在认证后的首页 401 上代发一次重定向，不改 API 的 401；
 因此“HTTP 认证通过”本身不代表远程设置可用。
 
 ClientTransportHooks.ownsHost 从全局 __DSH_TRANSPORT__ 读取；只设置 ownsHost 时，fetch 与 loadBundle
-仍回退到原有 HTTP/WS 传输。remote-privileged 用 webserver/index-inject 的 global 行注入 true。
+仍回退到原有 HTTP/WS 传输。remote-settings 用 webserver/index-inject 的 global 行注入 true。
 客户端先等待 __DSH_BOOT_READY__，注入先于页面启动。
 
 注入出处：`packages/host/webserver/src/index.ts`、`src/injections.ts`。
@@ -92,5 +92,5 @@ directory-picker-browse 插件停用 adaptive 行，用 Loader 挂载官方 host
 - /api 是保留通道，插件不能占用；注册随 fiber 释放。
 - 0.1.6 起 connection 宿主半在认证之后暴露 connection/request waterfall 事件，可 admit/wrap 已认证的共享 API 请求；本项目暂不使用（relay 的 ?token= 重定向仍是唯一业务解析例外）。
 - Connection 的 generic channel 挂载需要 owner context 注入 webServer。
-  remote-privileged 的 overlay 为 connection 设置 inject:[webRuntime,webServer]。
+  壳级常驻 overlay（remote-privileged 包）为 connection 设置 inject:[webRuntime,webServer]。
   缺失可能启动失败或落到静态 fallback 返回 405。

@@ -65,3 +65,7 @@ pnpm --filter @dsh-remote/dsh-plugin-turn-retry typecheck
 pnpm --filter @dsh-remote/dsh-plugin-turn-retry build
 node scripts/turn-retry-check.mjs
 ```
+
+## 停用与补回
+
+本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：失败重试与停止继续横幅、排队消息保护同时消失；dsh 自带的 llm-retry 自动重试不受影响。launcher 不再自动补回；右键托盘图标选「补回失败重试」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-turn-retry` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。

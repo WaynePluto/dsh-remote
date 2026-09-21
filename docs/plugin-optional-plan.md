@@ -1,98 +1,83 @@
 # 插件可选化计划
 
-**当前只做一件事：仓库内 Bundle 化**——把全部插件转成用户可停用的 Profile Bundle
-（简洁模式已完成，是参照实现）。「npm 发布」「独立仓库」与「壳配置化引用」
-**暂缓，以后再考虑**，相关设计保留在文末备查；发布路径已明确为**本仓库直接发布**，不需要拆仓。决策记录见 [01-decisions](01-decisions.md) D20。
-分批实施、按批验收，未实机验收不勾选 roadmap。
+**仓库内 Bundle 化已全部实施**——22 个插件（含简洁模式）都是用户可停用的默认受管
+Profile Bundle；remote-privileged 拆成壳级 connection 注入（不可停）与 remote-settings
+受管 Bundle。「npm 发布」「独立仓库」与「壳配置化引用」**暂缓，以后再考虑**，
+相关设计保留在文末备查；发布路径已明确为**本仓库直接发布**，不需要拆仓。
+决策记录见 [01-decisions](01-decisions.md) D20。代码完成≠验收完成：实机验收清单见下。
 
-## 已决事项（2026-09）
+## 已实施结果（2026-09-22 实施完成）
 
 - **统一语义**：停用 = dsh 插件页把包名移出 `dsh.profile.bundles`；launcher 对受管
   Bundle 只确保一次（profile 内 `dsh-remote-bundles-state.json`），此后尊重停用；
   补回 = 托盘菜单或 `--restore-bundle`。
-- **不做真卸载**：可卸载要求插件是 profile 的 pnpm 依赖，代价是版本漂移
-  （profile 内拷贝冻结在安装时刻）、运行时依赖 pnpm（绿色包机器未必有）、
-  补回从改数组变成跑包管理器。停用已等价于卸载（界面彻底消失），文件常驻
-  换来随 dsh-remote 升级、离线补回、零版本漂移。
-- **默认受管替代承重墙**：远程使能插件不再「强制注入、不可停」。
-  remote-privileged 拆成壳级 connection webServer 注入（**不可停**——它是全部插件
-  RPC 通道的地基，与远程无关，本机使用同样需要）+ 可停用的 ownsHost 声明；
-  连同 browser-compat、directory-picker-browse、yolo-mode 共 4 个转为**默认受管
-  Bundle**：默认全开、开箱即完整远程体验，用户知情后可停用，托盘/CLI 补回。
-  由此支持「纯本机 dsh 套壳 + 托盘」的使用方式；「默认固定 YOLO」的产品决策
-  不变，只是从不可关变为默认开、可关。
-- **npm 发布暂缓（路径为本仓库直接发布）**：18 个通用插件只依赖 dsh 插件契约、
-  对任何 dsh 用户都有价值，上游 0.1.6 的插件管理器与宿主兼容性 manifest 也为
-  第三方发布留好了生态位。本仓库已是 pnpm workspace，各包可直接发布，
-  无需拆仓（拆仓只提供组织性收益）；发布动作等 Bundle 化完成与版本纪律就绪后
-  再启动（见文末）。
+- **每个插件包**：`dsh-overlay.yml` 改名为 `cordis.patch.yml`，package.json 声明
+  `dsh.bundle.patch` 并把它列入 `files`；README 增加「停用与补回」一节。
+- **权威清单**在 `packages/launcher/src/dsh-plugins.ts`：
+  `SHELL_PLUGIN_PACKAGES`（仅 remote-privileged 的 connection 注入 overlay）与
+  `MANAGED_PLUGIN_PACKAGES`（22 个受管 Bundle，顺序即层序：远程设置在前、
+  代理先于其他出网插件、固定 YOLO 固定末位）。profile.ts 据此导出
+  `MANAGED_PLUGIN_BUNDLES` 与默认模板；`scripts/local-config.mjs`
+  （`DEFAULT_PROFILE_BUNDLES`）与 `scripts/pack/manifest.mjs`
+  （`PROFILE_BUNDLE_FILES`）复制同一清单，三处不一致时以 launcher 为准修齐。
+  托盘的受管清单与中文标签在 `packaging/win-launcher/config.go` 维护。
+- **产物检查**：launcher 启动前 `checkManagedPluginBundles` 校验每个受管包的
+  patch 层与宿主/浏览器产物；绿色包检查扩展到全部 Bundle 文件（含 concise presets；
+  顺带补上了此前遗漏的 browser-compat `dist/client.js`）。
+- **第四批拆分**：`@dsh-remote/dsh-plugin-remote-settings` 承接 ownsHost 首页注入
+  （Cordis 插件名保留 `dsh-remote-remote-privileged`，插件树身份不变）；
+  remote-privileged 原包只剩 `dsh-overlay.yml`（connection 的 webServer 注入），
+  无代码产物。`yolo-mode-check.mjs` 已改为验证 Bundle 装载路径（隔离 profile 带
+  全部受管 Bundle + 壳级 overlay + probe）。
+- **开发工作区**：全部插件进入根 package.json devDependencies，dsh 的 Bundle 双锚
+  解析（安装锚点优先）在源码 checkout 里同样成立；`pnpm dev` 与 launcher 用同一
+  受管清单确保 profile。
+- **旧 profile 升级路径**：launcher/dev-stack 下次启动把 21 个新受管 Bundle 一次
+  补插到 `dsh-web-app` 之后并记录状态文件；已存在的简洁模式行保持原位（层序与
+  它无关）。全新 profile 直接得到完整默认模板。
+
+已验证（自动检查）：全仓 lint / typecheck / build / test 通过；15 个可独立运行的
+check 冒烟（yolo、concise、proxy、copilot-auth、models 系、files、services、terminal、
+notify、agents-md、exec-process、turn-retry、chat-scroll、user-message-fork、
+tools/skills-inspector）在 Bundle 装载形态下全部通过；开发栈完整启动（dsh 全部
+Bundle 层装载、relay、connector、token 上报）。models-catalog 与
+model-capabilities 无独立 check 脚本，靠包测试与实机验收；m0-fence 需要运行中的栈。
+
+## 待实机验收（不因自动检查完成而勾选 roadmap）
+
+- dsh 插件页逐个停用（每批抽代表）：dsh 正常启动、对应功能消失；launcher 下次
+  启动不补回，控制台打印跳过提示。
+- 托盘右键列出全部缺失受管项（不再是单项「补回简洁模式」），点击后写回并重启
+  生效；`--restore-bundle` 等价可用。
+- 影子型插件在 Bundle 层序下 priority 影子仍生效：user-message-fork 的 user
+  renderer、files 的原生 files body。
+- 带浏览器半的插件实机确认 combo 产物与槽位注册（页面 `__DSH_BOOT__` 与功能入口）。
+- 涉 UI 的插件在深浅主题、中英文文案下验收。
+- yolo-mode 停用重启后恢复原生权限审批、补回后回到固定 YOLO（安全方向见
+  [04-security](04-security.md)）。
+
+层序变化的既定边界（实施时已接受，README 已说明）：
+
+- Bundle 层位于用户 profile patch 之下，用户手改 patch 可以覆盖或停用我们的插件行；
+  托盘补回只读 `dsh.profile.bundles`，感知不到 profile patch 层的停用——
+  「想让停用被托盘感知，请用 dsh 插件页的开关」。
+- 插件间顺序从 `--patch` argv 顺序变为 bundles 数组顺序；受管插入统一排在
+  `dsh-web-app` 之后，yolo 排在受管插入的末位（其配置覆盖最后应用）。
 
 ## 默认受管插件与停用后果
 
 | 受管 Bundle（默认全开） | 停用后果（已逐个核实） |
 |---|---|
 | 简洁模式（concise-mode） | 丢失 concise / concise-ptc 预设，其余无影响 |
-| 远程设置（remote-privileged 拆出的 ownsHost 部分） | 经 relay 地址访问时设置页回到 dsh 受限形态——**包括本机** 127.0.0.1:30809（relay 转发的 Host 不是 dsh 自己的 authority）；直连 dsh 端口的原生访问不受影响 |
-| browser-compat（浏览器兼容） | 现代浏览器无感；旧 WebKit（旧 Safari / 手机 WebView）可能白屏 |
+| 远程设置（remote-settings，自 remote-privileged 拆出的 ownsHost 部分） | 经 relay 地址访问时设置页回到 dsh 受限形态——**包括本机** 127.0.0.1:30809（relay 转发的 Host 不是 dsh 自己的 authority）；直连 dsh 端口的原生访问不受影响 |
+| browser-compat（浏览器兼容） | 现代浏览器无感；旧 WebKit（旧 Safari / 手机 WebView）可能白屏，设置里的「浏览器日志」页消失 |
 | directory-picker-browse（网页目录选择） | dsh 回到原生目录选择：本机用户桌面弹对话框（人在机器前可用）；远程浏览器看不到对话框、无法新建工作区（已有会话不受影响） |
 | yolo-mode（固定 YOLO） | 恢复 dsh 原生权限审批（工具调用逐个批准）；补回即回到固定 YOLO。安全方向成立：停用是降权，启用是提权但必须主动走托盘/CLI，不会误触 |
+| 其余 17 个通用插件 | 各自界面/功能入口消失，详见各包 README「停用与补回」；proxy 停用回退环境变量代理，terminal 停用影响 Linux sudo 管理入口，services 停用不停止已启动的服务进程 |
 
-壳内唯一强制保留的是 connection 的 webServer 注入（一个 overlay 片段），随 launcher
-常驻传入；全部受管 Bundle 都停用时壳照常工作——dsh-base / dsh-web-app 受上游保护
-不可卸，relay / connector / 托盘照常，loopback 访问照常。
-
-## 当前阶段：仓库内 Bundle 化
-
-把插件从 launcher `--patch` overlay 转成 Profile Bundle，使用与简洁模式相同的
-记忆清单与托盘补回机制。分四批，**第四批耦合最高，须在前三批机制稳定后进行**：
-
-| 批次 | 插件 | 特点 |
-|---|---|---|
-| 一 | chat-scroll、notify、favorite-models、subagent-depth、tools-inspector、skills-inspector、user-message-fork | 纯 UI 增强，无宿主配置耦合 |
-| 二 | agents-md、proxy、copilot-auth、models-catalog、model-capabilities | 设置页类；proxy 停用后回退环境变量代理，README 须说明 |
-| 三 | exec-process、turn-retry、files、services、terminal | 会话核心；terminal 停用影响 Linux sudo 管理入口，README 须说明 |
-| 四 | ownsHost 声明（自 remote-privileged 拆出）、browser-compat、directory-picker-browse、yolo-mode | 停用后果见表上方；yolo 同步修订 [安全说明](04-security.md)；拆分后 remote-privileged 原包只剩壳级注入职责 |
-
-每个插件的转换步骤：
-
-1. package.json 声明 `dsh.bundle.patch` 指向本包 overlay（对照简洁模式的
-   `cordis.patch.yml` 确认 Bundle 装载读取的文件名与入口写法）。
-2. `packages/launcher/src/dsh-plugins.ts` 的 overlay 清单移除该插件；
-   `packages/launcher/src/index.ts` 的受管 Bundle 清单（`managedBundles`）加入它。
-3. 同步 `scripts/local-config.mjs`（dev-stack 的 overlay 扫描）与 `scripts/pack.mjs`
-   的产物检查——三处清单不一致时以 launcher 为准修齐。
-4. 插件 README 增加「停用与补回」一节（含后果说明）；`docs/plugins.md` 索引行补注可停用。
-5. 跑该插件的 check 脚本与全仓 `pnpm lint / typecheck / build / test`。
-
-第四批额外步骤：先把 remote-privileged overlay 里的
-`- id: connection / inject: [webRuntime, webServer]` 片段迁入壳级常驻 overlay
-（随 launcher 传入，位置由 `dsh-plugins.ts` 固定在首位），再将其余部分
-（ownsHost 声明 + 首页注入）独立成受管 Bundle；`yolo-mode-check.mjs` 随之改为
-验证 Bundle 装载路径。
-
-风险与边界：
-
-- **层序变化**：Bundle 层位于用户 profile patch（`cordis.patch.yml`）之下，用户手改
-  patch 从此能覆盖或停用我们的插件行（现在是 overlay 层保护）。托盘补回只读
-  `dsh.profile.bundles`，感知不到 profile patch 层的停用——README 说明
-  「想让停用被托盘感知，请用 dsh 插件页的开关」。
-- **影子型插件**（user-message-fork 影子 user renderer、files shadow 原生 files body）
-  需实机确认 Bundle 层序下 priority 影子仍生效。
-- **插件间顺序**从 `--patch` argv 顺序变为 bundles 数组顺序；受管插入统一排在
-  `dsh-web-app` 之后（`insertManagedBundles` 现有行为）。yolo 的配置覆盖必须在
-  其他受管 Bundle 之后生效——排在受管插入的末位。
-- **浏览器半**经 Bundle 模块表装载（简洁模式已验证可行）；每个带 client 半的插件
-  都要实机验证 combo 产物与槽位注册。
-- **托盘菜单演进**：受管项超过一个后，Go 侧从「单项菜单」改为列出 bundles 数组中
-  缺失的全部受管项（受管清单随壳下发或指向 `packages/launcher/src/profile.ts` 维护）。
-
-每批验收标准：
-
-- 在 dsh 插件页停用后：dsh 正常启动、对应功能消失；launcher 下次启动不补回，
-  控制台打印跳过提示。
-- 托盘出现「补回 xxx」，点击后写回并重启生效；`--restore-bundle` 等价可用。
-- 涉 UI 的插件在深浅主题、中英文文案下验收。
-- 该批全部 check 脚本与全仓四件套（lint / typecheck / build / test）通过。
+壳内唯一强制保留的是 connection 的 webServer 注入（remote-privileged 包的 overlay
+片段），随 launcher 常驻传入；全部受管 Bundle 都停用时壳照常工作——dsh-base /
+dsh-web-app 受上游保护不可卸，relay / connector / 托盘照常，loopback 访问照常。
 
 ## 暂缓：npm 发布（以后再考虑，路径为本仓库直接发布）
 
@@ -100,7 +85,7 @@
 `pnpm --filter <包名> publish` 即可发布（`workspace:` 协议发布时自动替换为真实版本）。
 拆仓只提供组织性收益（插件贡献者独立入口），不再是发布的先决条件；单仓发布保留
 一次 dsh 升级 = 一个仓库修兼容 + 发新版 + 跑全套 check 的流程，check 脚本零复制。
-前置条件是仓库内 Bundle 化完成（Bundle manifest 即可安装形态）。启动前准备：
+前置条件是仓库内 Bundle 化完成（**已达成**，Bundle manifest 即可安装形态）。启动前准备：
 
 - 22 个插件包现为 `private: true`；发布集去掉该标记，天然区分「发布集 / 壳私有集」。
 - 9 个插件依赖 `@dsh-remote/plugin-ui`（`workspace:0.0.1`）：plugin-ui / plugin-build

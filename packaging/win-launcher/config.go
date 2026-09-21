@@ -25,11 +25,41 @@ const (
 	// 但菜单运行在本机；按铁律 11，127.0.0.1 是唯一
 	// 不需要登录的访问入口。
 	loopbackHost = "127.0.0.1"
-
-	// 与 packages/launcher/src/profile.ts 的 CONCISE_MODE_BUNDLE
-	// 保持一致；菜单据此判断简洁模式是否被用户停用。
-	conciseModeBundle = "@dsh-remote/dsh-plugin-concise-mode"
 )
+
+// managedBundle 是一个受管 Profile Bundle 的包名与菜单文案。
+type managedBundle struct {
+	name  string
+	label string
+}
+
+// managedBundles 与 packages/launcher/src/dsh-plugins.ts 的
+// MANAGED_PLUGIN_PACKAGES 保持一致（launcher 是权威清单）；菜单据此列出
+// 已被用户在 dsh 插件页停用、可补回的受管项。
+var managedBundles = []managedBundle{
+	{"@dsh-remote/dsh-plugin-remote-settings", "远程设置"},
+	{"@dsh-remote/dsh-plugin-browser-compat", "浏览器兼容"},
+	{"@dsh-remote/dsh-plugin-directory-picker-browse", "网页目录选择"},
+	{"@dsh-remote/dsh-plugin-proxy", "出网代理"},
+	{"@dsh-remote/dsh-plugin-copilot-auth", "Copilot 登录"},
+	{"@dsh-remote/dsh-plugin-models-catalog", "模型目录更新"},
+	{"@dsh-remote/dsh-plugin-model-capabilities", "模型能力与协议"},
+	{"@dsh-remote/dsh-plugin-favorite-models", "常用模型"},
+	{"@dsh-remote/dsh-plugin-concise-mode", "简洁模式"},
+	{"@dsh-remote/dsh-plugin-turn-retry", "失败重试"},
+	{"@dsh-remote/dsh-plugin-exec-process", "执行过程"},
+	{"@dsh-remote/dsh-plugin-chat-scroll", "会话滚动导航"},
+	{"@dsh-remote/dsh-plugin-user-message-fork", "用户消息分叉"},
+	{"@dsh-remote/dsh-plugin-agents-md", "全局提示词"},
+	{"@dsh-remote/dsh-plugin-notify", "任务通知"},
+	{"@dsh-remote/dsh-plugin-services", "常驻服务"},
+	{"@dsh-remote/dsh-plugin-terminal", "交互终端"},
+	{"@dsh-remote/dsh-plugin-tools-inspector", "工具状态"},
+	{"@dsh-remote/dsh-plugin-skills-inspector", "技能状态"},
+	{"@dsh-remote/dsh-plugin-files", "文件浏览"},
+	{"@dsh-remote/dsh-plugin-subagent-depth", "子代理深度"},
+	{"@dsh-remote/dsh-plugin-yolo-mode", "固定 YOLO"},
+}
 
 // settings 是 tray 需要的 launcher 配置子集：两个菜单
 // URL 共用的 relay 端口，以及日志文件所在的 home 目录。
@@ -178,16 +208,16 @@ func dshHomeDir() string {
 	return filepath.Clean(configured)
 }
 
-// conciseModeDisabled 报告简洁模式 Bundle 是否已不在 dsh profile 的
-// bundles 列表里（用户在 dsh 插件页停用了它）。任何读取或解析失败都
-// 返回 false：状态未知时不显示「补回」菜单项，绝不凭猜测改写 profile。
-func conciseModeDisabled(dshHome string, profile string) bool {
+// missingManagedBundles 报告哪些受管 Bundle 已不在 dsh profile 的 bundles
+// 列表里（用户在 dsh 插件页停用了它们）。任何读取或解析失败都返回空表：
+// 状态未知时不显示「补回」菜单项，绝不凭猜测改写 profile。
+func missingManagedBundles(dshHome string, profile string) []managedBundle {
 	if dshHome == "" || profile == "" {
-		return false
+		return nil
 	}
 	data, err := os.ReadFile(filepath.Join(dshHome, "profiles", profile, "package.json"))
 	if err != nil {
-		return false
+		return nil
 	}
 	var manifest struct {
 		Dsh *struct {
@@ -197,11 +227,17 @@ func conciseModeDisabled(dshHome string, profile string) bool {
 		} `json:"dsh"`
 	}
 	if err := json.Unmarshal(data, &manifest); err != nil {
-		return false
+		return nil
 	}
 	bundles := manifest.Dsh.Profile.Bundles
 	if bundles == nil {
-		return false
+		return nil
 	}
-	return !slices.Contains(bundles, conciseModeBundle)
+	var missing []managedBundle
+	for _, candidate := range managedBundles {
+		if !slices.Contains(bundles, candidate.name) {
+			missing = append(missing, candidate)
+		}
+	}
+	return missing
 }

@@ -306,11 +306,13 @@ async function main() {
   try {
     const { listed, loadedPath } = await verifySkillPath()
     check(listed !== undefined, '真注册表里读到了本仓库的 dsh-source 技能')
-    check(listed !== undefined && listed.path === undefined,
-      'list() 的 SkillSummary 上没有 path（所以列表不能显示精确文件，必须单独 locate）',
+    // dsh 0.1.6-alpha.2 起 SkillSummary 自带可选 path（sidebar 预览用）；
+    // 文件型技能应有值。插件的「点击打开」不依赖它，仍走 get()。
+    check(typeof listed?.path === 'string' && listed.path.endsWith('SKILL.md'),
+      'list() 的 SkillSummary 带文件型技能的 path（0.1.6-alpha.2 新契约）',
       String(listed?.path))
     check(listed?.resourceBase?.kind === 'directory' && typeof listed.resourceBase.path === 'string',
-      'list() 只给到技能目录 resourceBase', JSON.stringify(listed?.resourceBase))
+      'list() 给到技能目录 resourceBase', JSON.stringify(listed?.resourceBase))
     check(typeof loadedPath === 'string' && loadedPath.endsWith('SKILL.md'),
       'get() 给出了精确的 SKILL.md 路径（「点击打开本地文件」靠这条）', String(loadedPath))
   } catch (error) {

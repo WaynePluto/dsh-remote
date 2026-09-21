@@ -31,3 +31,6 @@ node scripts/agents-md-check.mjs
 不会叠加浏览器默认黑色 focus 轮廓。
 
 修改插件后必须构建并重启 dsh。
+## 停用与补回
+
+本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：设置里的「全局提示词」页消失；已写入 `$DSH_HOME/AGENTS.md` 的内容保留，dsh 继续读取。launcher 不再自动补回；右键托盘图标选「补回全局提示词」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-agents-md` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。

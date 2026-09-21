@@ -90,20 +90,22 @@ dsh-restart-status.json 供「远程入口」页展示；不需要操作员重�
 
 ## 2.2 Profile 与插件装载
 
-Bundle 顺序为 `dsh-base` → `dsh-web-app` → `dsh-plugin-concise-mode`。
-最后一层仅向 `dsh-remote-web` 提供 `concise` 和 `concise-ptc` 预设。
-locator 根据 `import.meta.url` 计算包内 preset root，不能依赖当前工作目录。
+全部 22 个插件都是受管 Profile Bundle（D20）：包根 `cordis.patch.yml` 由 package.json 的
+`dsh.bundle.patch` 声明，随 profile 的 `dsh.profile.bundles` 数组装载。默认顺序为
+`dsh-base` → `dsh-web-app` → 22 个受管 Bundle（远程设置在前、代理先于其他出网插件、
+简洁模式居中、固定 YOLO 固定末位）。concise-mode 的 locator 根据 `import.meta.url`
+计算包内 preset root，不能依赖当前工作目录。
 
-普通运行插件使用包根 `dsh-overlay.yml`，入口写 `./dist/index.js`，launcher 以 `--patch` 传入。
-dsh 将相对路径锚定到 overlay 目录。宿主或浏览器构建产物缺失即拒绝启动。
+壳内唯一保留的 `--patch` overlay 是 remote-privileged 包的 connection 注入
+（webRuntime + webServer），随 launcher 常驻传入、不可停用——它是全部插件 RPC 通道
+的地基，与远程无关。宿主或浏览器构建产物缺失即拒绝启动。
 
-launcher 为不存在的 profile 创建模板；受管 Bundle（当前只有简洁模式）只确保一次，
-记录在 profile 内 `dsh-remote-bundles-state.json`——用户在 dsh 插件页停用后不再自动补回，
-补回入口是托盘菜单「补回简洁模式」与 `--restore-bundle`。
-第三方 Bundle 管理沿用官方 `dsh plugin --profile`。
-内置插件不修改 home 全局 patch 或官方 `web` profile。
+launcher 为不存在的 profile 创建模板；受管 Bundle 只确保一次，记录在 profile 内
+`dsh-remote-bundles-state.json`——用户在 dsh 插件页停用后不再自动补回，补回入口是
+托盘菜单（列出全部缺失受管项）与 `--restore-bundle`。第三方 Bundle 管理沿用官方
+`dsh plugin --profile`。内置插件不修改 home 全局 patch 或官方 `web` profile。
 
-远程浏览器设置由 `remote-privileged` 注入 `ownsHost: true` 开放；它不替代 relay 认证，
+远程浏览器设置由 remote-settings（ownsHost）注入开放；它不替代 relay 认证，
 不修改请求头。这个标志也会开放在目标机器桌面打开文件的动作，手机无法看到该桌面窗口。
 
 ## 3. 持续关注

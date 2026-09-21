@@ -5,7 +5,7 @@
 
 ## 1. 范围与粒度
 
-- pnpm workspace：4 个基础包、1 个纯浏览器构建期 UI 包、21 个插件包；根目录负责开发、检查和交付。
+- pnpm workspace：4 个基础包、1 个纯浏览器构建期 UI 包、22 个插件包 + 1 个壳级 overlay 包（remote-privileged，无代码）；根目录负责开发、检查和交付。
 - 扫描 `packages/*/src`、插件入口/README/manifest、`scripts` 和 `packaging`。
 - 不将 `node_modules`、`dist`、`release`、`.dev`、锁文件及生成图标当作手写模块。
 - 以包/模块组为粒度，不把全部插件、React 组件和工具逐个塞入同一张图。
@@ -23,12 +23,12 @@
 | 设置与模型插件（8） | `packages/plugins/{agents-md,proxy,copilot-auth,models-catalog,model-capabilities,favorite-models,subagent-depth,notify}` | 全局提示词、出网代理、模型登录/目录/能力/收藏、深度设置、桌面通知 | dsh 设置/连接/槽位；代理用 undici，模型目录用 pi-ai |
 | 会话插件（4） | `packages/plugins/{exec-process,turn-retry,chat-scroll,user-message-fork}` | 执行过程折叠、重试、滚动、用户消息分叉 | dsh 会话/投影/浏览器 UI；仅 turn-retry 有实质宿主业务 |
 | 工作区与工具插件（5） | `packages/plugins/{services,terminal,tools-inspector,skills-inspector,files}` | 常驻服务、交互终端、工具/技能历史、右侧 Sidebar 只读文件浏览 | dsh live Agent、工具、PTY、RPC、Sidebar slots；services 自有 Node 进程管理引擎 |
-| 环境与预设插件（5） | `packages/plugins/{remote-privileged,browser-compat,directory-picker-browse,yolo-mode,concise-mode}` | 远程设置、旧 WebKit API 垫片与临时浏览器诊断、网页目录选择、固定 YOLO、精简预设 | dsh 插件组合；concise-mode 是 Bundle，其余是 overlay |
+| 环境与预设（6） | `packages/plugins/{remote-settings,remote-privileged,browser-compat,directory-picker-browse,yolo-mode,concise-mode}` | 远程设置（ownsHost）、旧 WebKit API 垫片与临时浏览器诊断、网页目录选择、固定 YOLO、精简预设；remote-privileged 仅携带壳级 connection 注入 overlay（无代码） | dsh 插件组合；全部为受管 Profile Bundle（D20） |
 | 开发与验证脚本 | `scripts/dev-stack.mjs`、`local-config.mjs`、`*-check.mjs` | 本地全链路、独立凭据目录、插件契约冒烟、依赖检查 | launcher/relay 源码模块、Node；脚本各自声明环境前提 |
 | 发行打包 | `scripts/pack.mjs`、`packaging/`、`.github/workflows/` | 分平台 deploy/归档、产物检查、启动脚本、图标、CI | archiver、pnpm、Go 工具链；不带 Node 二进制 |
 | Windows 托盘 | `packaging/win-launcher/*.go` | 菜单、单实例、自启动、日志轮转、Node launcher 生命周期 | Go 标准库、Win32 API；同一 `package main`，无第三方 Go 包 |
 
-22 个插件中 21 个普通 overlay，1 个 Profile Bundle；18 个有浏览器入口。`@dsh-remote/plugin-ui` 不是插件，不进入 overlay 清单或 launcher 插件顺序。
+22 个插件全部是默认受管 Profile Bundle（D20，可停用、托盘/CLI 补回）；18 个有浏览器入口。唯一随 `--patch` 传入的是 remote-privileged 的 connection 注入 overlay，不是插件。`@dsh-remote/plugin-ui` 不是插件，不进入受管清单。
 具体功能及使用限制见 [插件索引](docs/plugins.md) 和各包 README。
 
 ## 3. 源码依赖关系图
@@ -43,7 +43,7 @@ graph TD
   Launcher --> Protocol[protocol]
   Relay --> Protocol
   Connector[connector] --> Protocol
-  Plugins[21 个独立插件] --> DshLibs[官方 dsh 族库]
+  Plugins[22 个受管 Bundle 插件] --> DshLibs[官方 dsh 族库]
   Plugins --> PluginUI[plugin-ui：构建期内联]
   Plugins --> Undici[undici]
   PluginUI --> React[React/DOM 页面单例]

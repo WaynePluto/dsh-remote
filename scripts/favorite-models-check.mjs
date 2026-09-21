@@ -13,7 +13,7 @@ import { inspectClientBundle as inspectClientArtifact } from './lib/check-client
 
 const PACKAGE_ID = '@dsh-remote/dsh-plugin-favorite-models'
 const PACKAGE_DIR = join(ROOT, 'packages', 'plugins', 'favorite-models')
-const OVERLAY = join(PACKAGE_DIR, 'dsh-overlay.yml')
+const BUNDLE_PATCH = join(PACKAGE_DIR, 'cordis.patch.yml')
 const HOST_BUNDLE = join(PACKAGE_DIR, 'dist', 'index.js')
 const CLIENT_BUNDLE = join(PACKAGE_DIR, 'dist', 'client.js')
 const portArgument = process.argv.indexOf('--port')
@@ -105,8 +105,8 @@ const context = createCheckContext({
 })
 const { prepareHome } = context
 async function main() {
-  check(existsSync(OVERLAY), 'overlay 文件存在')
-  check(readFileSync(OVERLAY, 'utf8').includes("name: './dist/index.js'"), 'overlay 使用相对 Host 入口')
+  check(existsSync(BUNDLE_PATCH), 'Bundle patch 文件存在')
+  check(readFileSync(BUNDLE_PATCH, 'utf8').includes("name: './dist/index.js'"), 'Bundle patch 使用相对 Host 入口')
   check(existsSync(HOST_BUNDLE), 'Host bundle 存在')
   check(existsSync(CLIENT_BUNDLE), 'Client bundle 存在')
 

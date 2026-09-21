@@ -27,7 +27,7 @@ flowchart LR
 | `packages/relay` | 浏览器认证、设备认证、管理页、机器路由与字节转发 |
 | `packages/launcher` | 配置、profile、产物检查、启动和监督三个子进程 |
 | `packages/plugins` | 通过 dsh 插件扩展功能；见 [插件索引](plugins.md) |
-| `packages/plugins`（规划） | 全部插件转为可停用的默认受管 Bundle（简洁模式已完成）；connection 注入地基拆归壳级常驻；独立发布暂缓，见 [计划](plugin-optional-plan.md)（D20） |
+| `packages/plugins`（装载） | 全部 22 个插件为默认受管 Profile Bundle（可停用、托盘/CLI 补回）；connection 注入是壳级常驻 overlay 不可停（D20）；npm 发布暂缓，见 [计划](plugin-optional-plan.md) |
 
 dsh 是官方 npm 依赖，不 fork、不改源码。浏览器使用 dsh 自带 UI，relay 提供自己的登录和管理页。
 
@@ -37,22 +37,25 @@ dsh 是官方 npm 依赖，不 fork、不改源码。浏览器使用 dsh 自带 
 内置扩展只加载到 `dsh-remote-web`：
 
 ```text
-dsh-base → dsh-web-app → dsh-plugin-concise-mode
-  → profile patch → home patch → --patch overlays
+dsh-base → dsh-web-app → 22 个受管 Bundle（远程设置…固定 YOLO 末位）
+  → profile patch → home patch → --patch（仅壳级 connection 注入）
 ```
 
-launcher 对已有 profile 只补入缺失的 concise Bundle，保留其他配置。
-预设能力见 [简洁模式](../packages/plugins/concise-mode/README.md)。
+launcher 对已有 profile 按受管清单补插一次缺失的 Bundle，尊重用户此前的停用；
+停用后果与补回入口见 [插件索引](plugins.md) 与各包 README。
 
-### 普通插件装载
+### 插件 Bundle 与壳级 overlay 装载
 
-每个普通插件带 `dsh-overlay.yml`，入口写相对路径 `./dist/index.js`。
-dsh 将它锚定到 overlay 所在目录，发行包移动后仍可解析。
-launcher 和开发栈都以 `--patch` 加载，并检查宿主与浏览器产物，缺失即拒绝启动。
+每个插件包在 package.json 声明 `dsh.bundle.patch` 指向包根 `cordis.patch.yml`，
+入口写相对路径 `./dist/index.js`；dsh 将它锚定到该文件目录，发行包移动后仍可解析。
+launcher 与开发栈都在启动前检查宿主与浏览器产物，缺失即拒绝启动。
+带浏览器半的包同时声明 `dsh.client`，dsh 据此下发 `dist/client.js`。
 
-装载清单以 [dsh-plugins.ts](../packages/launcher/src/dsh-plugins.ts) 为准：
-代理在其他出网插件之前生效，固定 YOLO 是最后一个普通 overlay。
-开发入口为 [dev-stack.mjs](../scripts/dev-stack.mjs)，由 [local-config.mjs](../scripts/local-config.mjs) 提供 overlay 路径。
+装载顺序以 [dsh-plugins.ts](../packages/launcher/src/dsh-plugins.ts) 为准：
+代理在其他出网插件之前生效，固定 YOLO 是最后一个受管 Bundle；
+唯一随 `--patch` 传入的是 remote-privileged 的 connection 注入（壳级、不可停）。
+开发入口为 [dev-stack.mjs](../scripts/dev-stack.mjs)，由 [local-config.mjs](../scripts/local-config.mjs)
+提供 overlay 路径与默认 Bundle 清单（与 launcher 保持一致）。
 
 第三方 Bundle 使用官方命令：
 
@@ -108,7 +111,7 @@ WebSocket 走独立 upgrade 路径，不能交给普通 HTTP 路由处理。
 
 relay 原样转发 Host/Origin；launcher 为 dsh 声明浏览器使用的 trusted host。
 条目必须是裸 host 或 host:port，错误格式会导致 dsh 启动失败。
-远程设置能力由 [remote-privileged](../packages/plugins/remote-privileged/README.md) 提供。
+远程设置能力由 [remote-settings](../packages/plugins/remote-settings/README.md) 提供。
 
 launcher 从 dsh 输出截获启动 token，经 connector 的 dsh-auth 帧上报 relay。
 仅当 dsh 对首页返回 401，relay 才返回一次 `?token=` 重定向，让 dsh 自己交换 cookie。

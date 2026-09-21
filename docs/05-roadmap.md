@@ -18,7 +18,7 @@
 - [x] concise 与 concise-ptc 两个简洁预设，PTC 复用官方工具执行链。
 - [x] 固定 YOLO，用户提问保留人工回答。
 - [ ] dsh 0.1.6-alpha.2 适配；自动检查已完成，仍需真实链路验收（登录 → 发消息 → 流式输出），复核入口见 [源码依据](02-dsh-facts.md)。
-- [ ] 插件可选化（D20）：按 [计划](plugin-optional-plan.md) 完成仓库内 Bundle 化——全部 22 个插件可停用：简洁模式已完成，其余 21 个分四批（17 个通用 + 4 个远程使能转默认受管）；npm 发布（本仓库直接发、无需拆仓）与壳配置化暂缓，以后再考虑。
+- [ ] 插件可选化（D20）代码已全部完成：22 个插件全为默认受管 Bundle，remote-privileged 拆为壳级 connection 注入（不可停）+ remote-settings 受管 Bundle，托盘列出全部缺失受管项；全部 check 脚本与全仓四件套通过（skills-inspector 检查随 dsh `SkillSummary.path` 新契约更新）。**待实机验收**：dsh 插件页逐个停用/补回、深浅主题与中英文界面、影子型插件（user-message-fork、files）在 Bundle 层序下 priority 影子生效，见 [计划](plugin-optional-plan.md) 验收清单。
 - [ ] 简洁模式停用/补回实机验收：dsh 插件页停用后 launcher 不再自动补回，托盘「补回简洁模式」写回并重启生效。
 - [x] 插件使用说明归属各包 README，docs 按主题组织且每篇不超过 600 行。
 
@@ -47,7 +47,7 @@
 
 | 插件 | 待确认 |
 |---|---|
-| remote-privileged | 远程模型与插件设置可以加载、保存 |
+| remote-settings | 远程模型与插件设置可以加载、保存；停用后经 relay 访问设置页回到受限形态、托盘可补回 |
 | copilot-auth | 设备码登录成功，凭据持久化，账号模型可使用 |
 | proxy | 保存实际代理地址，测试请求与模型请求正确出网，关闭后直连 |
 | models-catalog | 检查、选择、应用与撤销模型；保留已有条目 |

@@ -47,3 +47,6 @@ node scripts/services-check.mjs
 
 live 测试验证真实进程存活、日志和停止；仅 mock 测试不能证明这些操作系统性质。
 修改插件后必须构建并重启 dsh，再确认既有服务能被认领。
+## 停用与补回
+
+本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：常驻服务的模型工具与管理入口消失；已启动的服务进程不会被停掉，但失去管理界面与跨会话认领入口。launcher 不再自动补回；右键托盘图标选「补回常驻服务」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-services` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。

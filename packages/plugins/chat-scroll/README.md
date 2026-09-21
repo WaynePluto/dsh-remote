@@ -38,3 +38,7 @@ pnpm --filter @dsh-remote/dsh-plugin-chat-scroll typecheck
 浏览器回归：首次打开仍有「加载更早」的历史会话，不滚动、不加载更多，直接点击最后一条回复的「回到消息开头」，确认其开头到达阅读线且有中间滚动位置；再检查短回复、其他回复各自的按钮、切换会话以及「减少动态效果」。手动上滚后点击右下角原生向下箭头，确认有中间滚动位置、最终回到底部，继续生成内容时仍自动跟随；深浅主题与中英文都需验收。
 
 插件改完后必须重启 dsh；当前 `dsh-remote-web` profile 没有 HMR，单纯刷新页面不会重新加载新的浏览器 bundle。
+
+## 停用与补回
+
+本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：消息开头定位与返回底部按钮消失，回到 dsh 原生滚动行为。launcher 不再自动补回；右键托盘图标选「补回会话滚动导航」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-chat-scroll` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。

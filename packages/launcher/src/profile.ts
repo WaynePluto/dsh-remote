@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
+import { MANAGED_PLUGIN_PACKAGES } from './dsh-plugins.js'
 
 /** dsh 自己的 home 覆盖；dsh-remote 共享标准 home（D14）。 */
 export const DSH_HOME_ENV = 'DSH_HOME'
@@ -15,8 +16,19 @@ export const CONCISE_MODE_BUNDLE = '@dsh-remote/dsh-plugin-concise-mode'
 const DSH_BASE_BUNDLE = '@deepseek-ai/dsh-base'
 const DSH_WEB_APP_BUNDLE = '@deepseek-ai/dsh-web-app'
 
+/**
+ * launcher 协调的全部受管 Bundle（D20）：默认全开，用户可在 dsh 插件页
+ * 停用，托盘菜单或 `--restore-bundle` 补回。顺序即 profile 里的层序，
+ * 代理在其他出网插件之前、固定 YOLO 在末位；来源与产物清单一处维护。
+ */
+export const MANAGED_PLUGIN_BUNDLES: readonly string[] = MANAGED_PLUGIN_PACKAGES.map(plugin => plugin.name)
+
 /** 默认 `dsh-remote-web` profile 模板使用的 Bundle。 */
-export const DSH_REMOTE_PROFILE_BUNDLES = [DSH_BASE_BUNDLE, DSH_WEB_APP_BUNDLE, CONCISE_MODE_BUNDLE] as const
+export const DSH_REMOTE_PROFILE_BUNDLES = [
+  DSH_BASE_BUNDLE,
+  DSH_WEB_APP_BUNDLE,
+  ...MANAGED_PLUGIN_BUNDLES,
+] as const
 
 /** 原样取自 dsh 自己的 `initProfile`，这样 `dsh plugin` 才能找到预期内容。 */
 const PROFILE_PATCH_TEMPLATE = `# Your patch layer for this dsh profile, applied after every bundle layer:

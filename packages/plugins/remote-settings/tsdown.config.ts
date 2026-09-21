@@ -3,7 +3,7 @@ import { createPluginBuildConfig } from '../../plugin-build/index.mjs'
 
 export default defineConfig(
   createPluginBuildConfig({
-    id: '@dsh-remote/dsh-plugin-remote-privileged',
+    id: '@dsh-remote/dsh-plugin-remote-settings',
     entry: ['src/index.ts'],
     hostDeps: {},
     client: false,

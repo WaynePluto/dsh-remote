@@ -10,12 +10,11 @@
 
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
-import { CONCISE_MODE_BUNDLE, ensureProfile } from '../packages/launcher/src/profile.ts'
-import { DSH_BIN, DSH_PROFILE, ROOT, dshPluginOverlays } from './local-config.mjs'
+import { DSH_BIN, DSH_PROFILE, DEFAULT_PROFILE_BUNDLES, ROOT, dshPluginOverlays } from './local-config.mjs'
 
 const CHANNEL = '/concise-mode-check'
 const portAt = process.argv.indexOf('--port')
@@ -108,7 +107,18 @@ function browserHeaders(cookie) {
   }
 }
 function prepareHome() {
-  ensureProfile({ home: HOME, profile: DSH_PROFILE, managedBundles: [CONCISE_MODE_BUNDLE] })
+  // 与 launcher/profile.ts 同一份默认 Bundle 清单（local-config 复制，launcher 为权威）：
+  // 检查必须在发行装载形态（全部受管 Bundle）下验证 concise 预设。
+  const profile = join(HOME, 'profiles', DSH_PROFILE)
+  mkdirSync(profile, { recursive: true })
+  writeFileSync(join(profile, 'package.json'), `${JSON.stringify({
+    name: `dsh-profile-${DSH_PROFILE}`,
+    private: true,
+    dependencies: {},
+    dsh: { profile: { bundles: DEFAULT_PROFILE_BUNDLES } },
+  }, null, 2)}\n`)
+  writeFileSync(join(profile, 'cordis.patch.yml'), '[]\n')
+  writeFileSync(join(profile, 'pnpm-workspace.yaml'), 'packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n')
   writeFileSync(PROBE, PROBE_SOURCE, 'utf8')
   writeFileSync(OVERLAY, "- insert:\n    - id: concise-mode-check\n      name: './concise-mode-check-probe.mjs'\n", 'utf8')
 }

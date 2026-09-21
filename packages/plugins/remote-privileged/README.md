@@ -1,24 +1,16 @@
-# 远程设置
+# 壳级连接注入（remote-privileged）
 
-`@dsh-remote/dsh-plugin-remote-privileged` 让已通过 relay 认证的远程浏览器使用完整的 dsh 设置页，
-包括模型、凭据和插件配置。插件自动生效，没有单独的页面或开关。
+`@dsh-remote/dsh-plugin-remote-privileged` 只剩一个职责：包根 `dsh-overlay.yml` 里的
+`connection` 行注入。launcher 把它作为唯一的壳级常驻 `--patch` overlay 传给 dsh，
+固定在首位，**不可停用**——它让插件 RPC 注册使用与 dsh 自己相同的 WebServer context，
+是全部插件（含本机使用）RPC 通道的地基，不是一个功能插件。
 
-## 工作方式
-
-dsh 浏览器端通过 `ownsHost` 判断是否可以持久化设置。本插件使用官方的首页注入接口声明
-`globalThis.__DSH_TRANSPORT__.ownsHost = true`，并为 profile 的 Connection 配置所需 Web 服务注入，
-让其他插件的 RPC 通道正常挂载。
-
-## 安全边界
-
-- 不修改 dsh 源码、不改写 Host/Origin，也不绕过 `/api` 的信任校验和浏览器认证。
-- 非 loopback 访问必须先通过 relay 登录；本插件不是认证方案。
-- `ownsHost` 也会开放调用系统程序打开文件的能力，动作发生在运行 dsh 的机器桌面上，手机看不到该窗口。
-- 仅加载到 `dsh-remote-web`，不修改官方 `web` profile。
+ownsHost 的远程设置能力已拆到受管 Bundle
+[remote-settings](../remote-settings/README.md)（默认全开、可停用、托盘补回）。
+本包没有代码产物，只有 overlay 文件与说明。
 
 ## 维护
 
-升级 dsh 时复核 `ClientTransportHooks.ownsHost`、`webserver/index-inject` 和 Connection 注入契约。
-构建产物为 `dist/index.js`，无需浏览器 bundle。修改后必须重启 dsh。
-
-源码依据见 [dsh 核实结论](../../../docs/02-dsh-facts.md)。
+升级 dsh 时复核 `connection` 行的 `webRuntime` / `webServer` 注入契约
+（见 [dsh 核实结论](../../../docs/02-dsh-facts.md)）。launcher、开发栈与绿色包
+检查清单都以 [dsh-plugins.ts](../../launcher/src/dsh-plugins.ts) 为准。

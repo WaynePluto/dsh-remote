@@ -33,3 +33,6 @@ node scripts/notify-check.mjs
 ```
 
 冒烟会实际尝试弹出通知。修改插件后必须构建并重启 dsh。
+## 停用与补回
+
+本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：Windows 桌面任务通知消失，不再提醒任务完成或等待输入。launcher 不再自动补回；右键托盘图标选「补回任务通知」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-notify` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。

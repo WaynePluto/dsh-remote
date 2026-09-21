@@ -1,4 +1,4 @@
-# dsh-remote 的 dsh 插件叠加层。launcher 会把它作为 --patch 传给 dsh。
+# dsh-remote 的受管 Bundle patch 层；由 profile 的 bundles 数组装载。
 # Host 半注册设置命名空间与全局子代理深度 guard；浏览器半通过
 # package.json 的 dsh.client + exports["./client"] 进入设置插件卡片。
 - insert:
