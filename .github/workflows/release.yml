@@ -1,10 +1,11 @@
-# Release：推 v* 标签时打出三个平台的绿色包并附到 GitHub Release。
+# Release：推 v* 标签时打出三平台 × core/full 六个绿色包并附到 GitHub Release。
 #
 #   示例：git tag v0.0.1 && git push origin v0.0.1
 #
 # pack.mjs 在一台机器上就能交叉打全平台（Go 交叉编译 + supportedArchitectures），
-# 所以只需要一个 ubuntu runner。也支持 workflow_dispatch 手动触发（只上传
-# artifact、不创建 Release），用来调试打包流程。
+# 所以只需要一个 ubuntu runner。core/full 的区别只在于是否携带 LibreOffice 引擎
+# （Office 预览），见 scripts/pack/manifest.mjs 的 VARIANTS。也支持
+# workflow_dispatch 手动触发（只上传 artifact、不创建 Release），用来调试打包流程。
 #
 # 前置条件：tag 必须与 packages/launcher/package.json 的 version 一致
 # （zip 文件名里的版本号取自那里，不一致等于发错货）。

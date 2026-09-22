@@ -56,6 +56,26 @@ export const TARGETS = {
   },
 }
 
+/** 引擎类重组件：optionalDependencies 平台包、惰性加载、缺失时只在对应功能里报错，
+ * 是 core 变体唯一值得剔除的东西。只匹配引擎包本身，不带 `-` 后缀的 JS 壳
+ * （@deepseek-ai/libreoffice-kit）必须保留——dsh-office-to-pdf 顶层 import 它。 */
+export const HEAVY_ENGINE_PACKAGES = [/^@deepseek-ai\/libreoffice-kit-/]
+
+/** 发行变体：同一平台打两次包，zip 名带变体后缀，没有无后缀的默认包。
+ * 声明顺序即打包顺序：full 先打（树完整），core 在其后裁剪再打。 */
+export const VARIANTS = {
+  full: {
+    label: '全功能',
+    zipTag: 'full',
+    excludes: [],
+  },
+  core: {
+    label: '核心功能',
+    zipTag: 'core',
+    excludes: HEAVY_ENGINE_PACKAGES,
+  },
+}
+
 export const KEEP_AT_PACKAGE_ROOT = new Set(['dist', 'node_modules'])
 export const PNPM_BOOKKEEPING = [/(^|\/)\.modules\.yaml$/, /(^|\/)\.pnpm\/lock\.yaml$/]
 export const BIN_SCRIPT = /(^|\/)\.bin\//
@@ -243,6 +263,8 @@ export function createManifest(root, { platform = process.platform, arch = proce
     winExecutable: WIN_EXECUTABLE,
     winIconResource: WIN_ICON_RESOURCE,
     targets: TARGETS,
+    variants: VARIANTS,
+    heavyEnginePackages: HEAVY_ENGINE_PACKAGES,
     hostTarget: `${platform}-${arch}`,
     platform,
     arch,

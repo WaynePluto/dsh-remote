@@ -117,3 +117,59 @@ export function checkPrunedTree(context, targetKey, target) {
     if (extra.length !== 0) context.fail(`${relative} 里还剩着别的平台：${extra.join('、')}`)
   }
 }
+
+/** 收集 node_modules 里名字匹配任一模式的包（含嵌套 node_modules），返回包名与目录。 */
+function listMatchingPackages(context, patterns) {
+  const matches = []
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue
+      const full = join(directory, entry.name)
+      if (entry.name.startsWith('@')) {
+        visit(full)
+        continue
+      }
+      const manifestPath = join(full, 'package.json')
+      if (!existsSync(manifestPath)) continue
+      let name
+      try {
+        name = JSON.parse(readFileSync(manifestPath, 'utf8')).name ?? entry.name
+      } catch {
+        continue
+      }
+      if (patterns.some(pattern => pattern.test(name))) matches.push({ name, directory: full })
+      const nested = join(full, 'node_modules')
+      if (existsSync(nested)) visit(nested)
+    }
+  }
+  visit(join(context.packageDir, 'node_modules'))
+  return matches
+}
+
+/** 变体裁剪：删除名字命中变体排除清单的包，返回被删包名（去重）。 */
+export function pruneToVariant(context, variant) {
+  const matches = listMatchingPackages(context, variant.excludes)
+  for (const { directory } of matches) rmSync(directory, { recursive: true, force: true })
+  return [...new Set(matches.map(match => match.name))]
+}
+
+/** 变体验收：full 必须真的带着引擎类重组件，core 必须一个不剩。 */
+export function checkVariantTree(context, variantKey, variant) {
+  if (variant.excludes.length === 0) {
+    const engines = listMatchingPackages(context, context.heavyEnginePackages)
+    if (engines.length === 0) {
+      context.fail(
+        `${variantKey} 变体里没有找到任何引擎类重组件，full 与 core 就没有区别了。`,
+        '上游改名或调整结构时更新 manifest.mjs 的 HEAVY_ENGINE_PACKAGES。',
+      )
+    }
+    return
+  }
+  const remaining = listMatchingPackages(context, variant.excludes)
+  if (remaining.length !== 0) {
+    context.fail(
+      `${variantKey} 变体裁剪没有生效，包里还剩：${[...new Set(remaining.map(match => match.name))].join('、')}`,
+      'pruneToVariant 按 package.json 的 name 字段删，这几个包可能改了包名。',
+    )
+  }
+}

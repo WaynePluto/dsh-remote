@@ -6,13 +6,17 @@
  * 当前 version：发版改 version 漏改引用时，本地旧链接仍能解析，CI 全新安装才会炸，
  * 这里提前到提交前响亮失败。
  *
+ * 最后核对各包 src/version.ts 里的构建身份常量（LAUNCHER_VERSION 等）必须等于
+ * 本包 package.json 的 version——同一类「发版漏改」的源码形态，漏改会让包内 banner
+ * 打出旧版本号。
+ *
  * 允许：精确 SemVer（"4.4.3"、"0.1.1-rc.2"、"1.0.0+build.1"）、workspace 协议（"workspace:*"/"workspace:^"）、
  * catalog 协议（"catalog:"/"catalog:xxx"）及 link:/file: 本地路径。
  * 拒绝：^、~、>=、x 通配、范围（||/空格）、dist-tag（latest/next）以及 git/URL 等非确定版本。
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
@@ -108,6 +112,28 @@ if (staleWorkspacePins.length > 0) {
   console.error('[fail] 钉死版本的 workspace: 引用与目标包当前版本不一致：');
   for (const item of staleWorkspacePins) console.error(`       ${item}`);
   console.error('       修复：发版改 version 时同步改这些引用，然后运行 pnpm install 更新 lockfile');
+  process.exit(1);
+}
+
+// packages/*/src/version.ts 的构建身份常量必须与本包 version 同步
+const staleVersionConstants = [];
+for (const { file, manifest } of manifests) {
+  const versionFile = join(dirname(file), 'src', 'version.ts');
+  if (!statSync(versionFile, { throwIfNoEntry: false })) continue;
+  const source = readFileSync(versionFile, 'utf8');
+  for (const match of source.matchAll(/export const ([A-Z0-9_]+_VERSION) = '([^']+)'/g)) {
+    const [, constant, value] = match;
+    if (value === manifest.version) continue;
+    staleVersionConstants.push(
+      `${relative(ROOT, versionFile)}: ${constant} = '${value}'，但包 version 是 ${manifest.version}`,
+    );
+  }
+}
+
+if (staleVersionConstants.length > 0) {
+  console.error('[fail] 构建身份常量与包 version 不一致：');
+  for (const item of staleVersionConstants) console.error(`       ${item}`);
+  console.error('       修复：发版改 version 时同步改 version.ts 里的常量并重新构建');
   process.exit(1);
 }
 

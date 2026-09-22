@@ -55,7 +55,12 @@ Every machine running dsh-remote is **identical**: its own dsh, a console, and a
 
 ## Install
 
-Download the zip for **your platform** from [Releases](../../releases) and unpack (dsh is included):
+Download the zip for **your platform** from [Releases](../../releases) and unpack (dsh is included). Each platform comes in **core / full** variants — pick what you need:
+
+| Feature | core | full |
+|---|---|---|
+| dsh core features | ✅ | ✅ |
+| Office document preview | ❌ | ✅ |
 
 - **Windows**: double-click `dsh-remote.exe`. The exe is unsigned; if SmartScreen complains, choose "More info → Run anyway". Or run `pwsh -File .\start.ps1`
 - **Linux / macOS**: `./start.sh`
@@ -71,7 +76,7 @@ pnpm install
 pnpm release
 ```
 
-`pnpm release` builds first (skip with `--skip-build`), targets the host platform by default (`--target=all` for all), and writes the zip to `release/` — unpack and start it as above. Packing requires pnpm >=10 (the project does not force a local pnpm version; CI pins 10.17.0 for reproducibility). The Windows `dsh-remote.exe` is compiled with [Go](https://go.dev/dl/); without Go, add `--skip-exe` and that package starts via `start.ps1` only.
+`pnpm release` builds first (skip with `--skip-build`), targets the host platform by default (`--target=all` for all), packs both core and full variants per platform (filter with `--variant=core`), and writes the zips to `release/` — unpack and start it as above. Packing requires pnpm >=10 (the project does not force a local pnpm version; CI pins 10.17.0 for reproducibility). The Windows `dsh-remote.exe` is compiled with [Go](https://go.dev/dl/); without Go, add `--skip-exe` and that package starts via `start.ps1` only.
 
 ## First start
 

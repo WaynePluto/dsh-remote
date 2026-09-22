@@ -1,7 +1,9 @@
-/** 打绿色包，输出 release/dsh-remote-<version>-<zipTag>.zip；条目直接放在 zip 根目录，没有版本目录层。
+/** 打绿色包，输出 release/dsh-remote-<version>-<zipTag>-<variant>.zip；条目直接放在 zip 根目录，没有版本目录层。
  *
- * 支持 --target=<目标>（可重复或逗号分隔）、all、--skip-build 和 --skip-exe。
- * 目标共用 staging，按命令顺序串行部署；跨平台目标在裁剪前、本机目标在裁剪后冒烟。
+ * 支持 --target=<目标>（可重复或逗号分隔）、all、--variant=<core|full>（可重复或逗号分隔，默认全打）、
+ * --skip-build 和 --skip-exe。变体没有无后缀的默认包：full 带引擎类重组件（Office 预览），
+ * core 裁掉它们。目标共用 staging，按命令顺序串行部署；同一目标先打 full 再打 core
+ * （core 的裁剪是破坏性的）；跨平台目标在裁剪前、本机目标在裁剪后冒烟。
  */
 /* oxlint-disable no-await-in-loop -- 打包目标共用 staging，必须串行部署和验收。 */
 import {
@@ -26,7 +28,9 @@ import {
 } from './pack/deploy.mjs'
 import {
   checkPrunedTree,
+  checkVariantTree,
   pruneToTarget,
+  pruneToVariant,
   storeHasTarget,
 } from './pack/platform.mjs'
 import {
@@ -98,6 +102,24 @@ function resolveRequestedTargets() {
 const { keys: requestedTargets, lenient } = resolveRequestedTargets()
 context.lenient = lenient
 
+/** 解析 variant 参数；默认全打，且按 VARIANTS 声明顺序执行（full 在 core 前，core 的裁剪不可逆）。 */
+function resolveRequestedVariants() {
+  const ordered = Object.keys(context.variants)
+  const values = process.argv
+    .filter(argument => argument.startsWith('--variant='))
+    .flatMap(argument => argument.slice('--variant='.length).split(','))
+    .map(value => value.trim())
+    .filter(value => value !== '')
+  if (values.length === 0) return ordered
+  const unknown = values.filter(value => !(value in context.variants))
+  if (unknown.length !== 0) {
+    fail(`不认识的变体：${unknown.join('、')}`, `可选：${ordered.join('、')}，不指定则全打。`)
+  }
+  return ordered.filter(key => values.includes(key))
+}
+
+const requestedVariants = resolveRequestedVariants()
+
 for (const file of context.allPackagingFiles) {
   if (existsSync(join(context.packaging, file.name))) continue
   fail(`缺少 packaging/${file.name}。`, '这个仓库不完整，或者文件被误删了。')
@@ -124,7 +146,8 @@ if (missingArtifacts.length !== 0) {
 
 mkdirSync(context.release, { recursive: true })
 
-/** 打一个目标；每次重新 deploy，避免上一目标的裁剪污染下一目标。 */
+/** 打一个目标；每次重新 deploy，避免上一目标的裁剪污染下一目标。
+ * 平台相关步骤只做一遍，随后按声明顺序对每个变体裁剪并各写一个 zip。 */
 async function buildTarget(key) {
   const target = context.targets[key]
   const isHost = target.platform === context.platform && target.arch === context.arch
@@ -213,19 +236,35 @@ async function buildTarget(key) {
 
   if (target.platform === 'win32' && withExecutable) smokeTestWindowsExecutable(context)
 
-  const treeBytes = directorySize(context.packageDir)
-  say(`打包前目录大小 ${formatSize(treeBytes)}`)
-
-  const output = join(context.release, `${prefix}-${target.zipTag}.zip`)
-  rmSync(output, { force: true })
-  say(`写入 ${output}`)
-  const zipBytes = await createZip(context, output, target.files, withExecutable)
-  rmSync(context.staging, { recursive: true, force: true })
-
   const entryHint = target.platform === 'win32'
     ? (withExecutable ? `双击 ${context.winExecutable}（常驻通知区域）或 pwsh -File .\\start.ps1` : '用 pwsh -File .\\start.ps1（本次没有打进 dsh-remote.exe）')
     : '跑 ./start.sh'
-  return { key, label: target.label, output, zipBytes, entryHint }
+
+  const results = []
+  for (const variantKey of requestedVariants) {
+    const variant = context.variants[variantKey]
+    console.log('')
+    say(`=== 变体 ${variantKey}（${variant.label}）===`)
+    if (variant.excludes.length > 0) {
+      const removedEngines = pruneToVariant(context, variant)
+      say(`裁掉 ${removedEngines.length} 个引擎类重组件：${removedEngines.join('、')}`)
+      // 变体裁剪动过树，本机目标重新自检一遍；跨平台目标本来就只能在目标机上跑。
+      if (isHost) smokeTestPackage(context)
+    }
+    checkVariantTree(context, variantKey, variant)
+
+    const treeBytes = directorySize(context.packageDir)
+    say(`打包前目录大小 ${formatSize(treeBytes)}`)
+
+    const output = join(context.release, `${prefix}-${target.zipTag}-${variant.zipTag}.zip`)
+    rmSync(output, { force: true })
+    say(`写入 ${output}`)
+    const zipBytes = await createZip(context, output, target.files, withExecutable)
+    results.push({ key, variant: variantKey, label: `${target.label}（${variant.label}）`, output, zipBytes, entryHint })
+  }
+
+  rmSync(context.staging, { recursive: true, force: true })
+  return results
 }
 
 const built = []
@@ -233,9 +272,9 @@ const skipped = []
 for (const key of requestedTargets) {
   // 目标共用暂存目录，必须逐个处理，不能并行删除彼此的文件。
   // oxlint-disable-next-line no-await-in-loop：共享暂存目录必须串行处理。
-  const result = await buildTarget(key)
-  if (result === undefined) skipped.push(key)
-  else built.push(result)
+  const results = await buildTarget(key)
+  if (results === undefined) skipped.push(key)
+  else built.push(...results)
 }
 
 if (built.length === 0) {
@@ -245,7 +284,7 @@ if (built.length === 0) {
 console.log(`
 [pack] 完成，${built.length} 个包`)
 for (const item of built) {
-  console.log(`       ${item.key}（${item.label}） ${formatSize(item.zipBytes)}
+  console.log(`       ${item.key} · ${item.variant}（${item.label}） ${formatSize(item.zipBytes)}
          文件: ${item.output}
          解压后: ${item.entryHint}`)
 }
@@ -253,4 +292,5 @@ if (skipped.length !== 0) {
   console.log(`       跳过: ${skipped.join('、')}（本机没有这些平台的原生二进制）
        ${UNLOCK_CROSS_BUILD_HINT}`)
 }
-console.log('       dsh 的原生依赖按平台安装，别发错平台。\n')
+console.log('       dsh 的原生依赖按平台安装，别发错平台。')
+console.log('       同一平台的 core/full 是同一个程序：core 只少了 Office 预览引擎，打开 Office 预览会报转换不可用。\n')

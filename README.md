@@ -54,7 +54,12 @@
 
 ## 安装
 
-从 [Releases](../../releases) 下载**对应平台**的 zip 解压即可（dsh 已随包携带）：
+从 [Releases](../../releases) 下载**对应平台**的 zip 解压即可（dsh 已随包携带）。每个平台分 **core / full** 两种包，按需选择：
+
+| 功能 | core 版本 | full 版本 |
+|---|---|---|
+| dsh 核心功能 | ✅ | ✅ |
+| Office 文档预览 | ❌ | ✅ |
 
 - **Windows**：双击 `dsh-remote.exe`。exe 没有代码签名，SmartScreen 提示时选「更多信息 → 仍要运行」；也可以 `pwsh -File .\start.ps1`
 - **Linux / macOS**：`./start.sh`
@@ -70,7 +75,7 @@ pnpm install
 pnpm release
 ```
 
-`pnpm release` 自带构建（`--skip-build` 可跳过），默认只打本机平台，`--target=all` 打全部平台，zip 输出在 `release/` 下，解压后按上面方式启动。打包要求 pnpm >=10（项目不固定本地 pnpm 版本，直接使用你已安装的版本；CI 为保持可复现性固定使用 pnpm 10.17.0）；Windows 包的 `dsh-remote.exe` 需要 [Go](https://go.dev/dl/) 编译，没装就加 `--skip-exe`，打出的包只能用 `start.ps1` 启动。
+`pnpm release` 自带构建（`--skip-build` 可跳过），默认只打本机平台，`--target=all` 打全部平台，每个平台各打 core 与 full 两种变体（`--variant=core` 可筛选），zip 输出在 `release/` 下，解压后按上面方式启动。打包要求 pnpm >=10（项目不固定本地 pnpm 版本，直接使用你已安装的版本；CI 为保持可复现性固定使用 pnpm 10.17.0）；Windows 包的 `dsh-remote.exe` 需要 [Go](https://go.dev/dl/) 编译，没装就加 `--skip-exe`，打出的包只能用 `start.ps1` 启动。
 
 ## 第一次启动
 

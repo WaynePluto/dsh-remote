@@ -14,6 +14,20 @@ launcher、relay、connector 使用纯 JS 与 Node 内置模块；dsh 的依赖�
 `pnpm release` 构建全部目标。完整参数见 [pack.mjs](../scripts/pack.mjs)。
 普通构建不需要重新生成图标；Windows exe 构建需要 Go，用户运行不需要 Go。
 
+### 发行变体
+
+每个平台打 core / full 两个 zip，文件名带变体后缀，没有无后缀的默认包。
+两者是同一个程序：core 只剔除引擎类重组件，目前只有 LibreOffice 引擎
+（dsh 0.1.6 起 Office 文档转 PDF 预览使用，压缩后每平台约多 58～121 MB）。
+
+- 排除清单是 pack/manifest.mjs 的 `HEAVY_ENGINE_PACKAGES`，按包名匹配
+  `@deepseek-ai/libreoffice-kit-*` 平台引擎包；`libreoffice-kit` JS 壳必须保留，
+  `dsh-office-to-pdf` 顶层 import 它，删壳 dsh 起不来。
+- 缺引擎只影响 Office 预览：dsh 正常启动，首次转换时才报错。
+- 打包时验收：full 里必须真的有引擎、core 里必须一个不剩，否则响亮失败。
+- 上游再引入重组件时，按「optionalDependencies 平台包、惰性加载可降级、体积值得」
+  三条件决定是否进 core 排除清单。
+
 ### 跨平台依赖
 
 根 manifest 的 pnpm.supportedArchitectures 拉取目标平台预编译包，ignoredOptionalDependencies
@@ -139,7 +153,8 @@ pnpm build
 pnpm release:win
 ```
 
-release 支持 `--skip-build` 复用 dist、`--skip-exe` 跳过 Windows exe；不带 target 时选择当前平台。
+release 支持 `--skip-build` 复用 dist、`--skip-exe` 跳过 Windows exe、`--variant=<core|full>`
+只打指定变体（默认全打）；不带 target 时选择当前平台。
 不要使用 `pnpm pack` 代替 release，它是 pnpm 自带的包归档命令。
 
 打包流程：
@@ -150,7 +165,8 @@ release 支持 `--skip-build` 复用 dist、`--skip-exe` 跳过 Windows exe；�
 4. 复制平台入口、说明与配置；Windows 额外编译托盘 exe。
 5. 校验插件产物，并按目标裁剪平台依赖。
 6. 运行入口冒烟检查；当前平台在裁剪后运行，其他平台在裁剪前验证 JS 依赖图。
-7. 排除 pnpm registry 账本，输出 release/dsh-remote-<version>-<zipTag>.zip（Windows 为 win-x64）；
+7. 排除 pnpm registry 账本，按变体各写一个 zip：full 直接打包，core 先剔除
+   引擎类重组件再打包（release/dsh-remote-<version>-<zipTag>-<core|full>.zip）；
    条目直接放在 zip 根目录，没有版本目录层。
 
 各包依赖保持真实嵌套关系，不手动拍平。任一必要工件或冒烟检查失败时不产出该包。
