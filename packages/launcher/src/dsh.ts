@@ -52,6 +52,19 @@ export function dshTokenFromLine(line: string): string | undefined {
   return token === null || token === '' ? undefined : token
 }
 
+/**
+ * dsh 0.1.7 起 Bundle 解析、清单或 patch 装载失败不再启动即败，而是把
+ * `dsh: skipping profile bundle "<包名>": <原因>` 写到 stderr 后跳过该 Bundle
+ * （上游 `packages/boot/app-boot/src/profile.ts`）。对依赖全部插件在位的
+ * dsh-remote 来说这是静默降级，launcher 检测到该行时必须响亮提示。
+ * @param line - dsh 子进程写出的一行。
+ * @returns 跳过诊断的说明文本；该行不是跳过诊断时为 undefined。
+ */
+export function skippedBundleFromLine(line: string): string | undefined {
+  const match = /: skipping profile bundle (\S+): (.+)$/u.exec(line)
+  return match === null ? undefined : `${match[1]} ${match[2] ?? ''}`
+}
+
 /** 加载此模块的目录；所有同级查找的锚点。 */
 export function launcherDirectory(): string {
   return dirname(fileURLToPath(import.meta.url))

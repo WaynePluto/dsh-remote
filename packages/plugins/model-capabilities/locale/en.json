@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Model Capabilities & Protocols",
+    "description": "Declare image support, reasoning levels, and per-model protocol overrides"
+  }
+}

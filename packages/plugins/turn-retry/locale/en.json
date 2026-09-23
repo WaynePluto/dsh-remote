@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Turn Retry",
+    "description": "Retry failed turns, continue after stopping, and protect queued messages"
+  }
+}

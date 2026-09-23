@@ -11,10 +11,15 @@
     }
   },
   "files": [
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "locale"
   ],
   "dependencies": {
     "@dsh-remote/dsh-plugin-remote-settings": "workspace:0.0.2-20260922",
     "@dsh-remote/dsh-plugin-browser-compat": "workspace:0.0.2-20260922"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   }
 }

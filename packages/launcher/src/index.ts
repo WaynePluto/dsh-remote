@@ -35,6 +35,7 @@ import {
   preparePnpmShim,
   resolveBundledModulesDirectory,
   resolveDshBin,
+  skippedBundleFromLine,
   resolveDshInstallAnchor,
   resolvePnpmCli,
   resolvePnpmVersion,
@@ -239,6 +240,12 @@ export async function run(argv: readonly string[]): Promise<number> {
       }),
       env: dshEnvironment,
       onLine: (line) => {
+        // dsh 0.1.7 对损坏 Bundle 是「stderr 诊断 + 跳过」而非启动失败；
+        // dsh-remote 依赖全部插件在位，这里把静默降级转成响亮警告。
+        const skipped = skippedBundleFromLine(line)
+        if (skipped !== undefined) {
+          console.error(`[dsh-remote] dsh 跳过了一个插件 Bundle（页面将缺少对应功能）：${skipped}`)
+        }
         if (dshTokenSeen) return
         const token = dshTokenFromLine(line)
         if (token === undefined) return

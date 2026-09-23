@@ -15,7 +15,7 @@ describe('concise mode profile bundle', () => {
     }
     expect(manifest.dsh?.bundle?.patch).toBe('./cordis.patch.yml')
     expect(manifest.main).toBeUndefined()
-    expect(manifest.files).toEqual(['cordis.patch.yml'])
+    expect(manifest.files).toEqual(['cordis.patch.yml', 'locale'])
     const patch = read('cordis.patch.yml')
     // dsh 0.1.7：预设是一行 `@deepseek-ai/dsh-agent-preset` 声明，config.plugins 即子插件行。
     expect(patch).toContain(`name: '@deepseek-ai/dsh-agent-preset'`)

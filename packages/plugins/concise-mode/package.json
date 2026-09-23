@@ -6,7 +6,8 @@
   "private": true,
   "type": "module",
   "files": [
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "locale"
   ],
   "dsh": {
     "bundle": {
@@ -18,5 +19,9 @@
   },
   "devDependencies": {
     "vitest": "4.1.11"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   }
 }

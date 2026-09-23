@@ -31,7 +31,15 @@ function stayAlive(banner: string): string {
 }
 
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
+  // 分离进程退出与句柄释放之间有竞态：Windows 把仍存活的进程 CWD 锁到临时目录，
+  // 重试也等不到。测试结论取决于断言而非清理；清不掉的目录交给系统临时目录回收。
+  for (const root of roots.splice(0)) {
+    try {
+      rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+    } catch {
+      // 故意留空：残留目录无害，不作为测试失败。
+    }
+  }
 })
 
 describe('a real detached service', () => {

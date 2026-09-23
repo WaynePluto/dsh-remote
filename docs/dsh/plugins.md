@@ -337,11 +337,25 @@ token 拼写和实际值是两件事，需用真实页面 getComputedStyle 检�
 | 表头 | 整行 button、aria-expanded、gap:10px、padding:8px 12px；嵌套 flex 居中 |
 | 标题与摘要 | 13px，标题 500/primary，摘要 tertiary；ellipsis 放内层 span |
 | 列表行 | 单行不换行；可变长文本给 `min-width:0` + ellipsis，行尾按钮组包在 `flex:none` 容器里不被压缩（实例：services 的 ServiceRow） |
-| 图标 | ui-primitives 的 outline 图标；services 与 terminal 共用 IconApiOutline14 |
-| 箭头 | 收起状态 IconChevronUpOutline14，展开状态 IconChevronDownOutline14 |
+| 图标 | ui-primitives 的 outline 图标；services 与 terminal 共用 IconApiOutlineMedium |
+| 箭头 | 收起状态 IconChevronUpOutlineMedium，展开状态 IconChevronDownOutlineMedium |
 | 滚动条 | --dsh-scrollbar-thumb 与 hover 使用 scrollbar-bg-l2、scrollbar-hover-l2 |
 
 @deepseek-ai/dsh-client-ui-primitives 必须 external，复用页面已有组件与 CSS。
 dsh `0.1.5-rc.2` 将通用文件图标统一为 `FileTypeIcon`（用 `path` 或 `kind` 选择类型），不再导出旧的
 `DocumentFileIcon`；项目浏览器插件应使用新接口，并在需要时显式传 `size`。该包带 CSS，不能在 environment:node
 单元测试中直接 import 含它的浏览器模块。
+
+## 插件包约定（dsh 0.1.7）
+
+- **peer 版本准入**：dsh 在 profile 装载时校验插件 `peerDependencies` 里的
+  `@deepseek-ai/dsh*` 声明与运行时版本，不匹配即拒载整行（官方豁免通道是 profile
+  `compatibility.json`）。本项目插件对 dsh 包只有类型引用，统一放 devDependencies，
+  **不得**把它们声明成 peerDependencies。
+- **显示元数据**：插件页/设置清单的标题与描述来自各包 `locale/{en,zh}.json` 的
+  `meta.title/description`（exports 需含 `./package.json` 与 `./locale/*.json`，
+  files 带 `locale`）。文案与 docs/plugins.md 词表一致；`icon` 暂不声明，用默认图。
+- **Bundle 静默跳过**：dsh 0.1.7 对解析/清单/patch 失败的 Bundle 不再启动即败，改为
+  stderr 打 `dsh: skipping profile bundle "<包名>": <原因>` 后跳过。launcher 在 dsh
+  输出行里检测该诊断并响亮警告（`skippedBundleFromLine`）；分发管线的
+  「缺少宿主/浏览器产物」预检因此仍是必要的前置防线。

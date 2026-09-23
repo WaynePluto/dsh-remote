@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "出网代理",
+    "description": "统一配置 dsh fetch 的 HTTP/HTTPS 代理出口"
+  }
+}

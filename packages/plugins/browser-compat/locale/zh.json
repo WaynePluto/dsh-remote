@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "浏览器兼容",
+    "description": "为旧 WebKit 垫平 Iterator、AbortSignal、Promise 缺口并提供临时错误日志"
+  }
+}

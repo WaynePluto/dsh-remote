@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Persistent Services",
+    "description": "Manage named services that outlive sessions"
+  }
+}

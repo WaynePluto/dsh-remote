@@ -6,12 +6,17 @@
   "type": "module",
   "files": [
     "dsh-overlay.yml",
-    "model-bootstrap.mjs"
+    "model-bootstrap.mjs",
+    "locale"
   ],
   "scripts": {
     "test": "vitest run"
   },
   "devDependencies": {
     "vitest": "4.1.11"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   }
 }

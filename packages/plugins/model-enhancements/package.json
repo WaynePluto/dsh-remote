@@ -11,12 +11,17 @@
     }
   },
   "files": [
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "locale"
   ],
   "dependencies": {
     "@dsh-remote/dsh-plugin-copilot-auth": "workspace:0.0.2-20260922",
     "@dsh-remote/dsh-plugin-models-catalog": "workspace:0.0.2-20260922",
     "@dsh-remote/dsh-plugin-model-capabilities": "workspace:0.0.2-20260922",
     "@dsh-remote/dsh-plugin-favorite-models": "workspace:0.0.2-20260922"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   }
 }

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Browser Compatibility",
+    "description": "Polyfill Iterator, AbortSignal, and Promise for older WebKit with a temporary error log"
+  }
+}

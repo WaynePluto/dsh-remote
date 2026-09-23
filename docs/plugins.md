@@ -64,6 +64,9 @@
 webServer 注入和模型 Bundle 在线启停所需的稳定启动屏障，随 launcher 以 `--patch` 常驻加载，
 不可停用或卸载。
 
+插件页与设置清单显示的标题、描述来自每个包 `locale/{en,zh}.json` 的 `meta` 字段
+（dsh 0.1.7 本地化包元数据），文案与本页词表一致；未声明 `icon` 时使用 dsh 默认图。
+
 ## 安装、升级与停用
 
 - 新建 `dsh-remote-web` profile 时，11 个分发包通过 dsh 官方插件管理器默认安装并启用；

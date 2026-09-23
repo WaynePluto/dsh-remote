@@ -1,9 +1,10 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { delimiter, join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { connectorArguments, resolveConnectorEntry } from '../src/connector.js'
-import { dshArguments, dshTokenFromLine, preparePnpmShim, withBundledPnpmPath } from '../src/dsh.js'
+import { dshArguments, dshTokenFromLine, preparePnpmShim, skippedBundleFromLine, withBundledPnpmPath } from '../src/dsh.js'
 import {
   PLUGIN_OVERLAY_FILE,
   SHELL_PLUGIN_PACKAGES,
@@ -123,9 +124,26 @@ describe('dsh browser login token', () => {
   })
 })
 
+describe('dsh skipped bundle diagnostics', () => {
+  it('reads the bundle name and reason out of a skip line', () => {
+    expect(skippedBundleFromLine('dsh: skipping profile bundle "@dsh-remote/dsh-plugin-proxy": cannot read manifest'))
+      .toBe('"@dsh-remote/dsh-plugin-proxy" cannot read manifest')
+  })
+
+  it('returns undefined for unrelated lines', () => {
+    for (const line of [
+      'dsh web: http://127.0.0.1:3080/?token=abc',
+      'some plugin emitted: skipping profile bundle lookalike without the prefix',
+      '',
+    ]) {
+      expect(skippedBundleFromLine(line)).toBeUndefined()
+    }
+  })
+})
+
 describe('connector entry', () => {
   const packed = join('C:', 'green', 'dist')
-  const source = join('D:', 'dev', 'dsh-remote', 'packages', 'launcher', 'src')
+  const source = join(repositoryRoot, 'packages', 'launcher', 'src')
 
   it('prefers the connector deployed into the package own node_modules', () => {
     const deployed = join(packed, '..', 'node_modules', '@dsh-remote', 'connector', 'dist', 'cli.js')
@@ -151,17 +169,19 @@ describe('connector entry', () => {
   })
 })
 
+const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+
 function barePluginName(name: string): string {
   return (name.split('/')[1] ?? name).replace(/^dsh-plugin-/u, '')
 }
 
 describe('dsh shell plugin overlay', () => {
   const packed = join('C:', 'green', 'dist')
-  const source = join('D:', 'dev', 'dsh-remote', 'packages', 'launcher', 'src')
+  const source = join(repositoryRoot, 'packages', 'launcher', 'src')
   const deployedRoots = Object.fromEntries(SHELL_PLUGIN_PACKAGES.map(name =>
     [name, join(packed, '..', 'node_modules', ...name.split('/'))]))
   const workspaceRoots = Object.fromEntries(SHELL_PLUGIN_PACKAGES.map(name =>
-    [name, join(source, '..', '..', 'plugins', barePluginName(name))]))
+    [name, join(repositoryRoot, 'packages', 'plugins', barePluginName(name))]))
 
   it('keeps exactly one non-removable shell overlay', () => {
     expect([...SHELL_PLUGIN_PACKAGES]).toEqual(['@dsh-remote/dsh-plugin-remote-privileged'])
