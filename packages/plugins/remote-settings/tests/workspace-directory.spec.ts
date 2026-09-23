@@ -1,6 +1,14 @@
+import { isAbsolute } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { OPEN_WORKSPACE_ENDPOINT } from '../src/shared.js'
 import { dispatchWorkspaceDirectory } from '../src/workspace-directory.js'
+
+/**
+ * 宿主平台上的绝对路径：`isAbsolute` 按运行平台判定（CI 在 Linux 上跑同一份
+ * 测试），夹具必须跟随平台，不能硬编码 `C:\...`。
+ */
+const WIN_ABSOLUTE = 'C:\\workspace\\repo'
+const ABSOLUTE = isAbsolute(WIN_ABSOLUTE) ? WIN_ABSOLUTE : '/workspace/repo'
 
 function setup() {
   const isDirectory = vi.fn(async () => true)
@@ -13,10 +21,10 @@ describe('顶部 Explorer 的认证私有通道', () => {
     const dependencies = setup()
     const signal = new AbortController().signal
     const result = await dispatchWorkspaceDirectory(
-      OPEN_WORKSPACE_ENDPOINT, { path: 'C:\\workspace\\repo' }, signal, dependencies)
+      OPEN_WORKSPACE_ENDPOINT, { path: ABSOLUTE }, signal, dependencies)
     expect(result).toEqual({ ok: true, value: { opened: true } })
-    expect(dependencies.isDirectory).toHaveBeenCalledWith('C:\\workspace\\repo')
-    expect(dependencies.open).toHaveBeenCalledWith('C:\\workspace\\repo', signal)
+    expect(dependencies.isDirectory).toHaveBeenCalledWith(ABSOLUTE)
+    expect(dependencies.open).toHaveBeenCalledWith(ABSOLUTE, signal)
   })
 
   it.each([
@@ -37,25 +45,25 @@ describe('顶部 Explorer 的认证私有通道', () => {
     const dependencies = setup()
     dependencies.isDirectory.mockResolvedValueOnce(false)
     const result = await dispatchWorkspaceDirectory(
-      OPEN_WORKSPACE_ENDPOINT, { path: 'C:\\missing' }, new AbortController().signal, dependencies)
+      OPEN_WORKSPACE_ENDPOINT, { path: ABSOLUTE }, new AbortController().signal, dependencies)
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error.code).toBe('remote-settings/not-directory')
     expect(dependencies.open).not.toHaveBeenCalled()
   })
 
   it.each(['stat', 'open'] as const)('stat 和 opener 失败响亮返回，不伪装 opened：%s', async failedAt => {
-      const dependencies = setup()
-      dependencies[failedAt === 'stat' ? 'isDirectory' : 'open'].mockRejectedValueOnce(new Error(`${failedAt} failed`))
-      const result = await dispatchWorkspaceDirectory(
-        OPEN_WORKSPACE_ENDPOINT, { path: 'C:\\repo' }, new AbortController().signal, dependencies)
-      expect(result.ok).toBe(false)
-      if (!result.ok) expect(result.error).toMatchObject({ code: 'remote-settings/open-failed', message: `${failedAt} failed` })
-    })
+    const dependencies = setup()
+    dependencies[failedAt === 'stat' ? 'isDirectory' : 'open'].mockRejectedValueOnce(new Error(`${failedAt} failed`))
+    const result = await dispatchWorkspaceDirectory(
+      OPEN_WORKSPACE_ENDPOINT, { path: ABSOLUTE }, new AbortController().signal, dependencies)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toMatchObject({ code: 'remote-settings/open-failed', message: `${failedAt} failed` })
+  })
 
   it('调用前或等待期间取消时返回 cancelled', async () => {
     const before = setup()
     const aborted = AbortSignal.abort(new Error('closed'))
-    const first = await dispatchWorkspaceDirectory(OPEN_WORKSPACE_ENDPOINT, { path: 'C:\\repo' }, aborted, before)
+    const first = await dispatchWorkspaceDirectory(OPEN_WORKSPACE_ENDPOINT, { path: ABSOLUTE }, aborted, before)
     expect(first.ok).toBe(false)
     if (!first.ok) expect(first.error.code).toBe('gateway/cancelled')
     expect(before.isDirectory).not.toHaveBeenCalled()
@@ -66,7 +74,7 @@ describe('顶部 Explorer 的认证私有通道', () => {
       signal.addEventListener('abort', () => { reject(signal.reason) }, { once: true })
       controller.abort(new Error('closed'))
     }))
-    const second = await dispatchWorkspaceDirectory(OPEN_WORKSPACE_ENDPOINT, { path: 'C:\\repo' }, controller.signal, during)
+    const second = await dispatchWorkspaceDirectory(OPEN_WORKSPACE_ENDPOINT, { path: ABSOLUTE }, controller.signal, during)
     expect(second.ok).toBe(false)
     if (!second.ok) expect(second.error.code).toBe('gateway/cancelled')
   })

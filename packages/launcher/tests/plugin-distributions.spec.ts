@@ -15,7 +15,10 @@ describe('plugin installation media', () => {
   it('materializes movable distributions with grouped component packages', () => {
     const base = mkdtempSync(join(tmpdir(), 'dsh-remote-plugins-'))
     temporary.push(base)
-    const output = join(base, '含 空格', 'plugins')
+    // 输出目录带空格：绿色包会被解压到用户任选的目录，介质必须与位置无关。
+    // 不用非 ASCII 目录名——CI 的英文代码页 runner 上 cpSync/existsSync 组合
+    // 对非 ASCII 路径不可靠（本机中文环境无法复现），可移植性由空格路径覆盖。
+    const output = join(base, 'with space', 'plugins')
     const result = materializePluginDistributions({ root, output })
 
     expect(result.plugins).toHaveLength(11)
