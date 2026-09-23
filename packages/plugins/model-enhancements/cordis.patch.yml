@@ -1,0 +1,29 @@
+# 模型增强的纯 Profile Bundle；组件保留独立行和稳定 ID。
+# 组件路径固定到本 Bundle 内嵌的依赖目录，避免停用 Bundle 时 HMR 重新解析已移除的裸包作用域。
+- insert:
+    - id: copilot-auth
+      name: './node_modules/@dsh-remote/dsh-plugin-copilot-auth/dist/index.js'
+      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-model-enhancements")'
+
+# 模型目录和协议覆盖必须先于 llm-pi-ai 的设置校验完成。
+- id: llm-pi-ai
+  name: '@deepseek-ai/dsh-llm-pi-ai'
+  inject:
+    - llm
+    - modelsCatalogBootstrap
+    - modelCapabilitiesBootstrap
+
+- insert:
+    - id: models-catalog
+      name: './node_modules/@dsh-remote/dsh-plugin-models-catalog/dist/index.js'
+      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-model-enhancements")'
+
+- insert:
+    - id: model-capabilities
+      name: './node_modules/@dsh-remote/dsh-plugin-model-capabilities/dist/index.js'
+      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-model-enhancements")'
+
+- insert:
+    - id: favorite-models
+      name: './node_modules/@dsh-remote/dsh-plugin-favorite-models/dist/index.js'
+      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-model-enhancements")'

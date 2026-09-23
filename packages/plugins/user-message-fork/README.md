@@ -26,6 +26,9 @@ node scripts/user-message-fork-check.mjs
 
 插件改完后必须重启 dsh；`dsh-remote-web` profile 没有 HMR，刷新页面不会重新加载新的浏览器 bundle。
 
-## 停用与补回
+## 分发与管理
 
-本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：用户消息的「分叉」按钮消失；已创建的子会话不受影响。launcher 不再自动补回；右键托盘图标选「补回用户消息分叉」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-user-message-fork` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。
+本包不作为独立安装项分发，而是 `@dsh-remote/dsh-plugin-conversation-enhancements`（会话增强 Bundle）的组件。停用后，用户消息的「分叉」按钮消失；已创建的子会话不受影响。
+可在该 Bundle 详情中单独停用或重新启用本组件；安装、卸载和升级以整个会话增强 Bundle 为单位。
+launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，并保留 Bundle 与组件的停用状态；卸载后不会自动补回。
+需要重装时，在 dsh「添加插件」中填写发行包 `plugins/conversation-enhancements` 或开发环境 `.dev/plugins/conversation-enhancements` 的绝对目录。

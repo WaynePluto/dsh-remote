@@ -49,6 +49,9 @@ RPC、文件或数据库；不上传、不跨设备同步，刷新或关闭页�
 - 加载体积增加一条小型自包含启动脚本和一个按需加载的设置 client bundle；documentpreview
   的 bundle 照常下载，本插件不复制上游组件。
 
-## 停用与补回
+## 分发与管理
 
-本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：现代浏览器无感；旧 WebKit（旧 Safari / 手机 WebView）可能白屏，设置里的「浏览器日志」页也随之消失。launcher 不再自动补回；右键托盘图标选「补回浏览器兼容」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-browser-compat` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。
+本包不作为独立安装项分发，而是 `@dsh-remote/dsh-plugin-remote-experience`（远程体验 Bundle）的组件。停用后，现代浏览器通常无感；旧 WebKit 可能白屏，设置里的「浏览器日志」页也会消失。
+可在该 Bundle 详情中单独停用或重新启用本组件；安装、卸载和升级以整个远程体验 Bundle 为单位。
+launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，并保留 Bundle 与组件的停用状态；卸载后不会自动补回。
+需要重装时，在 dsh「添加插件」中填写发行包 `plugins/remote-experience` 或开发环境 `.dev/plugins/remote-experience` 的绝对目录。

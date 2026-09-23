@@ -1,6 +1,7 @@
 {
   "name": "@dsh-remote/dsh-plugin-exec-process",
   "version": "0.0.2-20260922",
+  "description": "将工具调用、思考与错误整合为可折叠的执行过程。",
   "license": "MIT",
   "private": true,
   "type": "module",

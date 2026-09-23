@@ -1,35 +1,31 @@
 /**
  * 本地开发栈的共享设置。
  *
- * 范围：仅用于开发。发行绿色包使用 `@dsh-remote/launcher`
+ * 范围：仅用于开发入口。发行绿色包使用 `@dsh-remote/launcher`
  *（M3.1）启动 dsh + connector；此脚本还会启动 relay，
- * 以便单机验证完整的局域网链路。
+ * 以便单机验证完整的局域网链路。开发栈的运行数据沿用发行版默认 home。
  */
 
-import { randomBytes } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { networkInterfaces } from 'node:os'
+import { homedir, networkInterfaces } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 export const ROOT = fileURLToPath(new URL('..', import.meta.url))
+/** `.dev` 只供隔离冒烟脚本使用，开发栈本身不写这里。 */
 export const DEV_DIRECTORY = join(ROOT, '.dev')
-export const SECRETS_FILE = join(DEV_DIRECTORY, 'local-secrets.json')
-export const RELAY_DATABASE = join(DEV_DIRECTORY, 'relay.db')
-/** 仅用于开发环境的身份；真实 connector 密钥位于 ~/.dsh-remote。 */
-export const DEVICE_KEY_FILE = join(DEV_DIRECTORY, 'device.key')
-/** 也把 membership.json 保存在 .dev/ 中，避免 `pnpm dev` 加入真实 hub。 */
-export const DSH_REMOTE_HOME = DEV_DIRECTORY
+/** 开发栈沿用发行版默认的 dsh-remote home。 */
+export const DSH_REMOTE_HOME = join(homedir(), '.dsh-remote')
+export const RELAY_DATABASE = join(DSH_REMOTE_HOME, 'relay.db')
+export const DEVICE_KEY_FILE = join(DSH_REMOTE_HOME, 'device.key')
 
 export const RELAY_PORT = 30_809
 export const DSH_PORT = 3080
-export const MACHINE_SLUG = 'pc1'
 export const DSH_PROFILE = 'dsh-remote-web'
 
-// 与 packages/launcher/src/profile.ts 的 DSH_REMOTE_PROFILE_BUNDLES 保持一致
-//（launcher 是权威清单；check 脚本不能 import 源码 .ts，只能在此复制）。
-// 需要自建隔离 profile 的冒烟（如 yolo-mode-check）用它写模板。
+// 冒烟脚本直接装载每个源码组件，便于精确归因；这不是 launcher 的第三方
+// 分发清单。产品分组与默认顺序以根目录 plugin-catalog.json 为准。
 export const DEFAULT_PROFILE_BUNDLES = [
   '@deepseek-ai/dsh-base',
   '@deepseek-ai/dsh-web-app',
@@ -57,12 +53,19 @@ export const DEFAULT_PROFILE_BUNDLES = [
   '@dsh-remote/dsh-plugin-yolo-mode',
 ]
 
-// 通过 launcher 包让 Node 解析，而不是硬编码
-// node_modules 路径：hoisted 布局把 dsh 放在工作区根目录，而字面路径
-// 可能静默指向上一次安装残留的旧副本。
-export const DSH_BIN = fileURLToPath(pathToFileURL(
-  createRequire(join(ROOT, 'packages/launcher/package.json')).resolve('@deepseek-ai/dsh/lib/bin.js'),
+// pnpm run dev 会先在仓库外生成不含功能插件的 dsh 运行环境，避免安装锚
+// 从工作区 node_modules 抢先解析同名插件；单独运行脚本时保留源码回退用于诊断。
+const runtimeDescriptorPath = join(DEV_DIRECTORY, 'runtime.json')
+const runtimeDescriptor = existsSync(runtimeDescriptorPath)
+  ? JSON.parse(readFileSync(runtimeDescriptorPath, 'utf8'))
+  : undefined
+const sourceRequire = createRequire(join(ROOT, 'packages/launcher/package.json'))
+export const DSH_BIN = runtimeDescriptor?.dshBin ?? fileURLToPath(pathToFileURL(
+  sourceRequire.resolve('@deepseek-ai/dsh/lib/bin.js'),
 ))
+export const DSH_INSTALL_ANCHOR = runtimeDescriptor?.installAnchor ?? sourceRequire.resolve('@deepseek-ai/dsh/package.json')
+export const PNPM_CLI = runtimeDescriptor?.pnpmCli ?? join(dirname(sourceRequire.resolve('pnpm')), 'bin', 'pnpm.cjs')
+export const DSH_RUNTIME_BIN_DIRECTORY = join(runtimeDescriptor?.runtime ?? ROOT, 'node_modules', '.bin')
 
 /** 所有 dsh-remote dsh 插件所在的位置（D17）。 */
 export const PLUGINS_DIRECTORY = join(ROOT, 'packages/plugins')
@@ -84,7 +87,7 @@ export function dshPluginOverlays() {
     const overlay = join(packageDirectory, 'dsh-overlay.yml')
     if (!existsSync(overlay)) continue
     const manifest = JSON.parse(readFileSync(join(packageDirectory, 'package.json'), 'utf8'))
-    // 壳级 overlay 包（remote-privileged）没有构建产物：无 main 字段即跳过检查。
+    // 壳级 overlay 包（remote-privileged）直接携带 ESM 辅助文件：无 main 字段即跳过构建产物检查。
     if (manifest.main === undefined) {
       overlays.push(overlay)
       continue
@@ -111,31 +114,10 @@ export function lanAddress() {
   return undefined
 }
 
-/**
- * 加载或创建本地 JWT 密钥。
- *
- * 这是单机开发凭据；它不会离开 `.dev/`（该目录被 git 忽略）。
- * Connector 身份是设备密钥，而不是这里的密钥。
- */
-export function localSecrets() {
-  mkdirSync(DEV_DIRECTORY, { recursive: true })
-  try {
-    const parsed = JSON.parse(readFileSync(SECRETS_FILE, 'utf8'))
-    if (typeof parsed.jwtSecret === 'string') return { jwtSecret: parsed.jwtSecret }
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error
-  }
-
-  const secrets = { jwtSecret: randomBytes(32).toString('base64url') }
-  writeFileSync(SECRETS_FILE, `${JSON.stringify(secrets, undefined, 2)}\n`, { mode: 0o600 })
-  chmodSync(SECRETS_FILE, 0o600)
-  return secrets
-}
-
-export function relayEnvironment(secrets) {
+export function relayEnvironment(jwtSecret) {
   return {
     ...process.env,
-    DSH_REMOTE_JWT_SECRET: secrets.jwtSecret,
+    DSH_REMOTE_JWT_SECRET: jwtSecret,
   }
 }
 

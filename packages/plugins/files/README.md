@@ -6,7 +6,7 @@
 
 ## 使用
 
-打开右侧 Sidebar，先进入「开始」中的「工作区文件」目录入口，再选择原生的「文件」入口。宽屏下：
+打开右侧 Sidebar，在原生「开始」页选择「工作区文件」，进入原生「文件」页；「新建终端」和「浏览器」入口仍由 dsh 提供，不受本插件影响。宽屏下：
 
 - 文件树保持在左侧 pane；首次点文件时，插件通过原生 Sidebar `split` 建立右侧 pane；
 - 文件在原生文档预览 tab 中打开，支持 dsh 已有的 Markdown、代码、纯文本、图片、PDF 和 HTML 预览；
@@ -15,8 +15,9 @@
 - 页签标题右键菜单的「关闭其他」「关闭全部」只作用于右键目标所在分栏，不影响另一个分栏；
 - 空间不足、用户已有布局无法协调或目标 pane 已被移动时，退回原生文件树自己的打开行为，不阻断浏览。
 
-最终用户只看到一个「文件」入口，不再有「文件 pro」。原生文件树的登记项由插件以
-slot shadow 方式包装，原始 component、store、inject 和 locale 均保留；插件不复制上游树源码。
+最终用户只看到一个「文件」入口，不再有「文件 pro」。插件不注册额外入口，也不覆盖「开始」页。
+原生文件树的登记项由插件以 slot shadow 方式包装，原始 component、store、inject 和 locale
+均保留；插件不复制上游树源码。
 
 ## Git 状态
 
@@ -79,6 +80,10 @@ node scripts/files-check.mjs
 `dsh-remote-web` 没有 HMR。修改宿主、浏览器代码或样式后，必须重新构建并重启 dsh；只刷新页面不会
 重新加载冻结的浏览器产物。
 
-## 停用与补回
+## 分发与管理
 
-本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：右侧栏「文件」增强（Git 状态、目录右键菜单、预览增强）消失，回到 dsh 原生文件树；本插件不提供写入接口的性质不变。launcher 不再自动补回；右键托盘图标选「补回文件浏览」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-files` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。
+本插件作为独立 Bundle 分发，可单独停用、卸载和升级。停用后，Git 状态、目录右键菜单与预览增强消失，回到 dsh 原生文件树；本插件不提供写入接口的性质不变。
+launcher 首次默认安装本插件；后续只升级仍已安装的插件并保留停用状态，卸载后不会自动补回。
+需要重装时，在 dsh「添加插件」中填写发行包 `plugins/files` 或开发环境 `.dev/plugins/files` 的绝对目录，而不是源码目录或 `dist/index.js`。
+
+原生插件列表中的标题是 **plugin-files**，详情页显示完整包名 `@dsh-remote/dsh-plugin-files` 与 Bundle 行 `files`。副标题来自 package.json 的中文 `description`；标题仍由 dsh 根据 npm 包名生成。

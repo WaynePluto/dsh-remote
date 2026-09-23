@@ -27,3 +27,4 @@
 - insert:
     - id: yolo-mode
       name: './dist/index.js'
+      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-yolo-mode")'

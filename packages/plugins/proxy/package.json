@@ -1,6 +1,7 @@
 {
   "name": "@dsh-remote/dsh-plugin-proxy",
   "version": "0.0.2-20260922",
+  "description": "在 dsh 设置中配置模型、OAuth 与插件请求共用的出网代理。",
   "license": "MIT",
   "private": true,
   "type": "module",

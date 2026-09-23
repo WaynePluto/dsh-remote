@@ -3,17 +3,62 @@
 基线见 [源码依据](../02-dsh-facts.md)。产品装载规则见 [决策](../01-decisions.md)。
 以下路径相对 dsh 仓库根，明确标注项目实现的除外。
 
-## Bundle 与 Overlay
+## Bundle、Overlay 与第三方安装
 
-出处：`apps/cli/src/profile-boot.ts`、`packages/boot/app-boot/src/index.ts`、`src/profile.ts`。
+出处：`apps/cli/src/profile-boot.ts`、`packages/boot/app-boot/src/index.ts`、`src/profile.ts`、
+`apps/cli/src/plugin.ts`、`packages/boot/plugin-manager/src/index.ts`。
 
-应用顺序为 Bundle → profile patch → home patch → --patch（argv 顺序），后者覆盖前者。
---patch 可重复传入；insert 中 ./ 或 ../ 开头的入口锚定到 patch 所在目录。
-裸包名则相对 profile 解析，因此依赖其他宿主包的插件应声明 dependencies，由自身模块解析并挂载。
+应用顺序为 Bundle → profile patch → home patch → `--patch`（argv 顺序），后者覆盖前者。
+`--patch` 可重复传入；insert 中 `./` 或 `../` 开头的入口锚定到 patch 所在目录。裸包名相对
+Bundle 自身解析，因此组合 Bundle 必须将组件声明为固定版本 dependencies，并从自己的安装目录
+解析，不能依赖 launcher 工作区恰好存在同名包。
+
+profile 的 `dependencies` 是第三方 Bundle 是否安装的事实，`dsh.profile.bundles` 是 Bundle 是否
+启用的事实，profile patch 中目标行的 `disabled` 则是组件是否停用的事实，三者不能混用。
+项目首次默认安装第三方 Bundle，配套升级只处理仍在 dependencies 中的包，并保留后两种状态；
+卸载后不得仅凭“默认清单”重新加入 dependency 或 bundles。
 
 profile patch 执行时，末尾 overlay 插入的行还不存在，所以覆盖普通项目插件 config 需要更靠后的 patch，
 且目标行必须有稳定 id。用户可编辑的配置通常应使用设置命名空间，不依赖 Cordis config。
-插件配置页（0.1.6 起 Plugins 页的 plugins.item list slot，取代 settings.plugin.item keyed slot）编辑的是设置命名空间对应的值，不直接编辑 Cordis entry config。
+
+0.1.6 的插件管理页区分三类槽位：`plugins.item` 是官方插件卡片 list；第三方 Bundle 自身配置应注册
+keyed 的 `plugins.bundle.config`，key 为 Bundle 完整包名，owner 在详情页以 `view: 'page'` 渲染；
+组件行配置使用 `plugins.row.config`。这些表单编辑设置命名空间的值，不直接编辑 Cordis entry config。
+subagent-depth 已迁到 `plugins.bundle.config`，只渲染 page 视图并直接使用详情页配置区，不再显示
+第二层卡片、重复标题或嵌套折叠。槽位声明出处：
+`packages/client/ui-plugin-manager/src/client/slot-contract.ts`、`PluginManagerPage.tsx`。
+
+## 原生「添加插件」与显示
+
+出处：`packages/client/ui-plugin-manager/src/client/{presentation.ts,manager-store.ts,PluginManagerPage.tsx}`、
+`packages/boot/plugin-manager/src/index.ts`。本节核对已安装 `0.1.6-alpha.2` 的产物及随包文档；
+本地 dsh 源码 checkout 若版本不同，不能拿另一版本界面推断当前管理页。
+
+- 「添加插件」支持包名/版本、Git、压缩包与宿主机器的本地绝对路径；目录应指向有
+  `package.json` 且声明 `dsh.bundle.patch` 的包根。已在当前管理列表中的包会被拒为 already-installed。
+- Web 安装先 inspect，再由官方包管理器写 profile dependency；安装完成后点「立即启用」才选入
+  `dsh.profile.bundles`。直接关闭安装完成弹窗会保持已安装、未启用。
+- 外部包列在「已安装」，标题按展示规则去掉常见包名前缀，简介来自 package.json 的
+  `description`，不是 README；因此分发介质必须保留 manifest 的准确中文简介。
+- Bundle 开关改有序 bundles 数组；行开关改 profile patch 的 disabled，两者不是同一种停用。
+  没有 HMR 时需要重启 dsh 才应用运行时变更；管理页出现卡片不等于功能已经加载。
+- 每个 Bundle `insert` 行必须给出跨重组稳定且全局唯一的 `id`。Cordis Loader 会给匿名行生成随机 ID，
+  Profile HMR 全量重读 Bundle 后便会把未变化的匿名行当成新条目，并在旧条目仍存活时重复 import。
+  这会使任意 Bundle 开关被无关插件的 `failed to import` 阻断；磁盘选择已保存但旧 fiber 未卸载，
+  随后的卸载又会得到 `bundle-in-use`。进程重启只会掩盖问题，不能以“重启后正常”代替稳定 ID。
+
+### dsh-remote 分发约束
+
+- 根 `plugin-catalog.json` 将 22 个功能组件映射为 4 个组合包与 7 个独立包。发行介质位于
+  `plugins/`，开发介质位于 `.dev/plugins/`；两者都用本地绝对目录走上述官方安装流程。
+- 组合包是安装/卸载/升级单位，其 `cordis.patch.yml` 仍为组件保留独立稳定行。组件从 Bundle
+  内嵌依赖的相对路径装载，并用 Bundle 选择状态跳过 HMR 卸载阶段的瞬时残留行。普通组件可以
+  单独 disabled；models-catalog 与 model-capabilities 共同构成 `llm-pi-ai` 启动屏障，不能只停一行。
+- directory-picker-browse 需要 Bundle 层静态 override 原生 picker，因此必须是独立包，不能作为
+  可单独停用的组合包组件。
+- connection 的 webRuntime/webServer 注入和模型 HMR 启动屏障由壳级 remote-privileged
+  以 `--patch` 常驻加载，不进入原生第三方插件安装、启停与卸载流程。模型组件在启动时把屏障
+  挂到 root fiber；未选择模型增强时由壳提供占位屏障，避免 Bundle 切换重启 `llm-pi-ai`。
 
 ## 简洁模式预设 Bundle
 
@@ -22,7 +67,9 @@ profile patch 执行时，末尾 overlay 插入的行还不存在，所以覆盖
 `packages/core/system-prompt/src/index.ts`。
 
 dsh-web-app 创建 agent-presets 行，因此 concise-mode Bundle 必须排在其后，向同一 profile 增加 preset root。
-root 经 path.resolve 处理，不能直接用相对路径；包内 locator 从 import.meta.url 算出可搬移的绝对目录。
+root 经 path.resolve 处理，不能直接用普通相对路径。Bundle patch 在 `!!js` 中从 profile `baseUrl`
+创建 `require`，解析已安装包的 `package.json` 后计算可搬移的绝对 presets 目录；不得再插入 locator
+entry，否则停用 Bundle 的 Profile HMR 会在移除该包的同时重导入 locator，并报 `failed to import`。
 较早 root 的同名 preset 胜出，官方 web profile 不添加这个 root。
 
 两个预设保留文件、搜索、技能、前台 shell、前台一次性子代理、用户提问、待办和压缩。
@@ -86,6 +133,12 @@ namespace 统一为 dsh-plugin-<名字>，全局提示词正文直接保存文�
 
 - keyed/single/list 槽同一 cell 可以按 priority 影子覆盖，数值最小者渲染；同 cell + 同 priority 才冲突。
 - 接管现有 renderer 使用 priority:-1；并列添加用 list 或插件定义的子槽。
+- **设置导航是例外**：当前 `ui-settings-general/src/client/index.ts` 用原始 `slots.entries('settings.section')`
+  投影导航，而不是 `entriesOfSlot`。同 id 的 priority shadow 虽然只渲染一个正文，却会生成两个菜单项。
+  不应把 list 正文 shadow 当作无副作用的菜单增强。remote-settings 不注册或包装 Agent 预设页面，也不添加路径复制 UI。
+- 普通 list 槽由标准 `renderSlot` 按 cell 选择 priority 最低的 winner。顶部
+  `conversation.session.header.utilities/open-in-app` 没有另做 raw ledger 导航投影，因此 remote-settings 可用
+  `priority:-1` 复用原 component/store/inject/locale，仅替换注入的 Explorer launch；其它 app 与其它 header 项保持原生。
 - `ctx.slots.onEntryError` 观察被错误边界捕获的 slot renderer 异常；它只覆盖渲染边界，不等于全局
   （0.1.6 起回调参数是 StoredEntry | StoredFactory 联合，Factory 没有 options 字段，需 `'options' in entry` 收窄）
   `window.error` 或 Promise 拒绝监听。监听器随插件 fiber 清理，来源为 `packages/client/ui-renderer/src/client/registry.ts`。
@@ -159,13 +212,17 @@ React 重建或旧 WebKit flex 布局中丢失。升级检查包含 `navCell`/`n
 
 ### Sidebar 首次打开的默认页
 
-出处：`packages/client/ui-sidebar-right/src/client/contract/seed.ts`、`tabs/guide/GuideBody.tsx`（同包 client 下）。
+出处：`packages/client/ui-sidebar-right/src/client/contract/seed.ts`、`tabs/guide/GuideBody.tsx`（同包 client 下）；
+0.1.6 的子槽与终端定制入口另核对已安装包的 `@deepseek-ai/dsh-client-ui-sidebar-right/lib/client.js`、
+`@deepseek-ai/dsh-client-ui-sidebar-terminal/lib/client.js`。
 
 - `defaultSeed` 在仅有一个 guide 入口时直接选择该入口的页面 kind；零个或多个入口时选择 `guide`。
-  因此将 files-pro 与 files 合并成唯一入口，可能改变空布局首次展开的页面，不代表入口登记本身丢失。
+  不要为了强制显示 guide 增加虚假的页面类型与 guide 入口。
+- guide 的原生正文从已登记的页面类型生成入口；`sidebar.right.tab.guide` 是 chain，非拒绝的
+  插件项会**整体替换**原生正文，不会自动保留其它入口。已安装的 0.1.6 中每个入口还能经
+  `sidebar.right.tab.guide.entry` keyed 子槽由登记方定制（新建终端有原生下拉），不能用单文件入口
+  的整页替代品吞掉它。files 只增强原生文件树，不注册 guide chain/entry。
 - guide 中选择入口通过该 guide tab 的 `actions.openTab(kind, { replaceTab:true })` 替换 guide 自身。
-- 用户报告的首次展开目录入口消失仍待真实复现；需区分上述单入口默认页、树 tab 被错误替换、已有布局恢复。
-  不能以源码候选直接认定现场原因，也不能以增加重复/虚假入口修复。项目修复方案见根目录开发计划。
 
 ### 页签右键菜单与关闭范围
 

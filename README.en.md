@@ -67,6 +67,26 @@ Download the zip for **your platform** from [Releases](../../releases) and unpac
 
 > Packages are per-platform because dsh's dependencies ship prebuilt platform binaries; dsh-remote's own code has zero native modules.
 
+### Bundled functional plugins
+
+On the first start of the `dsh-remote-web` profile, dsh-remote uses dsh's official plugin manager to install
+and enable 11 bundled third-party Bundles containing 22 functional components: four grouped packages
+(remote experience, model enhancements, conversation enhancements, and development tools) plus seven
+standalone packages (directory picker, proxy, concise mode, global instructions, files, subagent depth,
+and fixed YOLO).
+
+- A grouped package can be disabled or uninstalled as a whole, and its component rows can normally be
+  disabled independently. The model catalog and model capabilities components share the `llm-pi-ai`
+  startup barrier and must not be disabled separately.
+- The browser directory picker is standalone because it must statically override dsh's native picker.
+- Upgrading dsh-remote also upgrades every bundled package that is still installed, including disabled
+  Bundles, while preserving Bundle and component disabled states.
+- Uninstalling is remembered: neither the launcher nor the tray restores the package. To reinstall the
+  version shipped with the current release, use dsh's “Add plugin” action with the absolute path
+  `<unpacked-directory>/plugins/<package-directory>`, then enable that Bundle.
+- The connection webServer injection remains a mandatory shell-level overlay. It underpins browser RPC
+  and is not a user-disableable plugin.
+
 Or build the exact same package from source:
 
 ```bash
@@ -189,14 +209,28 @@ This tool hands your dev machine to a browser. Read this once:
 
 ## Local development and debugging (for developers)
 
-`pnpm dev` / `pnpm start` in the repo are a **dev/debug stack**, not an installation: they run the repo's source or built artifacts, keep the relay database and device key in the repo's `.dev/` directory, and use the fixed machine name `pc1` — fully separate from a real install's `~/.dsh-remote`, so don't use it as your daily instance.
+`pnpm run dev` is a development stack, not an installation method. It builds the functional plugins,
+generates installable media under `.dev/plugins/`, and prepares a dependency-fingerprinted dsh runtime
+beside the repository. That isolated runtime has no same-name workspace plugin anchor, so dsh actually
+loads the third-party Bundles installed into the profile. The stack then runs the same first-install,
+upgrade, disable, and uninstall-memory lifecycle as a release and prints the `.dev/plugins/` reinstall path.
 
-```bash
-pnpm dev       # run the TypeScript source directly via tsx
-pnpm start     # run the dist artifacts produced by pnpm build
+The relay database, device key, membership, and JWT secret still use the release default
+`~/.dsh-remote`; dsh settings, profiles, and sessions still use standard `~/.dsh`. Do not run the dev stack
+and an installed release at the same time: they contend for ports and share device identity. `pnpm start`
+only runs existing build artifacts; it does not replace the plugin build, media generation, and isolated
+runtime preparation performed by `pnpm run dev`.
+
+```powershell
+pnpm run dev   # build plugins, generate .dev/plugins, prepare isolated dsh, and start the source stack
+pnpm start     # run existing dist artifacts after the development media/runtime have been prepared
 ```
 
-Development conventions and the usual checks (lint / typecheck / build / test) live in [AGENTS.md](AGENTS.md) (Chinese).
+A plugin uninstalled during development is not restored automatically. Reinstall it from the absolute
+`<repository>/.dev/plugins/<package-directory>` path. On Windows, if the repository and profile are on
+different drives, the bundled pnpm proxy transparently maps that source to the profile-local media mirror
+so the installed link remains valid. Development conventions and the usual checks live in
+[AGENTS.md](AGENTS.md) (Chinese).
 
 ## Docs (for developers, in Chinese)
 
@@ -214,11 +248,11 @@ Development conventions and the usual checks (lint / typecheck / build / test) l
 
 ## Status
 
-The tunnel, authentication, portable packages, and 21 bundled plugins are implemented. Outstanding device checks and next steps are tracked in [docs/05-roadmap.md](docs/05-roadmap.md) (Chinese).
+The tunnel, authentication, portable packages, and 22 functional plugin components are implemented. Outstanding plugin distribution and device checks are tracked in [docs/05-roadmap.md](docs/05-roadmap.md) (Chinese).
 
 | Item | Value |
 |---|---|
-| dsh version | `0.1.5-rc.2` (developer preview, **breaking changes expected**) |
+| dsh version | `0.1.6-alpha.2` (alpha channel, developer preview, **breaking changes expected**) |
 | dsh Node requirement | `^22.19.0 \|\| >=24.0.0` |
 | Runtime policy | uses your local Node; no Node binary bundled |
 | Native modules | zero in our own code (scrypt from Node core); dsh ships prebuilt per-platform binaries, hence per-platform packages |

@@ -1,115 +1,113 @@
-# 插件可选化计划
+# 插件第三方化与组合分发
 
-**仓库内 Bundle 化已全部实施**——22 个插件（含简洁模式）都是用户可停用的默认受管
-Profile Bundle；remote-privileged 拆成壳级 connection 注入（不可停）与 remote-settings
-受管 Bundle。「npm 发布」「独立仓库」与「壳配置化引用」**暂缓，以后再考虑**，
-相关设计保留在文末备查；发布路径已明确为**本仓库直接发布**，不需要拆仓。
-决策记录见 [01-decisions](01-decisions.md) D20。代码完成≠验收完成：实机验收清单见下。
+功能插件不再是 launcher 反复“补回”的受管 Bundle。它们是 dsh-remote 随发行版提供、
+首次默认安装的第三方插件：继续由 dsh 官方插件管理器展示、停用和卸载，dsh-remote 只负责
+首次提供、配套升级和安装介质。决策见 [01-decisions](01-decisions.md) D20。
 
-## 已实施结果（2026-09-22 实施完成）
+代码完成不等于验收完成；自动检查与实机项目分别列在文末。
 
-- **统一语义**：停用 = dsh 插件页把包名移出 `dsh.profile.bundles`；launcher 对受管
-  Bundle 只确保一次（profile 内 `dsh-remote-bundles-state.json`），此后尊重停用；
-  补回 = 托盘菜单或 `--restore-bundle`。
-- **每个插件包**：`dsh-overlay.yml` 改名为 `cordis.patch.yml`，package.json 声明
-  `dsh.bundle.patch` 并把它列入 `files`；README 增加「停用与补回」一节。
-- **权威清单**在 `packages/launcher/src/dsh-plugins.ts`：
-  `SHELL_PLUGIN_PACKAGES`（仅 remote-privileged 的 connection 注入 overlay）与
-  `MANAGED_PLUGIN_PACKAGES`（22 个受管 Bundle，顺序即层序：远程设置在前、
-  代理先于其他出网插件、固定 YOLO 固定末位）。profile.ts 据此导出
-  `MANAGED_PLUGIN_BUNDLES` 与默认模板；`scripts/local-config.mjs`
-  （`DEFAULT_PROFILE_BUNDLES`）与 `scripts/pack/manifest.mjs`
-  （`PROFILE_BUNDLE_FILES`）复制同一清单，三处不一致时以 launcher 为准修齐。
-  托盘的受管清单与中文标签在 `packaging/win-launcher/config.go` 维护。
-- **产物检查**：launcher 启动前 `checkManagedPluginBundles` 校验每个受管包的
-  patch 层与宿主/浏览器产物；绿色包检查扩展到全部 Bundle 文件（含 concise presets；
-  顺带补上了此前遗漏的 browser-compat `dist/client.js`）。
-- **第四批拆分**：`@dsh-remote/dsh-plugin-remote-settings` 承接 ownsHost 首页注入
-  （Cordis 插件名保留 `dsh-remote-remote-privileged`，插件树身份不变）；
-  remote-privileged 原包只剩 `dsh-overlay.yml`（connection 的 webServer 注入），
-  无代码产物。`yolo-mode-check.mjs` 已改为验证 Bundle 装载路径（隔离 profile 带
-  全部受管 Bundle + 壳级 overlay + probe）。
-- **开发工作区**：全部插件进入根 package.json devDependencies，dsh 的 Bundle 双锚
-  解析（安装锚点优先）在源码 checkout 里同样成立；`pnpm dev` 与 launcher 用同一
-  受管清单确保 profile。
-- **旧 profile 升级路径**：launcher/dev-stack 下次启动把 21 个新受管 Bundle 一次
-  补插到 `dsh-web-app` 之后并记录状态文件；已存在的简洁模式行保持原位（层序与
-  它无关）。全新 profile 直接得到完整默认模板。
+## 当前分发形态
 
-已验证（自动检查）：全仓 lint / typecheck / build / test 通过；15 个可独立运行的
-check 冒烟（yolo、concise、proxy、copilot-auth、models 系、files、services、terminal、
-notify、agents-md、exec-process、turn-retry、chat-scroll、user-message-fork、
-tools/skills-inspector）在 Bundle 装载形态下全部通过；开发栈完整启动（dsh 全部
-Bundle 层装载、relay、connector、token 上报）。models-catalog 与
-model-capabilities 无独立 check 脚本，靠包测试与实机验收；m0-fence 需要运行中的栈。
+根目录 `plugin-catalog.json` 是分发包、组件、稳定行 ID、源码目录与默认层序的唯一权威清单。
+22 个功能组件分为 4 个组合包与 7 个独立包：
 
-## 待实机验收（不因自动检查完成而勾选 roadmap）
+| 分发 Bundle | 类型 | 组件 |
+|---|---|---|
+| `remote-experience` | 组合 | remote-settings、browser-compat |
+| `model-enhancements` | 组合 | copilot-auth、models-catalog、model-capabilities、favorite-models |
+| `conversation-enhancements` | 组合 | turn-retry、exec-process、chat-scroll、user-message-fork、notify |
+| `development-tools` | 组合 | services、terminal、tools-inspector、skills-inspector |
+| `directory-picker-browse` | 独立 | 网页目录选择 |
+| `proxy` | 独立 | 出网代理 |
+| `concise-mode` | 独立 | 简洁模式 |
+| `agents-md` | 独立 | 全局提示词 |
+| `files` | 独立 | 文件浏览 |
+| `subagent-depth` | 独立 | 子代理深度 |
+| `yolo-mode` | 独立 | 固定 YOLO |
 
-- dsh 插件页逐个停用（每批抽代表）：dsh 正常启动、对应功能消失；launcher 下次
-  启动不补回，控制台打印跳过提示。
-- 托盘右键列出全部缺失受管项（不再是单项「补回简洁模式」），点击后写回并重启
-  生效；`--restore-bundle` 等价可用。
-- 影子型插件在 Bundle 层序下 priority 影子仍生效：user-message-fork 的 user
-  renderer、files 的原生 files body。
-- 带浏览器半的插件实机确认 combo 产物与槽位注册（页面 `__DSH_BOOT__` 与功能入口）。
-- 涉 UI 的插件在深浅主题、中英文文案下验收。
-- yolo-mode 停用重启后恢复原生权限审批、补回后回到固定 YOLO（安全方向见
-  [04-security](04-security.md)）。
+完整包名为 `@dsh-remote/dsh-plugin-<名称>`。组合包的 `cordis.patch.yml` 通过固定版本依赖
+装载组件，每个组件仍有稳定且全局唯一的行 ID。组合包是安装、卸载与配套升级单位；组件行
+保留单独停用能力，但有两个例外：models-catalog 与 model-capabilities 共同参与
+`llm-pi-ai` 启动屏障，当前不能只关闭其中一行。整个 model-enhancements 仍可停用或卸载。
 
-层序变化的既定边界（实施时已接受，README 已说明）：
+directory-picker-browse 必须在 Bundle 层静态停用 dsh 原生目录选择器，无法作为组合包中
+可独立停用的普通行，因此单独分发。不要同时启用组合包和其组件的旧独立 Bundle，否则相同
+稳定 ID 会产生重复入口冲突。
 
-- Bundle 层位于用户 profile patch 之下，用户手改 patch 可以覆盖或停用我们的插件行；
-  托盘补回只读 `dsh.profile.bundles`，感知不到 profile patch 层的停用——
-  「想让停用被托盘感知，请用 dsh 插件页的开关」。
-- 插件间顺序从 `--patch` argv 顺序变为 bundles 数组顺序；受管插入统一排在
-  `dsh-web-app` 之后，yolo 排在受管插入的末位（其配置覆盖最后应用）。
+## 生命周期
 
-## 默认受管插件与停用后果
+1. `dsh-remote-web` profile 初始只包含 `dsh-base` 与 `dsh-web-app`。
+2. 某个分发包首次被提供时，launcher 通过 dsh 官方插件管理器安装并默认启用。
+3. 后续 dsh-remote 启动会把当前介质版本配套升级到所有仍在 profile dependencies 中的包，
+   包括已停用的 Bundle；升级保持 `dsh.profile.bundles` 的选择及 profile patch 中组件行的
+   `disabled` 状态。
+4. 用户卸载 Bundle 后，其 dependency 消失。状态文件会记住它已提供过，launcher 不再安装，
+   托盘和 CLI 也不提供旧的“补回 Bundle”语义。
+5. 需要恢复时，在 dsh「添加插件」中输入当前介质内目标包目录的绝对路径，安装完成后启用：
+   - 绿色发行版：`<解压目录>/plugins/<包目录>`
+   - 源码开发：`<仓库>/.dev/plugins/<包目录>`
 
-| 受管 Bundle（默认全开） | 停用后果（已逐个核实） |
-|---|---|
-| 简洁模式（concise-mode） | 丢失 concise / concise-ptc 预设，其余无影响 |
-| 远程设置（remote-settings，自 remote-privileged 拆出的 ownsHost 部分） | 经 relay 地址访问时设置页回到 dsh 受限形态——**包括本机** 127.0.0.1:30809（relay 转发的 Host 不是 dsh 自己的 authority）；直连 dsh 端口的原生访问不受影响 |
-| browser-compat（浏览器兼容） | 现代浏览器无感；旧 WebKit（旧 Safari / 手机 WebView）可能白屏，设置里的「浏览器日志」页消失 |
-| directory-picker-browse（网页目录选择） | dsh 回到原生目录选择：本机用户桌面弹对话框（人在机器前可用）；远程浏览器看不到对话框、无法新建工作区（已有会话不受影响） |
-| yolo-mode（固定 YOLO） | 恢复 dsh 原生权限审批（工具调用逐个批准）；补回即回到固定 YOLO。安全方向成立：停用是降权，启用是提权但必须主动走托盘/CLI，不会误触 |
-| 其余 17 个通用插件 | 各自界面/功能入口消失，详见各包 README「停用与补回」；proxy 停用回退环境变量代理，terminal 停用影响 Linux sudo 管理入口，services 停用不停止已启动的服务进程 |
+重新安装得到当前 dsh-remote 随附版本，而不是从旧 profile 或网络猜测版本。介质目录中的
+`catalog.json` 记录 11 个包及组件；删除 profile 依赖不会删除介质文件。
 
-壳内唯一强制保留的是 connection 的 webServer 注入（remote-privileged 包的 overlay
-片段），随 launcher 常驻传入；全部受管 Bundle 都停用时壳照常工作——dsh-base /
-dsh-web-app 受上游保护不可卸，relay / connector / 托盘照常，loopback 访问照常。
+## 旧 profile 迁移
 
-## 暂缓：npm 发布（以后再考虑，路径为本仓库直接发布）
+旧版 profile 中 22 个受管 Bundle 在首次运行新生命周期时迁移为 11 个第三方分发包：
 
-**发布不需要拆仓**：本仓库已是 pnpm workspace，每个插件包都是完整的 npm 包形态，
-`pnpm --filter <包名> publish` 即可发布（`workspace:` 协议发布时自动替换为真实版本）。
-拆仓只提供组织性收益（插件贡献者独立入口），不再是发布的先决条件；单仓发布保留
-一次 dsh 升级 = 一个仓库修兼容 + 发新版 + 跑全套 check 的流程，check 脚本零复制。
-前置条件是仓库内 Bundle 化完成（**已达成**，Bundle manifest 即可安装形态）。启动前准备：
+- 仍安装或启用的组件归入对应组合/独立包；旧组件 dependency 在组合包安装后移除。
+- 旧 Bundle 已停用的组件会在 profile patch 中写为同 ID 的 disabled 行，保持用户选择。
+- 旧版已经明确卸载的 files 保持卸载，不因迁移重新出现。
+- 迁移后 `dsh-remote-bundles-state.json` 使用新版状态记录已提供包及介质版本；它只辅助区分
+  “首次提供”和“用户已卸载”，不代替 profile dependency 这一安装事实。
 
-- 22 个插件包现为 `private: true`；发布集去掉该标记，天然区分「发布集 / 壳私有集」。
-- 9 个插件依赖 `@dsh-remote/plugin-ui`（`workspace:0.0.1`）：plugin-ui / plugin-build
-  先或同时发布；核实它是打进 `dist/client.js` 的构建期依赖还是运行时导入。
-- 建 `@dsh-remote` npm scope（org，公开包免费）。
-- 版本纪律：semver + 每包 changelog + 发布脚本/CI（`pnpm -r publish` 或 changesets）；
-  发布即公共承诺，破坏性变更须显式升主版本。
-- `@deepseek-ai/*` 依赖写法决策：保持钉版 dependencies（用户安装时拉取匹配版本）
-  或改 peerDependencies（依赖宿主解析，dsh 自己的插件族用这种模式）。
-- 壳改为钉版引用（仍是本仓库 workspace 引用，无需改动），绿色包离线解压即用不变；
-  其他用户经官方插件管理器安装。
-- **主要顾虑**：发布后的维护承诺与 dsh 0.1.x 的破坏频率（0.1.6-alpha.2 一次断了
-  5 处契约）；启动前重估维护精力。
+## 开发与发行介质
 
-## 暂缓：独立仓库（纯组织性选项，可永不实施）
+`scripts/plugin-distributions.mjs` 按同一清单原子生成可搬移介质，检查 Bundle patch、宿主产物、
+浏览器产物与组合包组件闭包，并去除 `workspace:` 协议。组合包把组件复制进自己的
+`node_modules/@dsh-remote/`，无需在线获取本仓库私有包。
 
-只有当插件生态需要独立贡献入口或发布节奏时才值得评估；其代价是双仓升级协同
-（插件仓先修兼容发版，壳仓再升 dsh 钉版）。若日后拆仓，承接范围与清单见此前的
-设计：18 个通用插件 + plugin-ui/plugin-build + 对应 check 脚本与测试 harness 迁出，
-壳仓保留 relay / connector / launcher / 托盘、五个默认受管插件与壳级 connection 注入。
+- `pnpm run dev` 先构建功能插件，再自动生成 `.dev/plugins/`，并在仓库同级准备按依赖指纹
+  隔离的 dsh 运行时。隔离运行时没有工作区同名安装锚，避免源码 `node_modules` 遮蔽真正安装到
+  profile 的第三方包；随后开发栈执行与发行版相同的生命周期。介质及运行时依赖先复制到 profile
+  内同盘缓存，避免 Windows 跨盘 `link:` 静默缺失；原生插件页收到 `.dev/plugins` 绝对路径时，
+  launcher 的 pnpm 代理也会按包名映射到该缓存。旧 pnpm 主版本创建的依赖目录会安全重建。
+- 绿色打包在每个平台/变体的根目录生成 `plugins/`，并把它放入 zip。功能插件不再依靠
+  launcher 的 production dependency 充当安装锚；介质生成与打包检查覆盖离线内容、依赖闭包、
+  路径含空格/中文及宿主/浏览器产物。
 
-## 暂缓：壳配置化引用（随发布一并考虑）
+开发与发行只允许介质目录和 dsh 安装锚不同，生命周期逻辑必须共用。`pnpm start` 直接运行已有
+构建产物，不替代 `pnpm run dev` 的插件构建、介质生成与隔离运行时准备步骤。
 
-`dsh-remote.config.json` 增加 `plugins` 段（受管 Bundle 清单），launcher 据此装配
-profile；记忆清单与停用/补回语义不变；connection webServer 注入**不走配置**、由
-launcher 强制传入。默认配置等于五个默认受管 + 全部通用插件，老用户无感。
-配置 schema 变更实施前在决策表补记。
+## 壳级运行时 overlay
+
+`@dsh-remote/dsh-plugin-remote-privileged` 由 launcher 以 `--patch` 常驻装载，不是功能插件，
+不进入第三方安装、升级、停用或卸载生命周期。它保留 connection 的 webRuntime/webServer 注入，
+并固定 `llm-pi-ai` 的模型启动屏障；模型增强未随进程启动时提供占位屏障，已启动时由模型组件
+完成真实初始化后把屏障挂在 root fiber。这样运行中停用或重新启用模型 Bundle 不会热重启
+`llm-pi-ai`。remote-settings 已属于 remote-experience 组合包，可在其中单独停用。
+
+## 子代理深度配置
+
+subagent-depth 的设置入口已从官方卡片槽 `plugins.item` 迁到按包名 keyed 的
+`plugins.bundle.config`。表单只在该 Bundle 详情页的 `view: 'page'` 渲染，直接使用页面已有的
+标题、说明和配置区域，不再绘制第二张嵌套卡片或重复折叠标题；写入仍遵循 mutate 后回读、失败
+保留草稿的规则。
+
+## 尚待验证
+
+以下项目未完成前，不得把 roadmap 的实机验收勾为完成：
+
+- 跑完受影响包测试、launcher/pack 测试以及仓库级 `check:dependencies`、lint、typecheck、build、test。
+- 在真实 dsh 插件页验证 4 个组合包与 7 个独立包首次安装、Bundle 停用、允许的组件停用、卸载、
+  launcher 重启不补回，以及从 `plugins/` 绝对路径重装当前版本。
+- 验证升级一个已启用 Bundle、一个已停用 Bundle 和一个含停用组件的组合包，三者版本更新而状态不变。
+- 验证 model-enhancements 整体停用可用；当前界面仍会显示两个启动屏障组件的行开关，实机验收不得单独关闭它们。
+- 验证 user-message-fork 与 files 的 priority shadow 在新层序下生效。
+- 在深浅主题和中英文界面检查组合包组件行、subagent-depth 无嵌套卡配置页及全部浏览器入口。
+- 在绿色包与 `pnpm run dev` 各走一次卸载后重装，覆盖离线、空格和中文路径。
+
+## 后续发布边界
+
+当前安装介质随绿色包交付，不代表这些私有包已经发布到 npm。若以后公开发布，仍需先确定
+semver/changelog、`@dsh-remote` scope、dsh peer/dependency 策略和 CI；无需为了发布拆仓。
+connection overlay 始终留在壳内，不改成用户配置项。

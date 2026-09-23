@@ -53,6 +53,9 @@ node scripts/copilot-auth-check.mjs
 
 另外：`@earendil-works/pi-ai` 的版本要跟 dsh 依赖的那个保持一致，否则凭据格式可能对不上。
 
-## 停用与补回
+## 分发与管理
 
-本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：设置里的 Copilot 登录页消失；已保存的凭据与账号模型条目保留，但无法重新登录或同步。launcher 不再自动补回；右键托盘图标选「补回Copilot 登录」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-copilot-auth` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。
+本包不作为独立安装项分发，而是 `@dsh-remote/dsh-plugin-model-enhancements`（模型增强 Bundle）的组件。停用后，Copilot 登录入口消失；已保存的凭据与账号模型条目保留。
+可在该 Bundle 详情中单独停用或重新启用本组件；安装、卸载和升级以整个模型增强 Bundle 为单位。
+launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，并保留 Bundle 与组件的停用状态；卸载后不会自动补回。
+需要重装时，在 dsh「添加插件」中填写发行包 `plugins/model-enhancements` 或开发环境 `.dev/plugins/model-enhancements` 的绝对目录。

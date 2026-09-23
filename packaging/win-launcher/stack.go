@@ -4,7 +4,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -229,24 +228,6 @@ func (s *stack) restart() {
 		time.Sleep(100 * time.Millisecond)
 	}
 	s.start()
-}
-
-// runOneShot 用与常驻 stack 相同的 node、entry 与用户参数运行一次
-// launcher 的一次性命令（当前只有 --restore-bundle），等待结束并返回
-// 合并输出。命令只改 profile 文件、不启动任何子进程，因此不需要
-// 作业对象；调用方决定是否随后重启 stack 使其生效。
-func (s *stack) runOneShot(extra []string) (string, error) {
-	arguments := make([]string, 0, len(s.arguments)+len(extra))
-	arguments = append(arguments, s.arguments...)
-	arguments = append(arguments, extra...)
-	command := exec.Command(s.node, append([]string{s.entry}, arguments...)...)
-	command.Dir = s.root
-	var output strings.Builder
-	command.Stdout = &output
-	command.Stderr = &output
-	command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: createNoWindow, HideWindow: true}
-	err := command.Run()
-	return output.String(), err
 }
 
 func closeJob(job syscall.Handle) {

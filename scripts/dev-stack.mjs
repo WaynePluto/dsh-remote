@@ -4,31 +4,37 @@
  * `pnpm dev` 通过 tsx 运行 TypeScript 源码；`pnpm start` 运行构建后的
  * `dist/` 产物。两者都会在明确的、需要认证的局域网 HTTP 模式下把 relay
  * 绑定到所有接口，因此手机或另一台机器可以访问，同时所有非 loopback 请求仍必须登录。
+ * 运行数据沿用发行版默认的 `~/.dsh-remote`，不要与发行版实例并发启动。
  */
 
 import { spawn } from 'node:child_process'
 import { createPrivateKey } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
+import { hostname } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { DatabaseSync } from 'node:sqlite'
 import process from 'node:process'
-import { MANAGED_PLUGIN_BUNDLES, ensureProfile, profileDirectory, resolveDshHome } from '../packages/launcher/src/profile.ts'
+import { defaultMachineSlug } from '../packages/launcher/src/relay.ts'
+import { loadOrCreateJwtSecret, jwtSecretFilePath } from '../packages/launcher/src/jwt-secret.ts'
+import { preparePnpmShim, resolveBundledModulesDirectory, resolvePnpmVersion, withBundledPnpmPath } from '../packages/launcher/src/dsh.ts'
+import { ensureProfile, profileDirectory, resolveDshHome } from '../packages/launcher/src/profile.ts'
+import { synchronizePluginDistributions } from '../packages/launcher/src/plugin-lifecycle.ts'
+import { developmentProfileOptions } from './dev-profile.ts'
 import { issueDeviceEnrollToken, openRelayStore } from '../packages/relay/src/store/index.ts'
 import {
   DEVICE_KEY_FILE,
   DSH_REMOTE_HOME,
   DSH_BIN,
+  DSH_INSTALL_ANCHOR,
   DSH_PORT,
-  DSH_PROFILE,
-  MACHINE_SLUG,
   RELAY_DATABASE,
   RELAY_PORT,
   ROOT,
+  PNPM_CLI,
   connectorCliArguments,
   dshPluginOverlays,
   lanAddress,
-  localSecrets,
   relayCliArguments,
   relayEnvironment,
 } from './local-config.mjs'
@@ -41,6 +47,12 @@ function fail(message, hint) {
   console.error(`\n[dsh-remote] ${message}`)
   if (hint !== undefined) console.error(`           ${hint}\n`)
   process.exit(1)
+}
+
+/** 与 launcher 未传 --slug 时的 connector 默认 machine id 保持一致。 */
+function defaultConnectorMachineId() {
+  const host = hostname().toLowerCase().replaceAll(/[^a-z0-9-]+/gu, '-').replace(/^-+|-+$/gu, '')
+  return host === '' ? 'dsh-remote-machine' : host
 }
 
 /**
@@ -86,7 +98,7 @@ function localDevicePublicKey() {
 /**
  * 判断本机是否仍需要注册。
  *
- * 仅检查是否存在设备记录并不够：重置 `.dev/` 或删除密钥文件会让两端持有不同的密钥，
+ * 仅检查是否存在设备记录并不够：删除发行版 home 中的密钥文件会让两端持有不同的密钥，
  * 结果会表现为含糊的认证失败，而不是重新注册。
  * @returns 当 relay 尚未信任本地密钥时返回 true。
  */
@@ -98,7 +110,7 @@ function needsEnrollment() {
   try {
     const row = database.prepare(
       'SELECT public_key, revoked_at FROM devices WHERE slug = ?',
-    ).get(MACHINE_SLUG)
+    ).get(machineSlug)
     return row === undefined || row.revoked_at !== null || row.public_key !== publicKey
   } finally {
     database.close()
@@ -106,7 +118,7 @@ function needsEnrollment() {
 }
 
 /**
- * 为开发机签发短期注册令牌。
+ * 为本机签发短期注册令牌。
  *
  * 这里调用 relay 自己的库函数，而不是通过 shell 调用：面向用户的 CLI 已经不再携带
  * `token create` 命令，因为现在由管理控制台签发令牌。
@@ -117,7 +129,7 @@ function createEnrollToken() {
   try {
     return issueDeviceEnrollToken({
       store,
-      slug: MACHINE_SLUG,
+      slug: machineSlug,
       deviceName: 'local development stack',
       via: 'cli',
     }).token
@@ -167,9 +179,15 @@ function start(name, command, argv, environment, onLine) {
 
 if (built) assertBuilt()
 const adminReady = adminInitialized()
-
-const secrets = localSecrets()
-const environment = relayEnvironment(secrets)
+const machineSlug = defaultMachineSlug()
+const machineId = defaultConnectorMachineId()
+const jwtSecret = loadOrCreateJwtSecret(
+  jwtSecretFilePath(DSH_REMOTE_HOME),
+  message => console.warn(`[dsh-remote] ${message}`),
+)
+const environment = relayEnvironment(jwtSecret)
+const pnpmShimDirectory = preparePnpmShim(join(DSH_REMOTE_HOME, 'runtime', 'pnpm-bin'), PNPM_CLI)
+const runtimeEnvironment = withBundledPnpmPath(environment, PNPM_CLI, pnpmShimDirectory)
 const lanIp = lanAddress()
 
 // 不预加载 proxy：出站 proxy 在 dsh 自己的
@@ -180,14 +198,27 @@ const lanIp = lanAddress()
 // authority。没有端口的条目匹配任意端口。
 const trustedHosts = ['127.0.0.1', 'localhost', ...lanIp === undefined ? [] : [lanIp]]
 
-// dsh 拒绝启动没有模板的 profile，因此开发栈必须像 launcher 一样（D14）
-// 引导共享 DSH_HOME：仅在目录缺失时创建最小模板，绝不重写。
-// 受管 Bundle 与 launcher 完全同清单：开发栈必须验证发行形态。
+// 开发与发行共用同一个 profile 和第三方插件生命周期；区别只有安装介质目录。
 const dshHome = resolveDshHome()
-const { bootstrap: profileBootstrap, skippedManaged } = ensureProfile({ home: dshHome, profile: DSH_PROFILE, managedBundles: MANAGED_PLUGIN_BUNDLES })
-console.log(`[dsh-remote] ${profileBootstrap === 'created' ? '已创建' : profileBootstrap === 'updated' ? '已更新' : '使用已有的'} dsh profile ${profileDirectory(dshHome, DSH_PROFILE)}`)
-if (skippedManaged.length > 0) {
-  console.log(`[dsh-remote] ${skippedManaged.join('、')} 此前已在 dsh 插件页停用，本次不自动补回；--restore-bundle 可补回。`)
+const profileOptions = developmentProfileOptions(dshHome)
+const dshProfile = profileOptions.profile
+const { bootstrap: profileBootstrap } = ensureProfile(profileOptions)
+console.log(`[dsh-remote] ${profileBootstrap === 'created' ? '已创建' : '使用已有的'} dsh profile ${profileDirectory(dshHome, dshProfile)}`)
+const pluginMediaDirectory = join(ROOT, '.dev', 'plugins')
+const pluginSync = await synchronizePluginDistributions({
+  home: dshHome,
+  profile: dshProfile,
+  mediaDirectory: pluginMediaDirectory,
+  installAnchor: DSH_INSTALL_ANCHOR,
+  runtimeModulesDirectory: resolveBundledModulesDirectory(PNPM_CLI),
+  profileCreated: profileBootstrap === 'created',
+  packageManager: { command: process.execPath, args: [PNPM_CLI], version: resolvePnpmVersion(PNPM_CLI) },
+  onOutput: text => process.stdout.write(text),
+})
+console.log(`[dsh-remote] 开发插件目录：${pluginMediaDirectory}`)
+if (pluginSync.migrated) console.log('[dsh-remote] 已把旧受管 Bundle 迁移为第三方插件。')
+if (pluginSync.skippedRemoved.length > 0) {
+  console.log(`[dsh-remote] 已卸载且未自动补回：${pluginSync.skippedRemoved.join('、')}`)
 }
 
 const enrollToken = needsEnrollment() ? createEnrollToken() : undefined
@@ -201,16 +232,16 @@ let dshTokenSeen = false
 
 start('dsh', process.execPath, [
   DSH_BIN,
-  '--profile', DSH_PROFILE,
-  // 壳级常驻 overlay（connection 注入，D20）：普通插件已是受管 Bundle，
-  // 随上面的 profile 装载。--patch 是 launcher 标志，因此必须
+  '--profile', dshProfile,
+  // 壳级常驻 overlay（connection 注入，D20）：功能插件已作为第三方 Bundle
+  // 安装到上面的 profile。--patch 是 launcher 标志，因此必须
   // 与 --profile 放在一起，并置于 web app 自行解析的所有参数之前。
   ...dshPluginOverlays().flatMap(overlay => ['--patch', overlay]),
   '--no-open',
   '--host', '127.0.0.1',
   '--port', String(DSH_PORT),
   '--trusted-host', ...trustedHosts,
-], environment, (line) => {
+], runtimeEnvironment, (line) => {
   if (dshTokenSeen) return
   const match = /dsh web:\s*(\S+)/u.exec(line)
   if (match === null) return
@@ -230,7 +261,7 @@ start('relay', process.execPath, [
   'serve',
   '--host', '0.0.0.0',
   '--port', String(RELAY_PORT),
-  '--direct-slug', MACHINE_SLUG,
+  '--direct-slug', machineSlug,
   '--scheme', 'http',
   '--lan-http',
   '--data', RELAY_DATABASE,
@@ -247,10 +278,13 @@ if (dshToken === undefined) {
   console.warn('[dsh-remote] 没有从 dsh 的输出里读到登录 token；浏览器可能会看到 dsh 自己的 401。')
 }
 
+// 开发栈显式拨本机 relay，不能像 launcher 一样从 membership 选择 hub；
+// 因此额外固定 machine id，使它仍与发行版 connector（未传 --slug）共用设备记录。
 start('connector', process.execPath, [
   ...connectorCliArguments(built),
   '--relay', `ws://127.0.0.1:${RELAY_PORT}`,
-  '--slug', MACHINE_SLUG,
+  '--slug', machineSlug,
+  '--machine-id', machineId,
   '--dsh-port', String(DSH_PORT),
   '--device-key', DEVICE_KEY_FILE,
   '--home', DSH_REMOTE_HOME,

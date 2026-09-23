@@ -52,25 +52,37 @@ supportedArchitectures 是 os × cpu × libc 笛卡尔积，不能直接声明�
 ├─ dsh-remote.config.example.json
 ├─ package.json
 ├─ dist/index.js
+├─ plugins/
+│  ├─ catalog.json
+│  ├─ remote-experience/
+│  ├─ model-enhancements/
+│  └─ …                         # 11 个第三方 Bundle 安装目录
 └─ node_modules/
    ├─ @dsh-remote/relay/dist/cli.js
    ├─ @dsh-remote/connector/dist/cli.js
-   ├─ @dsh-remote/dsh-plugin-*/
+   ├─ @dsh-remote/dsh-plugin-remote-privileged/
+   ├─ pnpm/
    └─ @deepseek-ai/dsh/
 ```
 
-relay、connector 保持各自包位置，确保嵌套依赖从正确目录解析。
-普通插件必须同时携带 overlay 和 dist，浏览器插件还需要 dist/client.js。
-concise-mode 携带 manifest、cordis.patch.yml、locator 产物及两个 preset 目录。
+relay、connector 与壳级 remote-privileged overlay 保持各自包位置，确保 connection 注入、模型 HMR 启动屏障及嵌套依赖从正确目录解析。
+功能插件不再放在 launcher 的安装锚中，而由 `plugin-catalog.json` 生成到 `plugins/`；组合包把组件
+放在自身 `node_modules/@dsh-remote/` 下。浏览器插件必须携带 `dist/client.js`；concise-mode 是
+无可执行入口的纯 Bundle，只携带 patch 与两个 preset 目录。随包 pnpm 供 launcher 和 dsh 原生插件管理页离线调用。
+安装前，launcher 会把介质及其运行时依赖复制到 profile 的 `.dsh-remote-plugin-media/`。原生插件页
+仍接受 `.dev/plugins/<目录>` 或发行 `plugins/<目录>`；launcher 放入 PATH 的 pnpm 代理会按包名把跨盘
+受管介质映射到这份同盘镜像，避免 pnpm hoisted linker 生成指向 `profile/D:\\...` 的坏 junction。
+因此安装日志保留用户选择的介质路径，profile dependency 则有意记录同盘缓存。旧 profile 的 pnpm
+主版本不同时会事务式重建 `node_modules`；安装失败时恢复原 manifest、lockfile 和依赖目录。
 
 ## 3. 启动器
 
 每次启动监督三个子进程：dsh、relay、connector，不自动打开浏览器。
 
 1. 检测 Node 版本、读取配置。
-2. 确保专属 profile 存在；缺少 concise Bundle 时非破坏性补入。
+2. 确保专属 profile 基础结构存在；首次从 `plugins/` 默认安装功能 Bundle，后续配套升级仍安装项并保留停用状态。
 3. 首次生成 relay JWT 密钥，收紧文件权限。
-4. 校验 Bundle、overlay 和宿主/浏览器产物。
+4. 校验插件安装介质、壳级 overlay 和宿主/浏览器产物。
 5. 以 pipe 拉起 dsh、前缀转发日志，等待就绪并截获 token。
 6. 启动 relay 和 connector，打印访问地址。
 7. 监视 membership：`--trusted-host` 集合实际变化时（加入/改换/取消远程入口）自动重启 dsh
@@ -162,8 +174,8 @@ release 支持 `--skip-build` 复用 dist、`--skip-exe` 跳过 Windows exe、`-
 1. 构建所有工作区产物。
 2. 检查目标平台依赖。
 3. 一次 pnpm deploy --filter=@dsh-remote/launcher --prod 生成自洽依赖树。
-4. 复制平台入口、说明与配置；Windows 额外编译托盘 exe。
-5. 校验插件产物，并按目标裁剪平台依赖。
+4. 从 `plugin-catalog.json` 生成根目录 `plugins/` 安装介质，再复制平台入口、说明与配置；Windows 额外编译托盘 exe。
+5. 校验插件介质、壳级 overlay 和运行产物，并按目标裁剪平台依赖。
 6. 运行入口冒烟检查；当前平台在裁剪后运行，其他平台在裁剪前验证 JS 依赖图。
 7. 排除 pnpm registry 账本，按变体各写一个 zip：full 直接打包，core 先剔除
    引擎类重组件再打包（release/dsh-remote-<version>-<zipTag>-<core|full>.zip）；

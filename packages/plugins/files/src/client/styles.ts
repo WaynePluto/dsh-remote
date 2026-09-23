@@ -3,17 +3,6 @@ const CSS = `
 .dsh-files-native-enhancement{display:flex;flex:1 1 auto;flex-direction:column;width:100%;height:100%;min-width:0;min-height:0;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-base)}
 .dsh-files-native-enhancement>[data-files-state]{flex:1 1 auto;min-width:0;min-height:0;height:100%}
 .dsh-files-native-note{flex:none;padding:5px 12px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.4;border-bottom:.5px solid var(--dsw-alias-border-l1)}
-.dsh-files-directory-guide{display:flex;flex-direction:column;gap:14px;align-items:center;justify-content:center;box-sizing:border-box;min-height:100%;padding:0 24px;background:var(--dsw-alias-bg-base)}
-.dsh-files-directory-guide::after{content:'';flex:0 1 10%}
-.dsh-files-directory-hero{display:flex;margin-bottom:16px;color:var(--dsw-static-neutral-200)}
-body[data-ds-dark-theme] .dsh-files-directory-hero{color:var(--dsw-static-neutral-700)}
-.dsh-files-directory-entry{display:flex;gap:14px;align-items:center;box-sizing:border-box;width:380px;max-width:100%;min-height:56px;padding:14px 20px;color:var(--dsw-alias-label-primary);font:inherit;text-align:left;background:var(--dsw-alias-bg-layer-1);border:.5px solid var(--dsw-alias-border-l4);border-radius:24px;cursor:pointer}
-.dsh-files-directory-entry:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.dsh-files-directory-entry:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
-.dsh-files-directory-icon{display:flex;flex:none;align-items:center;justify-content:center;width:26px;height:26px;color:var(--dsw-alias-label-secondary);line-height:0}
-.dsh-files-directory-copy{display:flex;min-width:0;flex-direction:column;gap:3px}
-.dsh-files-directory-title{overflow:hidden;font-size:15px;line-height:1.4;white-space:nowrap;text-overflow:ellipsis}
-.dsh-files-directory-description{overflow:hidden;color:var(--dsw-alias-label-caption);font-size:13px;line-height:1.4;white-space:nowrap;text-overflow:ellipsis}
 .dsh-files-native-enhancement [data-files-entry]>button[data-files-git-marker]{position:relative}
 .dsh-files-native-enhancement [data-files-entry]>button[data-files-git-marker]::after{content:attr(data-files-git-marker);display:inline-flex;align-items:center;justify-content:center;flex:none;min-width:16px;margin-left:auto;font-family:var(--dsw-font-mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:11px;font-weight:650;line-height:1}
 .dsh-files-native-enhancement [data-files-entry]>button[data-files-git-status=modified]::after{color:var(--dsw-alias-state-warn-primary)}

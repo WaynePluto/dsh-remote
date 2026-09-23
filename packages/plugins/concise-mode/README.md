@@ -17,14 +17,13 @@
 PTC 的规则、SDK、执行器和 UI 均复用 dsh。工具状态页和执行过程只统计顶层调用，
 一次 PTC 程序显示为一次 `run_code`，不展开计算内部子调用次数。
 
-## 装载与限制
+## 装载、分发与限制
 
-本包是 Profile Bundle，放在 `@deepseek-ai/dsh-web-app` 后，不使用普通插件的末尾 overlay。
-launcher 首次把本 Bundle 补入已有 profile 后记录在 profile 内的
-`dsh-remote-bundles-state.json`；用户在 dsh 插件页停用（把包名移出 `dsh.profile.bundles`）后，
-launcher 不再自动补回——右键托盘图标选「补回简洁模式」，或运行
-`node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-concise-mode` 补回。
-包内 locator 根据 `import.meta.url` 定位 presets，因此发行包可以移动目录。
+本包是可单独停用、卸载和升级的独立 Profile Bundle，放在 `@deepseek-ai/dsh-web-app` 后，不使用普通插件的末尾 overlay。
+launcher 首次默认安装本插件；后续只升级仍已安装的插件并保留停用状态，卸载后不会自动补回。
+需要重装时，在 dsh「添加插件」中填写发行包 `plugins/concise-mode` 或开发环境 `.dev/plugins/concise-mode` 的绝对目录。
+Bundle patch 通过 profile 根的 `baseUrl` 创建 `require`，解析当前已安装包的 `package.json` 后定位 presets；
+不再加载额外 locator entry，因此在线停用时不会因 HMR 重导入即将移除的模块而失败，发行包仍可移动目录。
 
 `concise-ptc` 的 persona 必须使用 `complete: false`，否则 dsh 生成的 PTC 工具说明会被过滤。
 两个预设都使用 `includeRuntimeContext: false`。权限仍由 profile 的固定 YOLO 插件决定。
@@ -33,8 +32,6 @@ launcher 不再自动补回——右键托盘图标选「补回简洁模式」�
 
 ```powershell
 pnpm --filter @dsh-remote/dsh-plugin-concise-mode test
-pnpm --filter @dsh-remote/dsh-plugin-concise-mode typecheck
-pnpm --filter @dsh-remote/dsh-plugin-concise-mode build
 node scripts/concise-mode-check.mjs
 ```
 

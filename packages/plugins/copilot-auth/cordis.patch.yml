@@ -9,5 +9,7 @@
 # exports["./client"]，把 dist/client.js 作为浏览器插件一起下发
 # （packages/client/modules/src/index.ts 的 locatePkgJson / clientExportOf）。
 # 因此 **dist/client.js 缺失会让 dsh 启动即失败**，不是静默降级。
+# id 必须稳定：Profile HMR 会重新解析全部 Bundle，匿名行会获得新随机 id 并被误判为新条目。
 - insert:
-    - name: './dist/index.js'
+    - id: copilot-auth
+      name: './dist/index.js'

@@ -48,6 +48,7 @@ export async function createZip(context, output, files, withExecutable) {
     })
   }
   archive.directory(join(context.packageDir, 'dist'), 'dist')
+  archive.directory(join(context.packageDir, 'plugins'), 'plugins')
   archive.directory(join(context.packageDir, 'node_modules'), 'node_modules', (entry) => {
     if (isPnpmBookkeeping(entry.name, context.pnpmBookkeeping)) return false
     if (context.binScript.test(entry.name.replaceAll('\\', '/'))) entry.mode = 0o755

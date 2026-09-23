@@ -66,6 +66,21 @@
 
 > 包分平台是因为 dsh 的依赖带预编译平台二进制；dsh-remote 自己的代码零原生模块。
 
+### 随附功能插件
+
+首次启动 `dsh-remote-web` profile 时，会通过 dsh 官方插件管理器默认安装并启用 11 个随附
+第三方 Bundle，共含 22 个功能组件：4 个组合包（远程体验、模型增强、会话增强、开发工具）
+和 7 个独立包（网页目录选择、出网代理、简洁模式、全局提示词、文件浏览、子代理深度、固定 YOLO）。
+
+- 组合包可整体停用或卸载；通常也可在详情页单独停用组件。模型增强中的「模型目录更新」与
+  「模型能力与协议」共同参与启动屏障，当前不要单独关闭其中一个。
+- 网页目录选择因需静态覆盖 dsh 原生目录选择器而独立分发。
+- 升级 dsh-remote 会配套升级所有仍安装的随附包，包括已停用的 Bundle，同时保留 Bundle 与
+  组件的停用状态。
+- 卸载表示用户不再需要：launcher 和托盘不会自动补回。需要恢复时，在 dsh「添加插件」中输入
+  `<解压目录>/plugins/<包目录>` 的绝对路径，再启用该 Bundle；这里安装的是当前发行版随附版本。
+- connection 的 webServer 注入仍是壳级常驻 overlay，是浏览器 RPC 的基础，不属于可停用插件。
+
 也可以自己从源码打包，产物与 Releases 下载的完全一致：
 
 ```bash
@@ -193,14 +208,24 @@ ssh -L 30809:127.0.0.1:30809 user@服务器地址
 
 ## 本地开发与调试（开发者向）
 
-仓库里的 `pnpm dev` / `pnpm start` 是**开发调试栈**，不是安装方式：跑的是仓库里的源码或构建产物，relay 数据库、设备密钥都落在仓库的 `.dev/` 目录，机器名固定 `pc1`，与正式安装的数据目录 `~/.dsh-remote` 互不相通，不要拿来当日用。
+仓库里的 `pnpm run dev` 是开发调试栈，不是安装方式。它会先构建功能插件、自动生成
+`.dev/plugins/` 安装介质，再在仓库同级准备按依赖指纹隔离的 dsh 运行时；该运行时不含工作区
+同名插件安装锚，确保实际加载的是安装到 profile 的第三方 Bundle。之后开发栈执行与发行版相同的
+首次安装、升级、停用和卸载记忆逻辑，并打印可用于重装的 `.dev/plugins/` 路径。
 
-```bash
-pnpm dev       # 用 tsx 直接跑 TypeScript 源码
-pnpm start     # 跑 pnpm build 之后的 dist 产物
+relay 数据库、设备密钥、membership 和 JWT 密钥仍复用发行版默认的 `~/.dsh-remote`，dsh 设置、
+profile 与会话仍使用标准 `~/.dsh`。不要让开发栈和已安装的发行版实例同时运行：它们会争用端口并
+共享设备身份。`pnpm start` 只运行已有构建产物，不会替代 `pnpm run dev` 的插件构建、介质生成与
+隔离运行时准备。
+
+```powershell
+pnpm run dev   # 构建插件、生成 .dev/plugins、准备隔离 dsh 运行时并启动源码栈
+pnpm start     # 运行已有 dist 产物；先确保上述开发介质和运行时已经生成
 ```
 
-开发约定与常用检查（lint / typecheck / build / test）见 [AGENTS.md](AGENTS.md)。
+在开发环境卸载插件后也不会自动补回；从 `<仓库>/.dev/plugins/<包目录>` 重新安装。Windows 上
+仓库与 profile 跨盘时，内置 pnpm 代理会自动改用 profile 内的同盘介质镜像，避免本地目录链接失效；
+安装入口仍填写 `.dev/plugins` 路径。开发约定与常用检查见 [AGENTS.md](AGENTS.md)。
 
 ## 文档索引（开发者向）
 
@@ -218,7 +243,7 @@ pnpm start     # 跑 pnpm build 之后的 dist 产物
 
 ## 当前进度
 
-隧道、认证、绿色包与 21 个内置插件已实现；实机验收和后续任务见 [docs/05-roadmap.md](docs/05-roadmap.md)。
+隧道、认证、绿色包与 22 个功能组件已实现；插件第三方分发及其他实机验收见 [docs/05-roadmap.md](docs/05-roadmap.md)。
 
 | 项 | 值 |
 |---|---|

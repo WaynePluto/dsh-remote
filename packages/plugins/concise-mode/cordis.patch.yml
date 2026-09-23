@@ -1,16 +1,12 @@
 # dsh-remote 的 Agent preset Profile Bundle。它只加入 dsh-remote-web 的 bundle 层，
 # 不作为 launcher 最末 --patch overlay 使用。
-- insert:
-    - id: concise-preset-root
-      name: './dist/index.js'
-
+#
+# 从 profile 根解析已安装包，避免停用 Bundle 时 HMR 重导入即将移除的 locator entry。
 - id: agent-presets
-  inject:
-    - dshRemoteConcisePresetRoot
   config:
     default: standard
     roots:
-      - path: !!js ctx.dshRemoteConcisePresetRoot.path
+      - path: !!js process.getBuiltinModule("node:path").join(process.getBuiltinModule("node:path").dirname(process.getBuiltinModule("node:module").createRequire(new URL("package.json", baseUrl)).resolve("@dsh-remote/dsh-plugin-concise-mode/package.json")), "presets")
         trust: system
     includeShippedRoot: true
     includeUserRoot: true

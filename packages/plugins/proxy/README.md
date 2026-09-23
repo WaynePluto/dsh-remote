@@ -40,6 +40,9 @@ pnpm --filter @dsh-remote/dsh-plugin-proxy build
 pnpm --filter @dsh-remote/dsh-plugin-proxy exec vitest run --pool=threads
 node scripts/proxy-check.mjs
 ```
-## 停用与补回
 
-本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：「设置 → 代理」页消失，dsh 回退到环境变量代理（HTTPS_PROXY / HTTP_PROXY）；已保存的代理地址保留在设置里但不再生效。launcher 不再自动补回；右键托盘图标选「补回出网代理」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-proxy` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。
+## 分发与管理
+
+本插件作为独立 Bundle 分发，可单独停用、卸载和升级。停用后，「设置 → 代理」页消失，dsh 回退到环境变量代理；已保存的代理设置保留但不生效。
+launcher 首次默认安装本插件；后续只升级仍已安装的插件并保留停用状态，卸载后不会自动补回。
+需要重装时，在 dsh「添加插件」中填写发行包 `plugins/proxy` 或开发环境 `.dev/plugins/proxy` 的绝对目录。

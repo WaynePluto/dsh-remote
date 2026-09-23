@@ -1,6 +1,7 @@
 {
   "name": "@dsh-remote/dsh-plugin-agents-md",
   "version": "0.0.2-20260922",
+  "description": "在 dsh 设置中查看和编辑全局 AGENTS.md 提示词。",
   "license": "MIT",
   "private": true,
   "type": "module",

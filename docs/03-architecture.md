@@ -27,7 +27,7 @@ flowchart LR
 | `packages/relay` | 浏览器认证、设备认证、管理页、机器路由与字节转发 |
 | `packages/launcher` | 配置、profile、产物检查、启动和监督三个子进程 |
 | `packages/plugins` | 通过 dsh 插件扩展功能；见 [插件索引](plugins.md) |
-| `packages/plugins`（装载） | 全部 22 个插件为默认受管 Profile Bundle（可停用、托盘/CLI 补回）；connection 注入是壳级常驻 overlay 不可停（D20）；npm 发布暂缓，见 [计划](plugin-optional-plan.md) |
+| `packages/plugins`（装载） | 22 个功能组件由 4 个组合包与 7 个独立第三方 Bundle 分发；首次默认安装、仍安装项配套升级、卸载后从随附 `plugins/` 重装；connection 注入和模型 HMR 启动屏障是壳级常驻 overlay（D20） |
 
 dsh 是官方 npm 依赖，不 fork、不改源码。浏览器使用 dsh 自带 UI，relay 提供自己的登录和管理页。
 
@@ -37,12 +37,12 @@ dsh 是官方 npm 依赖，不 fork、不改源码。浏览器使用 dsh 自带 
 内置扩展只加载到 `dsh-remote-web`：
 
 ```text
-dsh-base → dsh-web-app → 22 个受管 Bundle（远程设置…固定 YOLO 末位）
-  → profile patch → home patch → --patch（仅壳级 connection 注入）
+dsh-base → dsh-web-app → 已启用的第三方 Bundle（默认 11 个分发包）
+  → profile patch → home patch → --patch（壳级 connection 注入与模型 HMR 启动屏障）
 ```
 
-launcher 对已有 profile 按受管清单补插一次缺失的 Bundle，尊重用户此前的停用；
-停用后果与补回入口见 [插件索引](plugins.md) 与各包 README。
+launcher 首次安装默认分发包，后续配套升级仍在 profile dependencies 中的包并保留 Bundle/组件停用；
+已卸载包不自动补回，从发行版 `plugins/` 或开发 `.dev/plugins/` 目录经官方管理页重装。
 
 ### 插件 Bundle 与壳级 overlay 装载
 
@@ -51,9 +51,9 @@ launcher 对已有 profile 按受管清单补插一次缺失的 Bundle，尊重�
 launcher 与开发栈都在启动前检查宿主与浏览器产物，缺失即拒绝启动。
 带浏览器半的包同时声明 `dsh.client`，dsh 据此下发 `dist/client.js`。
 
-装载顺序以 [dsh-plugins.ts](../packages/launcher/src/dsh-plugins.ts) 为准：
-代理在其他出网插件之前生效，固定 YOLO 是最后一个受管 Bundle；
-唯一随 `--patch` 传入的是 remote-privileged 的 connection 注入（壳级、不可停）。
+默认分发与装载顺序以根目录 [plugin-catalog.json](../plugin-catalog.json) 为准：
+代理在模型增强前生效，固定 YOLO 是最后一个第三方 Bundle；唯一随 `--patch` 传入的是
+remote-privileged（壳级、不可停），负责 connection 注入和模型 Bundle 在线启停所需的稳定启动屏障。
 开发入口为 [dev-stack.mjs](../scripts/dev-stack.mjs)，由 [local-config.mjs](../scripts/local-config.mjs)
 提供 overlay 路径与默认 Bundle 清单（与 launcher 保持一致）。
 

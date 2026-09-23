@@ -16,6 +16,7 @@ import {
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
+import { materializePluginDistributions } from './plugin-distributions.mjs'
 import { createManifest, inPackage, UNLOCK_CROSS_BUILD_HINT } from './pack/manifest.mjs'
 import {
   cleanStrayDeployMirrors,
@@ -37,6 +38,7 @@ import {
   buildWindowsExecutable,
   smokeTestPackage,
   smokeTestWindowsExecutable,
+  verifyPluginDistributions,
 } from './pack/verify.mjs'
 import {
   createZip,
@@ -183,20 +185,16 @@ async function buildTarget(key) {
     fail('产物里没有随包携带的 dsh（node_modules/@deepseek-ai/dsh/lib/bin.js）。', 'launcher 在运行时会找它，缺了整个包就是废的。')
   }
 
-  const missingPluginFiles = context.dshPluginFiles.filter(relative => !existsSync(inPackage(context, relative)))
-  if (missingPluginFiles.length !== 0) {
-    fail(
-      `产物里缺少 dsh 插件文件：${missingPluginFiles.join('、')}`,
-      '插件靠 packages/launcher/package.json 里的 workspace 依赖被 deploy 进来；缺了 launcher 会拒绝启动 dsh。',
-    )
-  }
+  say('生成并验收 plugins/ 第三方插件安装目录')
+  materializePluginDistributions({ root: ROOT, output: join(context.packageDir, context.pluginMediaDirectory) })
+  verifyPluginDistributions(context)
 
-  const missingBundleFiles = context.profileBundleFiles
+  const missingShellOverlayFiles = context.shellOverlayFiles
     .filter(relative => !existsSync(inPackage(context, relative)))
-  if (missingBundleFiles.length !== 0) {
+  if (missingShellOverlayFiles.length !== 0) {
     fail(
-      `产物里缺少受管 profile bundle 文件：${missingBundleFiles.join('、')}`,
-      '插件靠 packages/launcher/package.json 里的 workspace 依赖被 deploy 进来；缺了 launcher 会拒绝启动 dsh。',
+      `产物里缺少壳级 overlay 文件：${missingShellOverlayFiles.join('、')}`,
+      'remote-privileged 必须保留为 launcher 的生产依赖，否则 connection 注入无法启动。',
     )
   }
 
@@ -230,6 +228,7 @@ async function buildTarget(key) {
   const removed = pruneToTarget(context, target)
   say(`裁掉 ${removed.length} 项不属于 ${key} 的内容`)
   checkPrunedTree(context, key, target)
+  verifyPluginDistributions(context)
 
   if (isHost) smokeTestPackage(context)
   else say(`跳过裁剪后的入口自检：${key} 的包在本机（${context.hostTarget}）跑不了。`)
@@ -252,6 +251,7 @@ async function buildTarget(key) {
       if (isHost) smokeTestPackage(context)
     }
     checkVariantTree(context, variantKey, variant)
+    verifyPluginDistributions(context)
 
     const treeBytes = directorySize(context.packageDir)
     say(`打包前目录大小 ${formatSize(treeBytes)}`)

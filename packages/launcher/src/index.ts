@@ -18,6 +18,7 @@
  */
 
 import process from 'node:process'
+import { join } from 'node:path'
 import { Command } from 'commander'
 import type { DshRestartStatus, MembershipHub } from '@dsh-remote/protocol'
 import { renderBanner } from './banner.js'
@@ -30,8 +31,15 @@ import {
   DSH_READY_TIMEOUT_MS,
   DSH_TOKEN_ENV_NAME,
   DSH_TOKEN_TIMEOUT_MS,
+  launcherDirectory,
+  preparePnpmShim,
+  resolveBundledModulesDirectory,
   resolveDshBin,
+  resolveDshInstallAnchor,
+  resolvePnpmCli,
+  resolvePnpmVersion,
   waitForDsh,
+  withBundledPnpmPath,
 } from './dsh.js'
 import {
   dshRestartStatusFilePath,
@@ -39,12 +47,14 @@ import {
   writeDshRestartStatus,
   type TrustChange,
 } from './dsh-restart.js'
-import { checkManagedPluginBundles, resolveDshPluginOverlays, SHELL_PLUGIN_PACKAGE_NAMES } from './dsh-plugins.js'
+import { resolveDshPluginOverlays, SHELL_PLUGIN_PACKAGE_NAMES } from './dsh-plugins.js'
 import { LauncherError } from './errors.js'
 import { JWT_SECRET_ENV_NAME, jwtSecretFilePath, loadOrCreateJwtSecret } from './jwt-secret.js'
 import { isSelfHub, membershipFilePath, readMembership } from './membership.js'
 import { assertSupportedNodeVersion } from './node-version.js'
-import { ensureProfile, MANAGED_PLUGIN_BUNDLES, profileDirectory, resolveDshHome, restoreManagedBundle } from './profile.js'
+import { DISTRIBUTION_PACKAGE_NAMES } from './plugin-catalog.js'
+import { DSH_REMOTE_PROFILE_BUNDLES, ensureProfile, profileDirectory, resolveDshHome } from './profile.js'
+import { resolvePluginMediaDirectory, synchronizePluginDistributions } from './plugin-lifecycle.js'
 import { relayArguments, resolveRelayEntry } from './relay.js'
 import { relayAdminInitialized } from './relay-admin.js'
 import { createSupervisor, type ChildExit } from './supervisor.js'
@@ -98,35 +108,15 @@ export async function run(argv: readonly string[]): Promise<number> {
     .description('启动 dsh、本机控制台与 dsh-remote 隧道连接器')
     .version(LAUNCHER_VERSION)
     .option('--config <path>', '配置文件路径（默认读取当前目录的 dsh-remote.config.json）')
-    .option('--restore-bundle <name>', '补回一个此前在 dsh 插件页停用的项目 Bundle（只改 profile 文件后退出，重启后生效）')
     .allowExcessArguments(false)
     .parse([...argv], { from: 'user' })
-  const options = program.opts<{ config?: string, restoreBundle?: string }>()
+  const options = program.opts<{ config?: string }>()
 
   const { config, path: configPath } = loadLauncherConfig({
     cwd: process.cwd(),
     configPath: options.config,
   })
   say(configPath === undefined ? '没有找到配置文件，使用默认配置。' : `已读取配置 ${configPath}`)
-
-  // 一次性补回命令：托盘菜单调用，或用户手动执行。只改 profile
-  // 文件、不启动任何子进程；正在运行的栈需要重启才能看到效果。
-  if (options.restoreBundle !== undefined) {
-    const restoreHome = resolveDshHome()
-    const restored = restoreManagedBundle({
-      home: restoreHome,
-      profile: config.dsh.profile,
-      bundle: options.restoreBundle,
-    })
-    if (restored === 'restored') {
-      say(`已把 ${options.restoreBundle} 写回 profile ${profileDirectory(restoreHome, config.dsh.profile)}；重启 dsh-remote 后生效。`)
-    } else if (restored === 'already-present') {
-      say(`${options.restoreBundle} 已经在 profile 里，无需补回。`)
-    } else {
-      say(`profile ${profileDirectory(restoreHome, config.dsh.profile)} 还不存在；首次启动会按模板创建。`)
-    }
-    return 0
-  }
 
   const membershipPath = membershipFilePath(config.home)
   const membership = readMembership(membershipPath)
@@ -136,18 +126,34 @@ export async function run(argv: readonly string[]): Promise<number> {
   const hub: MembershipHub | undefined = isSelfHub(membership?.hub) ? undefined : membership?.hub
 
   const dshHome = resolveDshHome()
-  const { bootstrap, skippedManaged } = ensureProfile({
+  const { bootstrap } = ensureProfile({
     home: dshHome,
     profile: config.dsh.profile,
-    ...config.dsh.profile === 'dsh-remote-web' ? { managedBundles: MANAGED_PLUGIN_BUNDLES } : {},
+    bundles: DSH_REMOTE_PROFILE_BUNDLES,
   })
   say(bootstrap === 'created'
     ? `已创建 dsh profile ${profileDirectory(dshHome, config.dsh.profile)}`
-    : bootstrap === 'updated'
-      ? `已更新 dsh profile ${profileDirectory(dshHome, config.dsh.profile)}`
-      : `使用已有的 dsh profile ${profileDirectory(dshHome, config.dsh.profile)}`)
-  if (skippedManaged.length > 0) {
-    say(`${skippedManaged.join('、')} 此前已在 dsh 插件页停用，本次不自动补回；右键托盘图标可选「补回」（或用 --restore-bundle）。`)
+    : `使用已有的 dsh profile ${profileDirectory(dshHome, config.dsh.profile)}`)
+
+  const dshBin = resolveDshBin()
+  const pnpmCli = resolvePnpmCli()
+  const pnpmShimDirectory = preparePnpmShim(join(config.home, 'runtime', 'pnpm-bin'), pnpmCli)
+  const dshEnvironment = withBundledPnpmPath(process.env, pnpmCli, pnpmShimDirectory)
+  if (config.dsh.profile === 'dsh-remote-web') {
+    const mediaDirectory = resolvePluginMediaDirectory({ launcherDirectory: launcherDirectory() })
+    const pluginSync = await synchronizePluginDistributions({
+      home: dshHome,
+      profile: config.dsh.profile,
+      mediaDirectory,
+      installAnchor: resolveDshInstallAnchor(),
+      runtimeModulesDirectory: resolveBundledModulesDirectory(pnpmCli),
+      profileCreated: bootstrap === 'created',
+      packageManager: { command: process.execPath, args: [pnpmCli], version: resolvePnpmVersion(pnpmCli) },
+      onOutput: text => process.stdout.write(text),
+    })
+    say(`插件介质：${mediaDirectory}`)
+    if (pluginSync.migrated) say('已把旧受管 Bundle 迁移为可卸载的第三方插件。')
+    if (pluginSync.skippedRemoved.length > 0) say(`${pluginSync.skippedRemoved.join('、')} 已被卸载，本次不自动补回。`)
   }
 
   // Mode A：relay 原样转发浏览器的 Host，因此 dsh 必须信任
@@ -167,12 +173,10 @@ export async function run(argv: readonly string[]): Promise<number> {
 
   // 所有四项都在启动任何子进程前解析：不完整的包
   // 必须在尚无运行中进程可清理时报告。
-  const dshBin = resolveDshBin()
   const dshPatchFiles = resolveDshPluginOverlays()
-  checkManagedPluginBundles()
   const relayEntry = resolveRelayEntry()
   const connectorEntry = resolveConnectorEntry()
-  say(`dsh 插件：壳级注入 ${SHELL_PLUGIN_PACKAGE_NAMES.join('、')}；受管 Bundle ${String(MANAGED_PLUGIN_BUNDLES.length)} 个`)
+  say(`dsh 插件：壳级注入 ${SHELL_PLUGIN_PACKAGE_NAMES.join('、')}；第三方 Bundle ${String(DISTRIBUTION_PACKAGE_NAMES.length)} 个`)
 
   // 从不写入日志：此密钥会签名每个控制台会话。
   const jwtSecret = loadOrCreateJwtSecret(
@@ -233,6 +237,7 @@ export async function run(argv: readonly string[]): Promise<number> {
         patchFiles: dshPatchFiles,
         extraArgs: config.dsh.extraArgs,
       }),
+      env: dshEnvironment,
       onLine: (line) => {
         if (dshTokenSeen) return
         const token = dshTokenFromLine(line)

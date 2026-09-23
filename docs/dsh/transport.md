@@ -90,7 +90,13 @@ directory-picker-browse 插件停用 adaptive 行，用 Loader 挂载官方 host
 - 客户端 rpc.call(channel, endpoint, payload) 请求 POST /x/<endpoint>，只打 /x 会 404。
 - 信封为 client-request、rpcId、method、payload；method 必须与 URL endpoint 一致。
 - /api 是保留通道，插件不能占用；注册随 fiber 释放。
-- 0.1.6 起 connection 宿主半在认证之后暴露 connection/request waterfall 事件，可 admit/wrap 已认证的共享 API 请求；本项目暂不使用（relay 的 ?token= 重定向仍是唯一业务解析例外）。
+- 0.1.6 起 connection 宿主半在认证与 Host/Origin 校验之后暴露 `connection/request` waterfall；
+  remote-settings 在 Windows 接管 `settings/openAgentPresetDirectory`，修复 dsh 原生命令成功却生成
+  隐藏 Explorer 窗口的问题。它不靠 Host 判断同机，路径由目标宿主按预设 id 解析；非 Windows/无 opener 交回原生。
+- 对话顶部 Explorer 由客户端原生控件 shadow 调用插件 RPC
+  `/remote-settings/open-workspace-directory`；connection 通道统一执行 trust fence 与浏览器认证，宿主只接受绝对且
+  已存在的目录。其它 app 继续使用原生 `/open-in-app/open`。两项处理都在 dsh 插件内；relay 不解析业务协议，
+  首页 token 重定向仍是唯一例外。
 - Connection 的 generic channel 挂载需要 owner context 注入 webServer。
   壳级常驻 overlay（remote-privileged 包）为 connection 设置 inject:[webRuntime,webServer]。
   缺失可能启动失败或落到静态 fallback 返回 405。

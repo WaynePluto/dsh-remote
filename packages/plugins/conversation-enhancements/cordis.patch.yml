@@ -1,0 +1,27 @@
+# 会话增强的纯 Profile Bundle；每个组件保留独立行和原有顺序。
+# 组件路径固定到本 Bundle 内嵌的依赖目录，避免停用 Bundle 时 HMR 重新解析已移除的裸包作用域。
+# id 沿用组件的稳定全局身份；不要与相同组件的独立 Bundle 同时启用。
+- insert:
+    - id: turn-retry
+      name: './node_modules/@dsh-remote/dsh-plugin-turn-retry/dist/index.js'
+      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-conversation-enhancements")'
+
+- insert:
+    - id: exec-process
+      name: './node_modules/@dsh-remote/dsh-plugin-exec-process/dist/index.js'
+      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-conversation-enhancements")'
+
+- insert:
+    - id: chat-scroll
+      name: './node_modules/@dsh-remote/dsh-plugin-chat-scroll/dist/index.js'
+      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-conversation-enhancements")'
+
+- insert:
+    - id: user-message-fork
+      name: './node_modules/@dsh-remote/dsh-plugin-user-message-fork/dist/index.js'
+      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-conversation-enhancements")'
+
+- insert:
+    - id: notify
+      name: './node_modules/@dsh-remote/dsh-plugin-notify/dist/index.js'
+      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-conversation-enhancements")'

@@ -1,6 +1,7 @@
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { connect } from 'node:net'
-import { dirname } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { LauncherError } from './errors.js'
@@ -72,6 +73,122 @@ export function resolveDshBin(): string {
     throw new LauncherError(
       '找不到随包携带的 dsh（@deepseek-ai/dsh）。',
       { hint: '这个绿色包的 node_modules 不完整，请重新解压一份完整的包。', cause: error })
+  }
+}
+
+/** dsh 的安装 manifest；官方插件管理器用它区分安装自带包与 profile 依赖。 */
+export function resolveDshInstallAnchor(): string {
+  try {
+    return createRequire(import.meta.url).resolve('@deepseek-ai/dsh/package.json')
+  } catch (error) {
+    throw new LauncherError(
+      '找不到随包携带的 dsh package.json。',
+      { hint: '这个绿色包的 node_modules 不完整，请重新解压一份完整的包。', cause: error },
+    )
+  }
+}
+
+/** 随 launcher 分发的 pnpm CLI，用于无全局 pnpm 的绿色包插件管理。 */
+export function resolvePnpmCli(): string {
+  try {
+    return join(dirname(createRequire(import.meta.url).resolve('pnpm')), 'bin', 'pnpm.cjs')
+  } catch (error) {
+    throw new LauncherError(
+      '找不到随包携带的 pnpm。',
+      { hint: '这个绿色包无法安装或升级插件，请重新解压一份完整的包。', cause: error },
+    )
+  }
+}
+
+/** pnpm 所在的随包 node_modules，也是插件运行时依赖的离线来源。 */
+export function resolveBundledModulesDirectory(pnpmCli = resolvePnpmCli()): string {
+  return dirname(dirname(dirname(pnpmCli)))
+}
+
+/** 读取随包 pnpm 的版本，供旧 profile 判断是否需要重建 node_modules。 */
+export function resolvePnpmVersion(pnpmCli = resolvePnpmCli()): string {
+  try {
+    const manifest = JSON.parse(readFileSync(join(dirname(dirname(pnpmCli)), 'package.json'), 'utf8')) as { version?: unknown }
+    if (typeof manifest.version !== 'string' || manifest.version === '') throw new TypeError('pnpm version 无效')
+    return manifest.version
+  } catch (error) {
+    throw new LauncherError(
+      '无法读取随包 pnpm 的版本。',
+      { hint: '这个绿色包的 pnpm 文件不完整，请重新解压一份完整的包。', cause: error },
+    )
+  }
+}
+
+const PNPM_WRAPPER_SOURCE = `import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { isAbsolute, join, parse } from 'node:path'
+import { spawnSync } from 'node:child_process'
+
+function packageName(directory) {
+  try {
+    const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'))
+    return typeof manifest.name === 'string' ? manifest.name : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function installDirectory(value) {
+  if (!isAbsolute(value) || !existsSync(value) || !statSync(value).isDirectory()) return value
+  if (parse(value).root.toLowerCase() === parse(process.cwd()).root.toLowerCase()) return value
+  const name = packageName(value)
+  const media = join(process.cwd(), '.dsh-remote-plugin-media')
+  if (name === undefined || !existsSync(media)) return value
+  for (const entry of readdirSync(media, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const candidate = join(media, entry.name)
+    if (packageName(candidate) === name) return candidate
+  }
+  return value
+}
+
+const [pnpmCli, ...original] = process.argv.slice(2)
+if (pnpmCli === undefined) process.exit(1)
+const args = original[0] === 'add'
+  ? original.map((value, index) => index > 0 ? installDirectory(value) : value)
+  : original
+const result = spawnSync(process.execPath, [pnpmCli, ...args], { env: process.env, stdio: 'inherit' })
+if (result.error) throw result.error
+process.exit(result.status ?? 1)
+`
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`
+}
+
+/** 创建供 dsh 原生插件管理器调用的 pnpm 代理，将绝对本地目录改成可跨盘物化的 file: spec。 */
+export function preparePnpmShim(directory: string, pnpmCli = resolvePnpmCli()): string {
+  mkdirSync(directory, { recursive: true })
+  const wrapper = join(directory, 'pnpm-wrapper.mjs')
+  writeFileSync(wrapper, PNPM_WRAPPER_SOURCE, 'utf8')
+  if (process.platform === 'win32') {
+    const command = join(directory, 'pnpm.cmd')
+    writeFileSync(command, `@echo off\r\n"${process.execPath}" "${wrapper}" "${pnpmCli}" %*\r\n`, 'utf8')
+  } else {
+    const command = join(directory, 'pnpm')
+    writeFileSync(command, `#!/bin/sh\nexec ${shellQuote(process.execPath)} ${shellQuote(wrapper)} ${shellQuote(pnpmCli)} "$@"\n`, 'utf8')
+    chmodSync(command, 0o755)
+  }
+  return directory
+}
+
+/** 将 pnpm 代理和随包 shim 加入 dsh 子进程 PATH，供原生插件管理页调用。 */
+export function withBundledPnpmPath(
+  environment: NodeJS.ProcessEnv,
+  pnpmCli = resolvePnpmCli(),
+  shimDirectory?: string,
+): NodeJS.ProcessEnv {
+  const modulesDirectory = resolveBundledModulesDirectory(pnpmCli)
+  const binDirectory = join(modulesDirectory, '.bin')
+  const pathKey = Object.keys(environment).find(key => key.toLowerCase() === 'path') ?? 'PATH'
+  const inherited = environment[pathKey] ?? ''
+  return {
+    ...environment,
+    [pathKey]: [shimDirectory, binDirectory, inherited].filter(Boolean).join(delimiter),
   }
 }
 

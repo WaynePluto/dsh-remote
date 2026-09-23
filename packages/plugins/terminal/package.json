@@ -1,6 +1,7 @@
 {
   "name": "@dsh-remote/dsh-plugin-terminal",
   "version": "0.0.2-20260922",
+  "description": "提供面向用户输入的跨平台交互终端。",
   "license": "MIT",
   "private": true,
   "type": "module",

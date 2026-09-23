@@ -75,7 +75,7 @@ function inspectClientBundle() {
       nativeFilesId: body.includes('@deepseek-ai/dsh-client-ui-sidebar-files'),
       documentPreviewId: body.includes('@deepseek-ai/dsh-client-ui-sidebar-documentpreview'),
       singleEntry: !body.includes('files-pro'),
-      initialDirectoryGuide: body.includes('dsh-remote-files-initial-guide-sentinel') && body.includes('dsh-files-directory-guide'),
+      nativeGuideUntouched: !body.includes('dsh-remote-files-initial-guide-sentinel') && !body.includes('dsh-files-directory-guide') && !body.includes('sidebar.right.tab.guide'),
       temporaryPreview: body.includes('dsh-files-preview-tab-title-temporary') && body.includes('replaceTab'),
       imageZoom: body.includes('data-files-image-zoom') && body.includes('imageZoomFit'),
       imageZoomPortalGuards: body.includes('dsh-files-image-toolbar') && body.includes('onPointerDown') && body.includes('stopPropagation'),
@@ -102,7 +102,7 @@ async function main() {
   check(client.nativeFilesId, "浏览器产物绑定原生 ui-sidebar-files")
   check(client.documentPreviewId, "浏览器产物绑定原生 documentpreview")
   check(client.singleEntry, "浏览器产物不再提供 files-pro 页面入口")
-  check(client.initialDirectoryGuide, "浏览器产物保留首次目录入口")
+  check(client.nativeGuideUntouched, "浏览器产物不替换原生开始页或插入虚假入口")
   check(client.temporaryPreview, "浏览器产物启用临时预览页签")
   check(client.imageZoom, "浏览器产物启用图片缩放层")
   check(client.imageZoomPortalGuards, "图片缩放 portal 阻止原生 tab 事件吞掉点击")

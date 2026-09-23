@@ -1,8 +1,8 @@
 /**
- * 使用本地开发数据库运行 relay CLI。
+ * 使用发行版 home 中的数据库运行 relay CLI。
  *
  * `node scripts/relay-cli.mjs <subcommand> [...args]` 将所有内容转发给
- * `dsh-remote-relay`，并填入 `.dev/relay.db` 与本地密钥。生产环境中相同的
+ * `dsh-remote-relay`，并默认使用发行版 home 中的 `relay.db`。生产环境中相同的
  * 子命令也可以直接通过已安装的 `dsh-remote-relay` 可执行文件使用。
  */
 
@@ -11,9 +11,7 @@ import process from 'node:process'
 import {
   RELAY_DATABASE,
   ROOT,
-  localSecrets,
   relayCliArguments,
-  relayEnvironment,
 } from './local-config.mjs'
 
 const forwarded = process.argv.slice(2).filter(argument => argument !== '--built')
@@ -28,12 +26,11 @@ const result = spawnSync(
   [
     ...relayCliArguments(built),
     ...forwarded,
-    // 显式提供的 --data 始终优先；这里只提供本地默认值。
+    // 显式提供的 --data 始终优先；这里只提供发行版默认值。
     ...forwarded.includes('--data') ? [] : ['--data', RELAY_DATABASE],
   ],
   {
     cwd: ROOT,
-    env: relayEnvironment(localSecrets()),
     stdio: 'inherit',
   },
 )

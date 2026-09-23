@@ -48,6 +48,10 @@ description: 编写或调整 dsh 插件的主题样式，处理表单焦点、�
 没有显式焦点规则的控件可能叠一圈粗黑边，而 dsh 插件字段仅变细边框颜色。
 `subagent-depth` 的触发按钮采用字段边框，选项弹层复用官方 `Menu`；二者不能混为同一层样式。
 
+`plugins.bundle.config` 已经位于 Bundle 详情页自己的 `detailSection` 中；配置组件应直接输出字段、状态和操作区，不能再套完整卡片、重复标题或折叠 header。只有 `plugins.item` 的 summary/page 两态由插件自己提供卡片摘要与详情。依据：`packages/client/ui-plugin-manager/src/client/PluginManagerPage.tsx`。
+
+`plugins.bundle.config` 已经渲染在 Bundle 详情页自己的配置 section 中；该槽的组件应直接输出字段、状态和操作区，不要再套一张完整卡片、重复标题或折叠 header。`plugins.item` 才是需要自行提供 summary/page 内容的官方分组入口。依据：`packages/client/ui-plugin-manager/src/client/PluginManagerPage.tsx`。
+
 官方插件配置字段契约：
 
 | 属性 | 值 |
@@ -121,6 +125,14 @@ description: 编写或调整 dsh 插件的主题样式，处理表单焦点、�
 - 等宽字体用 `var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)`；
   `--dsw-font-mono` 可能没有定义。
 - 已有 Dock 规则以仓库根 `docs/dsh/plugins.md` 为准，图标光学补偿须先量后改。
+
+### 设置导航与正文覆盖
+
+当前 `settings.section` 的 priority shadow 只影响正文 renderer；`ui-settings-general/src/client/index.ts`
+直接用原始 `slots.entries` 投影菜单，会把原条目和 shadow 条目都显示出来。增强现有页面时不能假定
+“同 id 只出现一个菜单”，测试必须连同导航登记检查；不需要页面定制时不要添加登记项。
+remote-settings 仅保留宿主 ownsHost 注入，没有浏览器菜单扩展。
+此导航例外已核对安装的 0.1.6-alpha.2 产物，不代表所有 list 槽的 owner 都有同样行为。
 
 ### 设置导航的插件图标
 

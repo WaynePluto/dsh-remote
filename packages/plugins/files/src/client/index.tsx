@@ -8,7 +8,6 @@ import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { FilesEndpoint, FilesSnapshot } from '../shared.js'
 import { en, NS, zh, type FilesKey } from './locales.js'
-import { createDirectoryGuide } from './DirectoryGuide.js'
 import { ImageZoomStore } from './imageZoomOverlay.js'
 import { installNativeFilesEnhancement } from './nativeFilesAdapter.js'
 import { installPreviewTitleEnhancement } from './previewTabTitle.js'
@@ -27,7 +26,7 @@ class FilesChannelError extends Error {
   constructor(message: string) { super(message); this.name = 'FilesChannelError' }
 }
 
-export const inject = ['slots', 'locale', 'connection', 'sidebarRight', 'sidebarRightTabs']
+export const inject = ['slots', 'locale', 'connection', 'sidebarRight']
 
 export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'files: copy dictionaries')
@@ -45,20 +44,6 @@ export function apply(ctx: Context): void {
   const previewTabs = new PreviewTabs()
   const imageStates = new ImageZoomStore()
   ctx.effect(() => {
-    const disposeSentinel = ctx.sidebarRightTabs.register({
-      id: 'dsh-remote-files-initial-guide-sentinel',
-      kind: 'dsh-remote-files-initial-guide-sentinel',
-      title: () => t('directoryGuideTitle'),
-      guide: [{ id: 'dsh-remote-files-initial-guide-sentinel-entry', order: 11, title: () => '' }],
-    })
-    const disposeGuide = ctx.slots.inject('sidebar.right.tab.guide', () => ctx.slots.register(
-      { name: 'sidebar.right.tab.guide', registrant: 'dsh-remote-files-directory-guide', priority: -1, select: () => ({}) },
-      createDirectoryGuide(t),
-    ))
-    const disposeEnhancement = () => {
-      disposeGuide()
-      disposeSentinel()
-    }
     const disposeFiles = installNativeFilesEnhancement(ctx, ctx.sidebarRight, loadGit, t, previewTabs)
     const disposeTitle = installPreviewTitleEnhancement(ctx, previewTabs, imageStates, t)
     const disposeMenu = installTabContextActions(ctx, ctx.sidebarRight, t)
@@ -67,7 +52,6 @@ export function apply(ctx: Context): void {
       imageStates.clear()
       disposeTitle()
       disposeFiles()
-      disposeEnhancement()
       previewTabs.dispose()
     }
   }, 'files: native files enhancement')

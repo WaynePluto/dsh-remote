@@ -4,6 +4,7 @@ import { IconChevronDownOutline14, Menu } from '@deepseek-ai/dsh-client-ui-primi
 
 interface DepthSelectProps {
   label: string
+  hint: string
   labels: readonly string[]
   value: number
   disabled: boolean
@@ -12,10 +13,17 @@ interface DepthSelectProps {
 
 const FIELD_CLASS = 'dshx-subagent-depth-field'
 const SELECT_CLASS = 'dshx-subagent-depth-select'
-// Trigger: packages/client/ui-settings-plugins/src/client/fields.module.css.
-// Popup: the same external Menu used by packages/client/locale/src/client/LanguageRow.tsx.
+// 触发器对齐官方插件字段，弹层直接复用语言选择器所用的 Menu。
 const CONTROL_STYLES = `
-.${FIELD_CLASS} { display: flex; flex-direction: column; gap: 6px; }
+.${FIELD_CLASS} { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; }
+.${FIELD_CLASS} + .${FIELD_CLASS} { border-top: 0.5px solid var(--dsw-alias-border-l2); }
+.${FIELD_CLASS}-label {
+  min-width: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+}
 .${FIELD_CLASS}-menu { display: flex; width: 100%; min-width: 0; }
 .${SELECT_CLASS} {
   display: flex;
@@ -49,11 +57,18 @@ const CONTROL_STYLES = `
   display: flex; align-items: center; justify-content: center; flex: none; line-height: 0;
   color: var(--dsw-alias-label-tertiary); pointer-events: none;
 }
+.${FIELD_CLASS}-hint {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
 `
 
-/** Official menu skin with field-local keyboard/focus handling; selection only stages a draft. */
-export function DepthSelect({ label, labels, value, disabled, onChange }: DepthSelectProps): ReactNode {
+/** 使用官方菜单外观，并在字段内补齐键盘导航与焦点归还。 */
+export function DepthSelect({ label, hint, labels, value, disabled, onChange }: DepthSelectProps): ReactNode {
   const id = useId()
+  const hintId = `${id}-hint`
   const trigger = useRef<HTMLButtonElement>(null)
   const optionLabels = useRef<(HTMLSpanElement | null)[]>([])
   const focusOnOpen = useRef<number | null>(null)
@@ -64,10 +79,9 @@ export function DepthSelect({ label, labels, value, disabled, onChange }: DepthS
     optionLabels.current[index]?.closest<HTMLButtonElement>('button')?.focus()
   }
 
-  // Menu owns the portal/placement but does not implement arrow navigation or autofocus.
+  // Menu 首帧先隐藏并测量位置，定位提交后的下一帧才能可靠聚焦。
   useLayoutEffect(() => {
     if (!menuOpen || focusOnOpen.current === null) return
-    // Menu first mounts its portal hidden to measure it; focus only after its placement commit.
     const index = focusOnOpen.current
     const frame = requestAnimationFrame(() => {
       optionLabels.current[index]?.closest<HTMLButtonElement>('button')?.focus()
@@ -89,13 +103,13 @@ export function DepthSelect({ label, labels, value, disabled, onChange }: DepthS
     if (disabled) return
     if (menuOpen && event.key === 'Escape') {
       event.preventDefault()
-      // React portal events reach this owner before dsh's document-level modal Escape handler.
+      // Portal 事件会冒泡到字段，必须在宿主设置页处理 Escape 前消费。
       event.stopPropagation()
       closeAndFocus()
       return
     }
     if (menuOpen && event.key === 'Tab') {
-      // Resume the form's tab order, rather than the portal's position at the end of body.
+      // 回到正常表单 Tab 顺序，不沿 body 末尾的 portal 节点继续。
       closeAndFocus()
       return
     }
@@ -118,7 +132,7 @@ export function DepthSelect({ label, labels, value, disabled, onChange }: DepthS
   return (
     <div className={FIELD_CLASS} onKeyDown={onKeyDown}>
       <style>{CONTROL_STYLES}</style>
-      <label htmlFor={id}>{label}</label>
+      <label className={`${FIELD_CLASS}-label`} htmlFor={id}>{label}</label>
       <Menu
         className={`${FIELD_CLASS}-menu`}
         open={menuOpen}
@@ -143,6 +157,7 @@ export function DepthSelect({ label, labels, value, disabled, onChange }: DepthS
             className={SELECT_CLASS}
             disabled={disabled}
             aria-label={`${label}: ${labels[value]}`}
+            aria-describedby={hintId}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             onClick={(event) => {
@@ -155,6 +170,7 @@ export function DepthSelect({ label, labels, value, disabled, onChange }: DepthS
           </button>
         )}
       />
+      <p id={hintId} className={`${FIELD_CLASS}-hint`}>{hint}</p>
     </div>
   )
 }

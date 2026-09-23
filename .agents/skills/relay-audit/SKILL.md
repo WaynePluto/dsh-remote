@@ -19,7 +19,7 @@ description: 查证 dsh-remote relay 的安全活动记录（SQLite audit_log �
 
 | 怎么跑起来的 | `relay.db` 在哪 |
 |---|---|
-| 本仓库开发（`pnpm dev`） | `.dev/relay.db`（`scripts/local-config.mjs`） |
+| 本仓库开发（`pnpm dev`） | `~/.dsh-remote/relay.db`（`scripts/local-config.mjs`，与发行版共用） |
 | 绿色包 / 托盘 | `<dsh-remote home>/relay.db`，home 默认 `~/.dsh-remote`（`packages/launcher/src/config.ts`） |
 | systemd 部署 | `~/.dsh-remote/relay.db`，Linux 通常为 `/home/<user>/.dsh-remote/relay.db`（`deploy/README.md`） |
 | 直接跑 `dsh-remote-relay` 且没给 `--data` | `./data/relay.db`（`packages/relay/src/cli.ts`） |
@@ -33,22 +33,22 @@ description: 查证 dsh-remote relay 的安全活动记录（SQLite audit_log �
 
 ```powershell
 # 最近 20 条
-node -e "const {DatabaseSync}=require('node:sqlite');const d=new DatabaseSync(process.argv[1],{readOnly:true});console.table(d.prepare('SELECT id, datetime(occurred_at/1000, ?, ?) AS t, event, success, actor_user_id, machine_id, source_ip, metadata_json FROM audit_log ORDER BY id DESC LIMIT ?').all('unixepoch','localtime',20))" .dev\relay.db
+node -e "const {DatabaseSync}=require('node:sqlite');const d=new DatabaseSync(process.argv[1],{readOnly:true});console.table(d.prepare('SELECT id, datetime(occurred_at/1000, ?, ?) AS t, event, success, actor_user_id, machine_id, source_ip, metadata_json FROM audit_log ORDER BY id DESC LIMIT ?').all('unixepoch','localtime',20))" "$env:USERPROFILE\.dsh-remote\relay.db"
 ```
 
 ```powershell
 # 只看失败的事件（爆破、坏签名、密码输错都在这里）
-node -e "const {DatabaseSync}=require('node:sqlite');const d=new DatabaseSync(process.argv[1],{readOnly:true});console.table(d.prepare('SELECT datetime(occurred_at/1000, ?, ?) AS t, event, source_ip, metadata_json FROM audit_log WHERE success = 0 ORDER BY id DESC LIMIT ?').all('unixepoch','localtime',50))" .dev\relay.db
+node -e "const {DatabaseSync}=require('node:sqlite');const d=new DatabaseSync(process.argv[1],{readOnly:true});console.table(d.prepare('SELECT datetime(occurred_at/1000, ?, ?) AS t, event, source_ip, metadata_json FROM audit_log WHERE success = 0 ORDER BY id DESC LIMIT ?').all('unixepoch','localtime',50))" "$env:USERPROFILE\.dsh-remote\relay.db"
 ```
 
 ```powershell
 # 按事件分组的总览：每种事件多少次、成功几次、最后一次是什么时候
-node -e "const {DatabaseSync}=require('node:sqlite');const d=new DatabaseSync(process.argv[1],{readOnly:true});console.table(d.prepare('SELECT event, COUNT(*) AS n, SUM(success) AS ok, datetime(MAX(occurred_at)/1000, ?, ?) AS last FROM audit_log GROUP BY event ORDER BY n DESC').all('unixepoch','localtime'))" .dev\relay.db
+node -e "const {DatabaseSync}=require('node:sqlite');const d=new DatabaseSync(process.argv[1],{readOnly:true});console.table(d.prepare('SELECT event, COUNT(*) AS n, SUM(success) AS ok, datetime(MAX(occurred_at)/1000, ?, ?) AS last FROM audit_log GROUP BY event ORDER BY n DESC').all('unixepoch','localtime'))" "$env:USERPROFILE\.dsh-remote\relay.db"
 ```
 
 ```powershell
 # 某个源 IP 干了什么（把 10.0.0.9 换成要查的地址）
-node -e "const {DatabaseSync}=require('node:sqlite');const d=new DatabaseSync(process.argv[1],{readOnly:true});console.table(d.prepare('SELECT datetime(occurred_at/1000, ?, ?) AS t, event, success, metadata_json FROM audit_log WHERE source_ip = ? ORDER BY id DESC LIMIT ?').all('unixepoch','localtime','10.0.0.9',50))" .dev\relay.db
+node -e "const {DatabaseSync}=require('node:sqlite');const d=new DatabaseSync(process.argv[1],{readOnly:true});console.table(d.prepare('SELECT datetime(occurred_at/1000, ?, ?) AS t, event, success, metadata_json FROM audit_log WHERE source_ip = ? ORDER BY id DESC LIMIT ?').all('unixepoch','localtime','10.0.0.9',50))" "$env:USERPROFILE\.dsh-remote\relay.db"
 ```
 
 要点：

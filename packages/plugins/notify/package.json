@@ -1,6 +1,7 @@
 {
   "name": "@dsh-remote/dsh-plugin-notify",
   "version": "0.0.2-20260922",
+  "description": "在 Windows 桌面通知任务完成或等待用户输入。",
   "license": "MIT",
   "private": true,
   "type": "module",

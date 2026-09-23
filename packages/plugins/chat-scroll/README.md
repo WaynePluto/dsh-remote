@@ -39,6 +39,9 @@ pnpm --filter @dsh-remote/dsh-plugin-chat-scroll typecheck
 
 插件改完后必须重启 dsh；当前 `dsh-remote-web` profile 没有 HMR，单纯刷新页面不会重新加载新的浏览器 bundle。
 
-## 停用与补回
+## 分发与管理
 
-本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：消息开头定位与返回底部按钮消失，回到 dsh 原生滚动行为。launcher 不再自动补回；右键托盘图标选「补回会话滚动导航」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-chat-scroll` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。
+本包不作为独立安装项分发，而是 `@dsh-remote/dsh-plugin-conversation-enhancements`（会话增强 Bundle）的组件。停用后，消息开头定位与返回底部按钮消失，回到 dsh 原生滚动行为。
+可在该 Bundle 详情中单独停用或重新启用本组件；安装、卸载和升级以整个会话增强 Bundle 为单位。
+launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，并保留 Bundle 与组件的停用状态；卸载后不会自动补回。
+需要重装时，在 dsh「添加插件」中填写发行包 `plugins/conversation-enhancements` 或开发环境 `.dev/plugins/conversation-enhancements` 的绝对目录。

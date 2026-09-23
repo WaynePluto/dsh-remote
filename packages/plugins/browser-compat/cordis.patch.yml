@@ -4,8 +4,8 @@
 # profile 属于用户，launcher 只在 profile 不存在时写模板，因此插件不能改用户的
 # cordis.patch.yml；本层在 profile patch 之下，用户自己的 patch 可以覆盖这里的行为。
 # `./` insert 名字由 dsh 锚定本文件目录并转成 file:// URL，故必须使用相对路径，不能写绝对路径。
-#
-# 无 id 的 insert 由 `applyEntryPatches` 追加到条目表末尾；它只订阅每次渲染
-# index.html 时收集的事件表，所以加载顺序不影响结果。
+# id 必须稳定：Profile HMR 会重新解析全部 Bundle，匿名行会获得新随机 id 并被误判为新条目。
+# 本插件只订阅每次渲染 index.html 时收集的事件表，所以加载顺序不影响结果。
 - insert:
-    - name: './dist/index.js'
+    - id: browser-compat
+      name: './dist/index.js'

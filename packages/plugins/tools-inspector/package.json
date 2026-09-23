@@ -1,6 +1,7 @@
 {
   "name": "@dsh-remote/dsh-plugin-tools-inspector",
   "version": "0.0.2-20260922",
+  "description": "在会话侧栏展示工具调用状态与历史统计。",
   "license": "MIT",
   "private": true,
   "type": "module",

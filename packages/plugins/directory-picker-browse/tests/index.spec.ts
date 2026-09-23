@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import {
   BROWSE_PICKER_PACKAGES, DIRECTORY_PICKER_AUTO, apply,
@@ -49,6 +50,13 @@ function fakeContext() {
 }
 
 describe('browser directory picker plugin', () => {
+  it('replaces the protected row instead of adding a separately switchable child row', () => {
+    const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
+    expect(patch).toMatch(/^- id: directory-picker$/mu)
+    expect(patch).toContain("name: './dist/index.js'")
+    expect(patch).not.toContain('- insert:')
+  })
+
   it('replaces auto with the official Host and browser browse faces', async () => {
     const harness = fakeContext()
 

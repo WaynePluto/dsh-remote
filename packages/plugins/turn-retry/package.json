@@ -1,6 +1,7 @@
 {
   "name": "@dsh-remote/dsh-plugin-turn-retry",
   "version": "0.0.2-20260922",
+  "description": "为失败或停止的回复提供安全重试与继续操作。",
   "license": "MIT",
   "private": true,
   "type": "module",

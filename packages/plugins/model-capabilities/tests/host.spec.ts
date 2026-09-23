@@ -6,16 +6,17 @@ describe('model-capabilities host half', () => {
   it('registers overrides and provides its bootstrap token', () => {
     const scope = { get: () => ({ protocolOverrides: {} }), watch: vi.fn() }
     const runtime = { applyProtocolOverrides: vi.fn(), modelIds: vi.fn(() => []) }
+    const root = { get: vi.fn(() => undefined), provide: vi.fn() }
     const ctx = {
       settings: { register: vi.fn(() => scope) },
       get: vi.fn(() => runtime),
-      provide: vi.fn(),
+      root,
     }
     expect(name).toBe('dsh-remote-model-capabilities')
     expect(apply(ctx as never)).toBeUndefined()
     expect(ctx.settings.register).toHaveBeenCalled()
     expect(runtime.applyProtocolOverrides).toHaveBeenCalledWith({})
-    expect(ctx.provide).toHaveBeenCalledWith(BOOTSTRAP_SERVICE, true)
+    expect(root.provide).toHaveBeenCalledWith(BOOTSTRAP_SERVICE, true)
   })
 
   it('mirrors an explicit model protocol into dsh settings after the override lands', async () => {
@@ -34,7 +35,11 @@ describe('model-capabilities host half', () => {
       get: vi.fn((namespace: string) => namespace === 'llm-pi-ai' ? section : undefined),
       mutate: vi.fn(async () => {}),
     }
-    const ctx = { settings, get: vi.fn(() => runtime), provide: vi.fn() }
+    const ctx = {
+      settings,
+      get: vi.fn(() => runtime),
+      root: { get: vi.fn(() => true), provide: vi.fn() },
+    }
     apply(ctx as never)
     await watcher?.({ protocolOverrides: { copilot: { 'gpt-new': 'openai-responses' } } }, { protocolOverrides: {} })
     await vi.waitFor(() => { expect(settings.mutate).toHaveBeenCalled() })

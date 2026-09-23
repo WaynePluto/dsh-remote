@@ -1,6 +1,7 @@
 {
   "name": "@dsh-remote/dsh-plugin-chat-scroll",
   "version": "0.0.2-20260922",
+  "description": "为聊天消息提供开头定位和返回底部的滚动导航。",
   "license": "MIT",
   "private": true,
   "type": "module",

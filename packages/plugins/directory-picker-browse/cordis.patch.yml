@@ -1,13 +1,5 @@
-# dsh-remote 的受管 Bundle patch 层；package.json 的 dsh.bundle.patch 指向本文件，
-# 由 profile 的 bundles 数组装载（层序：Bundle → profile patch → home patch → --patch）。
-#
-# dsh-web-app 默认挂载 directory-picker-auto。它在 Windows + loopback bind
-# 下会选 native，把对话框弹到被控机桌面；先在 Loader 启动前停掉 auto 行，
-# 再由 Host 半动态挂载 dsh 官方的 browse Host / client 两半，避免 native 与
-# browse 两个 backend 并发注册同一个 directoryPicker service。
-# overlay 的 insert 只引用本插件自己的相对入口，避免把 dsh 包名锚定到 profile 以外。
+# 用同一稳定行替换 dsh-web-app 的自动目录选择器。
+# Bundle 停用或卸载后，该覆盖层消失，原生 directory-picker 自动恢复；
+# 不额外插入可单独关闭的行，避免只关组件后留下无可用 picker 的状态。
 - id: directory-picker
-  disabled: true
-- insert:
-    - id: directory-picker-browse-remote
-      name: './dist/index.js'
+  name: './dist/index.js'

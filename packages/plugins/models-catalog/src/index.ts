@@ -240,7 +240,7 @@ export function apply(ctx: Context, config: Config): void {
   // runtime service 先提供给 sibling plugin，再注册 RPC；provenance 由 settings scope 管理。
   const runtime = createModelCatalogRuntime()
   ctx.provide(RUNTIME_SERVICE, runtime)
-  ctx.provide(BOOTSTRAP_SERVICE, true)
+  if (ctx.root.get(BOOTSTRAP_SERVICE) === undefined) ctx.root.provide(BOOTSTRAP_SERVICE, true)
   const service = new CatalogService(ctx, config.sourceUrl)
   const dispose = ctx.connection.rpc.handle(
     CHANNEL,

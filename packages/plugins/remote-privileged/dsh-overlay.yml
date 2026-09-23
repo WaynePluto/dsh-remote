@@ -8,3 +8,15 @@
 # connection 注入 webRuntime 与 webServer，让 RPC 注册使用相同的 WebServer context。
 - id: connection
   inject: [webRuntime, webServer]
+
+# 启动屏障保持为进程级固定契约，避免运行中停用模型增强时热重启 llm-pi-ai。
+- id: llm-pi-ai
+  name: '@deepseek-ai/dsh-llm-pi-ai'
+  inject:
+    - llm
+    - modelsCatalogBootstrap
+    - modelCapabilitiesBootstrap
+
+- insert:
+    - id: dsh-remote-model-bootstrap-fallback
+      name: './model-bootstrap.mjs'

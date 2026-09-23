@@ -1,11 +1,11 @@
 # 代码架构概览
 
-> 由 architecture-map 技能于 2026-09-11 基于源码扫描生成；基线提交 `67de12e`。
+> 由 architecture-map 技能基于源码扫描生成；2026-09-22 已按当前工作树的插件分发改造更新。
 > 模块结构变化后更新本文；产品/部署架构仍以 [docs/03-architecture.md](docs/03-architecture.md) 为准。
 
 ## 1. 范围与粒度
 
-- pnpm workspace：4 个基础包、1 个纯浏览器构建期 UI 包、22 个插件包 + 1 个壳级 overlay 包（remote-privileged，无代码）；根目录负责开发、检查和交付。
+- pnpm workspace：4 个基础包、1 个纯浏览器构建期 UI 包、22 个功能组件包、4 个纯组合 Bundle 包，以及 1 个壳级 overlay 包（remote-privileged）；根目录负责开发、检查和交付。
 - 扫描 `packages/*/src`、插件入口/README/manifest、`scripts` 和 `packaging`。
 - 不将 `node_modules`、`dist`、`release`、`.dev`、锁文件及生成图标当作手写模块。
 - 以包/模块组为粒度，不把全部插件、React 组件和工具逐个塞入同一张图。
@@ -18,17 +18,17 @@
 | 控制面协议 | `packages/protocol/src/index.ts` | 控制帧/schema、编解码、挑战签名消息、membership 与 dsh 重启状态文件契约、版本及超时 | zod；不依赖其他 workspace 包 |
 | Connector | `packages/connector/src/cli.ts`、`connector.ts` | Ed25519 身份、membership 监听、控制信道、回拨数据流、退避与致命退出 | protocol、ws、pino、Node net/crypto/fs |
 | Relay | `packages/relay/src/cli.ts`、`server.ts` | 浏览器/设备认证、管理页面、机器路由、HTTP/WS 转发、隧道注册表 | protocol、ws、hono、jose、otplib、pino、node:sqlite |
-| Launcher | `packages/launcher/src/index.ts` | 配置、profile 补齐、产物定位、trusted host、membership 信任变化时自动重启 dsh、三个子进程的启动与监督 | protocol、commander、zod；manifest 携带 dsh、relay、connector 和全部插件 |
+| Launcher | `packages/launcher/src/index.ts` | 配置、profile 初始化、第三方插件首次安装/配套升级、产物定位、trusted host、membership 信任变化时自动重启 dsh、三个子进程的启动与监督 | protocol、commander、zod、官方 plugin-manager；manifest 携带 dsh、relay、connector 与壳级 overlay，不再携带功能插件作为安装锚 |
 | 纯浏览器 UI 辅助 | `packages/plugin-ui/src/index.ts` 及职责文件 | dialog 几何/pointer 生命周期、导航图标、Inspector/dock 样式、共享测试纯函数；不注册 dsh service | React 类型/运行时 external；被插件 browser bundle 内联 |
 | 设置与模型插件（8） | `packages/plugins/{agents-md,proxy,copilot-auth,models-catalog,model-capabilities,favorite-models,subagent-depth,notify}` | 全局提示词、出网代理、模型登录/目录/能力/收藏、深度设置、桌面通知 | dsh 设置/连接/槽位；代理用 undici，模型目录用 pi-ai |
 | 会话插件（4） | `packages/plugins/{exec-process,turn-retry,chat-scroll,user-message-fork}` | 执行过程折叠、重试、滚动、用户消息分叉 | dsh 会话/投影/浏览器 UI；仅 turn-retry 有实质宿主业务 |
 | 工作区与工具插件（5） | `packages/plugins/{services,terminal,tools-inspector,skills-inspector,files}` | 常驻服务、交互终端、工具/技能历史、右侧 Sidebar 只读文件浏览 | dsh live Agent、工具、PTY、RPC、Sidebar slots；services 自有 Node 进程管理引擎 |
-| 环境与预设（6） | `packages/plugins/{remote-settings,remote-privileged,browser-compat,directory-picker-browse,yolo-mode,concise-mode}` | 远程设置（ownsHost）、旧 WebKit API 垫片与临时浏览器诊断、网页目录选择、固定 YOLO、精简预设；remote-privileged 仅携带壳级 connection 注入 overlay（无代码） | dsh 插件组合；全部为受管 Profile Bundle（D20） |
-| 开发与验证脚本 | `scripts/dev-stack.mjs`、`local-config.mjs`、`*-check.mjs` | 本地全链路、独立凭据目录、插件契约冒烟、依赖检查 | launcher/relay 源码模块、Node；脚本各自声明环境前提 |
+| 环境与预设（6） | `packages/plugins/{remote-settings,remote-privileged,browser-compat,directory-picker-browse,yolo-mode,concise-mode}` | 远程设置（ownsHost、Windows 预设与顶部 Open In… 的可见/置前 Explorer 兼容）、旧 WebKit API 垫片与临时浏览器诊断、网页目录选择、固定 YOLO、精简预设；remote-privileged 携带壳级 connection 注入和模型 HMR 启动屏障 | 功能组件进入第三方分发 Bundle；remote-privileged 由壳常驻加载 |
+| 开发与验证脚本 | `scripts/dev-stack.mjs`、`dev-runtime.mjs`、`plugin-distributions.mjs`、`local-config.mjs`、`*-check.mjs` | 本地全链路、隔离 dsh 运行时、开发插件介质、插件契约冒烟与依赖检查 | launcher/relay 源码模块、Node；脚本各自声明环境前提 |
 | 发行打包 | `scripts/pack.mjs`、`packaging/`、`.github/workflows/` | 分平台 deploy/归档、产物检查、启动脚本、图标、CI | archiver、pnpm、Go 工具链；不带 Node 二进制 |
 | Windows 托盘 | `packaging/win-launcher/*.go` | 菜单、单实例、自启动、日志轮转、Node launcher 生命周期 | Go 标准库、Win32 API；同一 `package main`，无第三方 Go 包 |
 
-22 个插件全部是默认受管 Profile Bundle（D20，可停用、托盘/CLI 补回）；18 个有浏览器入口。唯一随 `--patch` 传入的是 remote-privileged 的 connection 注入 overlay，不是插件。`@dsh-remote/plugin-ui` 不是插件，不进入受管清单。
+22 个功能组件按 `plugin-catalog.json` 分发为 4 个组合包与 7 个独立第三方 Bundle；首次默认安装，仍安装项随 dsh-remote 配套升级，卸载后不自动补回。唯一随 `--patch` 传入的是 remote-privileged 的壳级 overlay，包含 connection 注入和模型 HMR 启动屏障，不属于第三方插件生命周期。`@dsh-remote/plugin-ui` 是构建期辅助，也不进入分发清单。
 具体功能及使用限制见 [插件索引](docs/plugins.md) 和各包 README。
 
 ## 3. 源码依赖关系图
@@ -43,7 +43,7 @@ graph TD
   Launcher --> Protocol[protocol]
   Relay --> Protocol
   Connector[connector] --> Protocol
-  Plugins[22 个受管 Bundle 插件] --> DshLibs[官方 dsh 族库]
+  Plugins[22 个功能组件 / 11 个分发 Bundle] --> DshLibs[官方 dsh 族库]
   Plugins --> PluginUI[plugin-ui：构建期内联]
   Plugins --> Undici[undici]
   PluginUI --> React[React/DOM 页面单例]
@@ -90,7 +90,7 @@ graph TD
 ### Connector 与 Launcher
 
 - connector 的 `connector.ts` 管重连/membership 状态；`control.ts` 管单次认证/心跳；`stream.ts` 管字节搬运。
-- launcher 的 `profile.ts`、`dsh-plugins.ts` 管装载；`dsh.ts`/`relay.ts`/`connector.ts` 生成各自启动参数。
+- launcher 的 `profile.ts` 初始化基础 profile，`plugin-catalog.ts` / `plugin-lifecycle.ts` 管第三方插件分发，`dsh-plugins.ts` 只管壳级 overlay；`dsh.ts`/`relay.ts`/`connector.ts` 生成各自启动参数。
 - `supervisor.ts` 管子进程、输出及停止；`jwt-secret.ts` 和 `membership.ts` 只处理对应本地配置。
 - launcher 不实现账号管理页面；`relay-admin.ts` 只读数据库判断是否已有管理员。
 - dsh、relay、connector 是 launcher **spawn 的独立进程**，不是 launcher import 后在进程内运行。
@@ -112,11 +112,32 @@ graph TD
 
 ## 5. 装载、交付与验证
 
-- profile 顺序：`dsh-base → dsh-web-app → dsh-plugin-concise-mode`，再叠加 profile/home patch 与 CLI overlays。
-- 普通插件清单在 `packages/launcher/src/dsh-plugins.ts`；代理位于出网插件前，YOLO 为最后一个普通 overlay。
-- `scripts/local-config.mjs` 扫目录读取 manifest/产物，`dev-stack.mjs` 编排开发装载；不能仅凭目录顺序推断生产顺序。冒烟脚本的 home、dsh 生命周期、RPC、bundle loader 和 VM shim 位于 `scripts/lib/`，各检查只保留独特契约断言。
-- `scripts/pack.mjs` 只负责参数/前置检查/目标调度；`scripts/pack/{manifest,deploy,platform,verify,archive}.mjs` 分担清单、deploy、裁剪、验证与归档。launcher manifest 的 workspace dependencies 确保绿色包携带插件。
-- 托盘通过 `packaging/win-launcher/stack.go` 启动 Node launcher；Go 文件内部调用不是独立模块 import 边。
+- profile 基础顺序是 `dsh-base → dsh-web-app`；随后由
+  `packages/launcher/src/plugin-lifecycle.ts` 通过官方 plugin-manager 安装并选择第三方分发 Bundle。
+  Bundle 层之后仍依次应用 profile patch、home patch 和 CLI overlay。
+- `plugin-catalog.json` 是壳级 overlay、4 个组合包、7 个独立包、22 个组件及稳定行 ID 的唯一
+  权威清单。组合包保留组件行开关；model-enhancements 的 models-catalog 与
+  model-capabilities 共同参与 `llm-pi-ai` 启动屏障，不可单独停用。directory-picker-browse
+  需要静态覆盖原生服务，故独立分发。
+- 新 profile 首次默认安装全部 11 个分发包；后续升级所有仍安装项并保持 Bundle/组件停用。
+  已卸载包不补回，需要由用户从发行版 `plugins/<目录>` 或开发 `.dev/plugins/<目录>` 经官方
+  「添加插件」重装。
+- launcher 在安装前把介质和其运行时依赖复制到 profile 内 `.dsh-remote-plugin-media/`，避免 Windows
+  跨盘 `link:` 不生成目录链接；检测到旧 profile 由其他 pnpm 主版本创建时，会暂存并重建
+  `node_modules`，失败则恢复原目录和 manifest/lockfile。
+- `scripts/plugin-distributions.mjs` 从源码包生成可搬移介质：组合包的固定版本组件闭包位于其
+  `node_modules/@dsh-remote/`，独立包携带自身 patch、宿主与浏览器产物，`catalog.json` 描述安装项。
+- `pnpm run dev` 依次构建功能插件、生成 `.dev/plugins/`、由 `scripts/dev-runtime.mjs` 在仓库
+  同级准备无工作区同名安装锚的隔离 dsh 运行时，再启动 `dev-stack.mjs`。开发栈仍使用标准
+  DSH_HOME 和正式 profile，生命周期与发行版共用；不得与已安装实例并发运行。
+- 绿色打包通过 `scripts/pack.mjs` 在包根生成 `plugins/` 并归档；launcher production
+  dependencies 只保留运行时和壳级 overlay，不再承担功能插件安装锚。打包检查覆盖介质目录、
+  依赖闭包、宿主/浏览器产物、离线内容和可搬移路径。
+- 唯一 CLI overlay 是 remote-privileged；它由 launcher 强制解析并传给 dsh，不可停用或卸载。
+  除 connection 注入外，它固定 `llm-pi-ai` 的两个模型启动依赖，并在模型增强未随进程启动时提供
+  root-fiber 占位屏障，避免 Bundle 在线启停触发上游模型适配器热重启。
+- subagent-depth 浏览器半以包名为 key 注册 `plugins.bundle.config`，只渲染 Bundle 详情页的
+  page 视图，直接复用页面配置区域，不再通过 `plugins.item` 绘制嵌套卡片。
 - `pnpm check:dependencies`、`pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm test` 是仓库级基础检查。
 - 插件冒烟入口统一见 [docs/02-dsh-facts.md](docs/02-dsh-facts.md)；运行前阅读脚本环境与产物要求。
 - 改插件必须构建并重启 dsh；无 HMR。实机、深浅主题、移动端与公网链路验收不能用单元测试代替。

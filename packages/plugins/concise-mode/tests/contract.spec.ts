@@ -2,25 +2,24 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { apply as applyLocator } from '../src/index.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (path: string): string => readFileSync(join(root, path), 'utf8')
 
 describe('concise mode profile bundle', () => {
-  it('declares a dsh bundle and its locator insert', () => {
-    const manifest = JSON.parse(read('package.json')) as { dsh?: { bundle?: { patch?: string } } }
+  it('declares a pure bundle whose preset root resolves from the installed package', () => {
+    const manifest = JSON.parse(read('package.json')) as {
+      main?: string
+      dsh?: { bundle?: { patch?: string } }
+    }
     expect(manifest.dsh?.bundle?.patch).toBe('./cordis.patch.yml')
+    expect(manifest.main).toBeUndefined()
     const patch = read('cordis.patch.yml')
-    expect(patch).toContain("name: './dist/index.js'")
-    expect(patch).toContain('dshRemoteConcisePresetRoot')
-  })
-
-  it('provides an absolute preset root from the bundle module location', () => {
-    let provided: { path?: unknown } | undefined
-    applyLocator({ provide: (_name: string, value: { path?: unknown }) => { provided = value } } as never)
-    expect(typeof provided?.path).toBe('string')
-    expect(String(provided?.path)).toMatch(/[\\/]presets[\\/]?$/u)
+    expect(patch).not.toContain('insert:')
+    expect(patch).toContain('createRequire(new URL("package.json", baseUrl))')
+    expect(patch).toContain('@dsh-remote/dsh-plugin-concise-mode/package.json')
+    expect(patch).toContain('"presets"')
+    expect(patch).not.toContain('dshRemoteConcisePresetRoot')
   })
 
   const selectedRows = [

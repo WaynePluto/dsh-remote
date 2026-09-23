@@ -43,9 +43,46 @@ user/message 的 source.kind:skill-invocation 和 source.name。
 
 ## 打开目标机器文件
 
-出处：`packages/api/session-controller/src/index.ts`。
-浏览器使用 remote.session.canOpenWorkspacePath 与 openWorkspacePath，需注入 remote、remote.session。
-它打开的是运行 dsh 的机器桌面，手机不可见；先探测再显示按钮，路径始终可复制，不自行 spawn。
+出处：`packages/client/ui-open-in-app/src/client/{OpenInAppAction.tsx,controller.ts}`、
+`packages/host/open-in-app/src/{catalog.ts,index.ts,resolver.ts}`、`packages/api/session-controller/src/index.ts`；
+项目兼容见 `packages/plugins/remote-settings/src/{client/index.ts,workspace-directory.ts,windows-directory.ts}`。
+
+- 对话顶部「在本地打开」不是 session Remote：原生浏览器调用 `POST /open-in-app/open`，传 app id 与当前会话 cwd；
+  宿主先做 connection trust/auth、绝对路径和真实目录检查。其它文件动作仍可使用
+  `remote.session.canOpenWorkspacePath/openWorkspacePath`。
+- Windows catalog 的 Explorer 是 `shell-open`，最终同样进入 `openNativePath` 的隐藏 PowerShell，实测产生
+  `Visible:false` 的工作区窗口。remote-settings 用 `priority:-1` shadow
+  `conversation.session.header.utilities` 的原生 `open-in-app` 项，保留原组件、菜单、store、inject 和 locale；
+  仅 Explorer 转到认证私有通道 `/remote-settings/open-workspace-directory`，宿主复核绝对路径和现存目录后启动
+  可见 Explorer。路径验证完成后同样在 spawn 成功时立即响应；VS Code、Cursor、JetBrains 等其它 app
+  仍调用原生 `/open-in-app/open`。
+  本机真实链路已确认顶部按钮改走 `/remote-settings/open-workspace-directory`，RPC 返回 `{opened:true}`，
+  Windows 出现可见的 `xdip` Explorer；远程目标仍待另一台机器复测。
+- 动作发生在运行 dsh 的目标机器桌面，手机看不到；不按 Host 判断同机，不修改 relay。
+
+## Agent 预设目录
+
+出处：`packages/api/settings-controller/src/index.ts`、`packages/client/ui-agent-preset/src/client/{section-store.ts,AgentPresetSection.tsx}`、
+`packages/util/native-command/src/path-opener.ts`；已核对安装的 0.1.6-alpha.2 产物。
+
+- 本项目不区分浏览器是否与目标同机；本机免登录 relay 入口、成员端口和域名访问都在运行 dsh 的
+  目标机器上打开文件管理器。复制预设后的自动动作遵循同一行为。
+- `canOpenAgentPresetDirectory()` 由宿主的 nativeOpen 配置/平台能力决定，不检查浏览器地址。
+  无 opener 时仍交给原生实现返回 `{opened:false,path}`；桌面窗口可能在另一屏幕，无图形桌面或非交互
+  服务环境不能保证出现可见窗口。
+- 已安装 0.1.6-alpha.2 的 `packages/util/native-command/src/runner.ts` 对 PowerShell 使用
+  `windowsHide:true`；Windows 11 实测 `Invoke-Item` 返回成功但创建的 Explorer 为 `Visible:false`。
+  remote-settings 在认证与 trust fence 后接管 Windows 的 `settings/openAgentPresetDirectory`，宿主以
+  `agentPresets.resolve` 核对合法 id 与 `trust:user`，用单一 file URI 参数直接启动
+  `explorer.exe` 且 `windowsHide:false`。宿主在进程成功 spawn 后立即响应并 `unref`，不等待 Windows Shell
+  完成交接；同步启动失败和 spawn 前取消仍响亮失败，窗口实际绘制仍由 Windows 异步完成。
+  spawn 后的隐藏 PowerShell helper 最多 5 秒内按规范目录匹配可见 Shell 窗口，恢复最小化状态，并通过
+  `AttachThreadInput`、`BringWindowToTop`、`SetForegroundWindow` 尝试置前；路径以 base64 数据进入固定脚本。
+  helper 完全异步且失败不改变 RPC 结果。该动作是 best-effort，并会在成功时抢占目标机器当前焦点；
+  本机经 `30809` 实测 RPC 约 13 ms 返回，随后 `xdip` Explorer 的 HWND 成为系统前台窗口。
+  非 Windows/无 opener 交回原生。插件不添加菜单、复制按钮或 relay 判定元数据。
+  本机真实链路已从 Chrome 的 `127.0.0.1:30809` 点击验证：RPC 返回 `{opened:true}`，Windows
+  出现可见的 `test-2` Explorer；窗口位于第二显示器。远程目标仍需在另一台机器复测。
 
 ## 全局提示词
 
@@ -107,13 +144,13 @@ USER_GLOBAL_FILE 定义在内部 render.ts，不在公开入口，插件只能�
 ## 项目 files 增强层
 
 出处：`packages/plugins/files/src/{index.ts,git.ts,shared.ts}`、
-`packages/plugins/files/src/client/{nativeFilesAdapter.tsx,paneNavigation.ts,previewTabs.ts,previewTabTitle.tsx,imageZoomOverlay.tsx,tabContextActions.tsx,DirectoryGuide.tsx,gitDecorations.ts,FileContextMenu.tsx,treePath.ts}`。
+`packages/plugins/files/src/client/{nativeFilesAdapter.tsx,paneNavigation.ts,previewTabs.ts,previewTabTitle.tsx,imageZoomOverlay.tsx,tabContextActions.tsx,gitDecorations.ts,FileContextMenu.tsx,treePath.ts}`。
 
 项目插件不再注册 `conversation.view`，不再提供目录/list/read 私有文件服务，也不再复制原生树或预览。
 它通过 `sidebar.right.pane.tab` 的 priority shadow 包装 dsh `ui-sidebar-files` 登记项，保留原生
 component、store、inject、locale 和原生 `files` guide；文件正文由 `ui-sidebar-documentpreview`
-及 `workspaceFiles` 负责。由于 dsh 只有一个 guide entry 时会直接 seed 该页面，插件增加不显示的初始化 sentinel
-并在 guide chain 中渲染唯一的「工作区文件」目录入口；不增加第二个用户可见文件入口。
+及 `workspaceFiles` 负责。插件不接管 `sidebar.right.tab.guide`，不注册 sentinel 或第二个用户可见文件入口；
+「开始」页的工作区文件、新建终端与浏览器入口仍由 dsh 按实际注册的页面类型显示。
 
 - 原生树行的 `data-files-entry` / `data-files-path` 仅用于当前版本的局部增强契约：插件写入 Git
   data marker、aria-label/title，并通过外层事件委托提供右键菜单；不插入或移动原生行 DOM。

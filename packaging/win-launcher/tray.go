@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -43,16 +44,13 @@ const (
 const (
 	idOpenDsh uintptr = iota + 1
 	idOpenAdmin
+	idOpenPlugins
 	idStart
 	idStop
 	idRestart
 	idLog
 	idAutostart
 	idExit
-	// 「补回 xxx」的动态菜单项从这个基数开始，加上受管
-	// Bundle 在 missingManagedBundles 结果里的下标；受管项
-	// 最多二十来个，不会与上面的固定标识符冲突。
-	idRestoreBundleBase uintptr = 100
 )
 
 type application struct {
@@ -324,20 +322,11 @@ func (a *application) showMenu() {
 	state := a.stack.currentState()
 	appendItem(menu, idOpenDsh, "打开 dsh 界面", true)
 	appendItem(menu, idOpenAdmin, "打开管理界面", true)
+	appendItem(menu, idOpenPlugins, "打开插件目录", true)
 	appendSeparator(menu)
 	appendItem(menu, idStart, "启动", state == stackStopped)
 	appendItem(menu, idStop, "停止", state == stackRunning || state == stackStarting)
 	appendItem(menu, idRestart, "重启", state == stackRunning)
-	// 每个被用户在 dsh 插件页停用的受管 Bundle 各出现一条：停用后
-	// dsh 的插件页不再列出该 Bundle，这里是唯一的恢复入口。
-	// 菜单每次右键都重新读取 profile manifest，因此停用/补回后状态即时反映。
-	missing := missingManagedBundles(dshHomeDir(), a.settings.dshProfile)
-	for index, bundle := range missing {
-		appendItem(menu, idRestoreBundleBase+uintptr(index), "补回"+bundle.label, true)
-	}
-	if len(missing) > 0 {
-		appendSeparator(menu)
-	}
 	appendItem(menu, idLog, "查看日志", true)
 	appendCheckItem(menu, idAutostart, "开机自启动", autostartEnabled())
 	appendSeparator(menu)
@@ -374,6 +363,8 @@ func (a *application) invoke(command uintptr) {
 		a.openDsh()
 	case idOpenAdmin:
 		a.openAdmin()
+	case idOpenPlugins:
+		a.openPlugins()
 	case idStart:
 		a.stack.start()
 	case idStop:
@@ -386,16 +377,6 @@ func (a *application) invoke(command uintptr) {
 		a.toggleAutostart()
 	case idExit:
 		go a.quit()
-	default:
-		// 「补回 xxx」的动态项：按展示时的同一份缺失清单解码。
-		if command < idRestoreBundleBase {
-			return
-		}
-		missing := missingManagedBundles(dshHomeDir(), a.settings.dshProfile)
-		index := int(command - idRestoreBundleBase)
-		if index < len(missing) {
-			go a.restoreBundle(missing[index])
-		}
 	}
 }
 
@@ -403,33 +384,16 @@ func (a *application) openDsh() {
 	a.open(a.settings.dshWebURL())
 }
 
-// restoreBundle 把一个受管 Bundle 写回 dsh profile 并在 stack 运行中时
-// 重启使它生效。文件改写交给 launcher 的一次性命令完成
-// （--restore-bundle），托盘不复制 profile manifest 的合并逻辑；
-// 补回后该菜单项随下次右键自然消失。
-func (a *application) restoreBundle(bundle managedBundle) {
-	a.log.printf("正在补回%s（%s）", bundle.label, bundle.name)
-	output, err := a.stack.runOneShot([]string{"--restore-bundle=" + bundle.name})
-	for _, line := range strings.Split(strings.TrimRight(output, "\r\n"), "\n") {
-		if line != "" {
-			a.log.printf("[launcher] %s", strings.TrimPrefix(line, "[dsh-remote] "))
-		}
-	}
-	if err != nil {
-		a.log.printf("补回%s失败：%v", bundle.label, err)
-		messageBox(
-			"补回"+bundle.label+"失败：\n\n"+err.Error()+"\n\n详情见日志：\n"+a.settings.logPath(),
-			appName,
-			mbIconError,
-		)
+// openPlugins 打开绿色包随附的插件安装介质，用户可从 dsh 插件页
+// 选择其中的包重新安装已卸载插件。
+func (a *application) openPlugins() {
+	path := filepath.Join(a.root, "plugins")
+	if err := shellOpen(path); err != nil {
+		a.log.printf("打开插件目录 %s 失败：%v", path, err)
+		messageBox("打不开插件目录：\n\n"+path+"\n\n"+err.Error(), appName, mbIconError)
 		return
 	}
-	if a.stack.currentState() == stackRunning {
-		a.log.printf("补回完成，正在重启 dsh-remote 使其生效")
-		a.stack.restart()
-		return
-	}
-	a.log.printf("补回完成；下次启动时生效")
+	a.log.printf("已打开插件目录 %s", path)
 }
 
 func (a *application) openAdmin() {

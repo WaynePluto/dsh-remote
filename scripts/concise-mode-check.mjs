@@ -1,20 +1,21 @@
 /**
- * dsh-remote 精简代理预设的真实宿主端冒烟检查。
+ * dsh-remote 精简代理预设及随附 Bundle HMR 的真实宿主端冒烟检查。
  *
  * 每次升级 dsh 后运行：
  *
  *   用法：node scripts/concise-mode-check.mjs [--port 3100]
  *
- * 探针只挂载一个常驻预设作用域并读取注册表数据，不发起模型请求，也不创建会话。
+ * 探针挂载常驻预设作用域、读取注册表，并依次停用/启用全部随附 Bundle；不发起模型请求，也不创建会话。
  */
 
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
-import { DSH_BIN, DSH_PROFILE, DEFAULT_PROFILE_BUNDLES, ROOT, dshPluginOverlays } from './local-config.mjs'
+import { runPluginCommand } from '@deepseek-ai/dsh-plugin-manager/operations'
+import { DSH_BIN, DSH_INSTALL_ANCHOR, DSH_PROFILE, PNPM_CLI, ROOT, dshPluginOverlays } from './local-config.mjs'
+import { materializePluginDistributions } from './plugin-distributions.mjs'
 
 const CHANNEL = '/concise-mode-check'
 const portAt = process.argv.indexOf('--port')
@@ -24,7 +25,10 @@ if (!Number.isSafeInteger(PORT) || PORT < 1 || PORT > 65535) {
 }
 const AUTHORITY = '127.0.0.1:' + PORT
 const BASE = 'http://' + AUTHORITY
-const HOME = mkdtempSync(join(tmpdir(), 'dsh-concise-mode-check-'))
+const EXPECTED_DISTRIBUTIONS = JSON.parse(readFileSync(join(ROOT, 'plugin-catalog.json'), 'utf8'))
+  .distributions.map(distribution => distribution.name).toSorted()
+mkdirSync(join(ROOT, '.dev'), { recursive: true })
+const HOME = mkdtempSync(join(ROOT, '.dev', 'concise-mode-check-'))
 const PROBE = join(HOME, 'concise-mode-check-probe.mjs')
 const OVERLAY = join(HOME, 'concise-mode-check-overlay.yml')
 const PROJECT_GLOBAL_TOOLS = [
@@ -42,7 +46,7 @@ const EXPECTED_SECTIONS = [
 ]
 const EXPECTED_CONTEXTS = []
 const PROBE_SOURCE = [
-  "export const inject = ['agentPresets', 'tools', 'systemPrompt', 'connection']",
+  "export const inject = ['agentPresets', 'tools', 'systemPrompt', 'connection', 'pluginManager']",
   '',
   "const fields = ['id', 'trust', 'name', 'description', 'order', 'broken']",
   'function ownedPreset(preset) {',
@@ -71,6 +75,22 @@ const PROBE_SOURCE = [
   '}',
   'export function apply(ctx) {',
   "  const dispose = ctx.connection.rpc.handle('/concise-mode-check', async (endpoint) => {",
+  "    if (endpoint === 'toggle') {",
+  "      const disabled = await ctx.pluginManager.setBundleEnabled('@dsh-remote/dsh-plugin-concise-mode', false)",
+  "      const enabled = await ctx.pluginManager.setBundleEnabled('@dsh-remote/dsh-plugin-concise-mode', true)",
+  '      return { ok: true, value: { disabled, enabled } }',
+  '    }',
+  "    if (endpoint === 'toggle-all') {",
+  '      const listed = await ctx.pluginManager.listBundles()',
+  "      const names = listed.map(bundle => bundle.name).filter(name => name.startsWith('@dsh-remote/dsh-plugin-')).toSorted()",
+  '      const results = []',
+  '      for (const name of names) {',
+  '        const disabled = await ctx.pluginManager.setBundleEnabled(name, false)',
+  '        const enabled = await ctx.pluginManager.setBundleEnabled(name, true)',
+  '        results.push({ name, disabled, enabled })',
+  '      }',
+  '      return { ok: true, value: results }',
+  '    }',
   "    if (endpoint !== 'snapshot') {",
   '      return { ok: false, error: {',
   "        code: 'concise-mode-check/unknown-endpoint',",
@@ -106,19 +126,36 @@ function browserHeaders(cookie) {
     ...(cookie === undefined ? {} : { cookie }),
   }
 }
-function prepareHome() {
-  // 与 launcher/profile.ts 同一份默认 Bundle 清单（local-config 复制，launcher 为权威）：
-  // 检查必须在发行装载形态（全部受管 Bundle）下验证 concise 预设。
+async function prepareHome() {
   const profile = join(HOME, 'profiles', DSH_PROFILE)
+  const media = materializePluginDistributions({ output: join(ROOT, '.dev', 'plugins') })
   mkdirSync(profile, { recursive: true })
   writeFileSync(join(profile, 'package.json'), `${JSON.stringify({
     name: `dsh-profile-${DSH_PROFILE}`,
     private: true,
     dependencies: {},
-    dsh: { profile: { bundles: DEFAULT_PROFILE_BUNDLES } },
+    dsh: { profile: { bundles: [
+      '@deepseek-ai/dsh-base',
+      '@deepseek-ai/dsh-web-app',
+      ...media.plugins.map(plugin => plugin.name),
+    ] } },
   }, null, 2)}\n`)
   writeFileSync(join(profile, 'cordis.patch.yml'), '[]\n')
   writeFileSync(join(profile, 'pnpm-workspace.yaml'), 'packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n')
+  const install = await runPluginCommand({
+    profile: DSH_PROFILE,
+    dir: profile,
+    home: HOME,
+    installAnchor: DSH_INSTALL_ANCHOR,
+    cwd: ROOT,
+  }, ['add', ...media.plugins.map(plugin => join(media.output, plugin.directory))], {
+    execution: 'service',
+    outputBytes: 64 * 1024,
+    activateNewBundles: false,
+    command: process.execPath,
+    args: [PNPM_CLI],
+  })
+  if (install.exitCode !== 0) throw new Error(`安装冒烟插件失败：${install.output || install.logPath}`)
   writeFileSync(PROBE, PROBE_SOURCE, 'utf8')
   writeFileSync(OVERLAY, "- insert:\n    - id: concise-mode-check\n      name: './concise-mode-check-probe.mjs'\n", 'utf8')
 }
@@ -210,21 +247,21 @@ async function exchangeCookie(token) {
   return cookie
 }
 
-async function takeSnapshot(cookie) {
+async function callProbe(cookie, endpoint) {
   const rpcId = randomUUID()
-  const response = await fetch(BASE + CHANNEL + '/snapshot', {
+  const response = await fetch(BASE + CHANNEL + '/' + endpoint, {
     method: 'POST',
     headers: { ...browserHeaders(cookie), 'content-type': 'application/json' },
-    body: JSON.stringify({ type: 'client-request', rpcId, method: 'snapshot', payload: {} }),
+    body: JSON.stringify({ type: 'client-request', rpcId, method: endpoint, payload: {} }),
   })
   const text = await response.text()
   let body
   try { body = JSON.parse(text) } catch {
-    throw new Error('snapshot returned non-JSON: status=' + response.status + ', body=' + text.slice(0, 500))
+    throw new Error(endpoint + ' returned non-JSON: status=' + response.status + ', body=' + text.slice(0, 500))
   }
   if (response.status !== 200 || body?.type !== 'server-response'
     || body?.rpcId !== rpcId || body?.result?.ok !== true) {
-    throw new Error('snapshot RPC failed: status=' + response.status + ', body=' + JSON.stringify(body).slice(0, 1000))
+    throw new Error(endpoint + ' RPC failed: status=' + response.status + ', body=' + JSON.stringify(body).slice(0, 1000))
   }
   return body.result.value
 }
@@ -268,13 +305,13 @@ function diagnoseForbidden(actual) {
 async function main() {
   let child
   try {
-    prepareHome()
+    await prepareHome()
     const launch = startDsh()
     child = launch.child
     const token = await launch.ready
     const cookie = await exchangeCookie(token)
     await delay(1000)
-    const value = await takeSnapshot(cookie)
+    const value = await callProbe(cookie, 'snapshot')
     check(true, 'snapshot RPC completed, so concise standing mount succeeded')
 
     const roster = Array.isArray(value?.roster) ? value.roster : []
@@ -342,8 +379,30 @@ async function main() {
       'concise-ptc system prompt contexts are exactly empty',
       'actual=' + JSON.stringify(value?.concisePtc?.systemPrompt?.contexts))
 
-    if (failures !== 0) throw new Error(failures + ' concise-mode smoke assertion(s) failed')
-    console.log('\nAll concise-mode checks passed.')
+    const toggle = await callProbe(cookie, 'toggle')
+    check(toggle?.disabled?.application === 'applied' && toggle.disabled.warnings?.length === 0,
+      'concise-mode Bundle disables through live Profile HMR', JSON.stringify(toggle?.disabled))
+    check(toggle?.enabled?.application === 'applied' && toggle.enabled.warnings?.length === 0,
+      'concise-mode Bundle re-enables through live Profile HMR', JSON.stringify(toggle?.enabled))
+    const restored = await callProbe(cookie, 'snapshot')
+    check(restored?.roster?.some(preset => preset?.id === 'concise'),
+      'concise preset returns after live re-enable')
+
+    const distributionToggles = await callProbe(cookie, 'toggle-all')
+    const toggledNames = Array.isArray(distributionToggles)
+      ? distributionToggles.map(result => result.name).toSorted() : []
+    check(JSON.stringify(toggledNames) === JSON.stringify(EXPECTED_DISTRIBUTIONS),
+      'HMR check covers every distributed Bundle',
+      'expected=[' + EXPECTED_DISTRIBUTIONS.join(', ') + ']; actual=[' + toggledNames.join(', ') + ']')
+    for (const result of distributionToggles ?? []) {
+      check(result?.disabled?.application === 'applied' && result.disabled.warnings?.length === 0,
+        result.name + ' disables through live Profile HMR', JSON.stringify(result?.disabled))
+      check(result?.enabled?.application === 'applied' && result.enabled.warnings?.length === 0,
+        result.name + ' re-enables through live Profile HMR', JSON.stringify(result?.enabled))
+    }
+
+    if (failures !== 0) throw new Error(failures + ' concise-mode/HMR smoke assertion(s) failed')
+    console.log('\nAll concise-mode and distributed Bundle HMR checks passed.')
   } finally {
     try {
       await stopChildTree(child)

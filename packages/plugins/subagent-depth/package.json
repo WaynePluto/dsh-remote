@@ -1,6 +1,7 @@
 {
   "name": "@dsh-remote/dsh-plugin-subagent-depth",
   "version": "0.0.2-20260922",
+  "description": "设置模型委派子代理时允许的最大层数。",
   "license": "MIT",
   "private": true,
   "type": "module",

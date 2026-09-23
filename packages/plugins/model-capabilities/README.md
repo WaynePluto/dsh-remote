@@ -43,6 +43,9 @@ select 使用主题 brand focus 与右侧 chevron；不使用透明背景或浏�
 
 修改插件后必须重新构建并重启 dsh，刷新页面不会加载新的 Host 或浏览器 bundle。
 
-## 停用与补回
+## 分发与管理
 
-本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：模型能力声明页消失；已写入的图片支持与推理档位声明保留在设置里，但无法再编辑。launcher 不再自动补回；右键托盘图标选「补回模型能力与协议」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-model-capabilities` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。
+本包不作为独立安装项分发，而是 `@dsh-remote/dsh-plugin-model-enhancements`（模型增强 Bundle）的组件。
+模型目录与模型能力共同参与 `llm-pi-ai` 启动屏障，当前不支持在 Bundle 详情中单独关闭这两行；需要停用时应停用整个模型增强 Bundle。停用后，模型能力声明页消失；已写入的图片支持、推理档位与协议覆盖保留。
+安装、卸载和升级也以整个模型增强 Bundle 为单位。launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，并保留停用状态；卸载后不会自动补回。
+需要重装时，在 dsh「添加插件」中填写发行包 `plugins/model-enhancements` 或开发环境 `.dev/plugins/model-enhancements` 的绝对目录。

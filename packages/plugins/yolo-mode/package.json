@@ -1,6 +1,7 @@
 {
   "name": "@dsh-remote/dsh-plugin-yolo-mode",
   "version": "0.0.2-20260922",
+  "description": "固定 dsh 为全权限自动批准模式，同时保留用户提问。",
   "license": "MIT",
   "private": true,
   "type": "module",

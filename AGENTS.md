@@ -19,13 +19,13 @@
 - 一台机器独立 origin，公网用子域名，局域网可用每机器端口，不能挂子路径。
 - launcher、connector、relay 不引入原生模块，持久化用 node:sqlite，密码哈希用 node:crypto scrypt。
 - 优先成熟依赖，所有直接依赖固定版本，不使用范围、dist-tag 或隐式升级。
-- 与官方 dsh 共用标准 DSH_HOME，仅在 dsh-remote-web profile 加载项目内置扩展。
+- 与官方 dsh 共用标准 DSH_HOME，仅在 dsh-remote-web profile 安装项目功能插件。
   不写 home 级 patch、不修改官方 web profile，不实现第二套插件管理器。
 - 普通插件位于 packages/plugins/<名字>，包名 @dsh-remote/dsh-plugin-<名字>，
   包根 overlay 用 ./dist/index.js；launcher、dev-stack、pack 都要检查宿主和浏览器产物。
-- concise-mode（用户文案「简洁模式」）是专属 Profile Bundle，位于 dsh-web-app 后；locator 以 import.meta.url 定位 preset root。
-  launcher 对受管 Bundle 只确保一次（记录在 profile 内 dsh-remote-bundles-state.json）；用户在 dsh 插件页停用后不再自动补回，
-  补回入口是托盘菜单「补回简洁模式」与 `--restore-bundle`，见 packages/launcher/src/profile.ts。
+- 22 个功能组件按 `plugin-catalog.json` 分发为组合包和独立包：首次默认安装，后续配套升级仍安装项并保留 Bundle/组件停用状态，卸载后不自动补回；开发与发行介质分别位于 `.dev/plugins/` 和 `plugins/`。
+- `remote-privileged` 的 connection/webServer 注入与模型 HMR 启动屏障作为不可卸载的壳级基础设施；模型屏障服务挂在 root fiber，避免 Bundle 在线启停重启 `llm-pi-ai`。
+- concise-mode（用户文案「简洁模式」）是独立第三方 Profile Bundle，位于 dsh-web-app 后；patch 从 profile `baseUrl` 创建 `require`，解析已安装包的 package.json 后定位 preset root，不插入 locator entry。
 - 中文文案使用决策中的词表，页面使用机器真名；hub、membership、slug 等代码标识符不随文案改名。
 - 完成 roadmap 条目立即勾选，未做实机验收不能按自动测试结果勾选。
 

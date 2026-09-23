@@ -1,0 +1,457 @@
+import { randomUUID } from 'node:crypto'
+import fs from 'node:fs'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
+import { runPluginCommand } from '@deepseek-ai/dsh-plugin-manager/operations'
+import { isMap, isSeq, parseDocument } from 'yaml'
+import type { PluginDistribution } from './plugin-catalog.js'
+import { PLUGIN_DISTRIBUTIONS } from './plugin-catalog.js'
+import { LauncherError } from './errors.js'
+import { DSH_BASE_BUNDLE, DSH_WEB_APP_BUNDLE, profileDirectory } from './profile.js'
+
+const STATE_FILE = 'dsh-remote-bundles-state.json'
+const PACKAGE_MANAGER_MIGRATION_DIRECTORY = '.dsh-remote-package-manager-migration'
+const PROFILE_MEDIA_DIRECTORY = '.dsh-remote-plugin-media'
+const LEGACY_FILES = '@dsh-remote/dsh-plugin-files'
+
+interface JsonObject { [key: string]: unknown }
+
+interface MediaEntry {
+  readonly name: string
+  readonly version: string
+  readonly directory: string
+  readonly components: readonly { readonly name: string, readonly rowId: string, readonly toggleable?: boolean }[]
+}
+
+interface LifecycleState {
+  readonly schemaVersion: 2
+  readonly offered: readonly string[]
+  readonly versions: Readonly<Record<string, string>>
+}
+
+interface PackageManagerCommand {
+  readonly command: string
+  readonly args?: readonly string[]
+  readonly version?: string
+}
+
+export interface PluginSyncResult {
+  readonly installed: readonly string[]
+  readonly upgraded: readonly string[]
+  readonly skippedRemoved: readonly string[]
+  readonly migrated: boolean
+}
+
+/** 定位开发或绿色发行版生成的插件安装介质目录。 */
+export function resolvePluginMediaDirectory(options: {
+  readonly launcherDirectory: string
+  readonly configured?: string | undefined
+}): string {
+  const candidates = [
+    options.configured,
+    // 绿色包入口位于 <release>/dist/index.js。
+    join(options.launcherDirectory, '..', 'plugins'),
+    // 源码入口位于 packages/launcher/{src,dist}。
+    join(options.launcherDirectory, '..', '..', '..', '.dev', 'plugins'),
+  ].filter((candidate): candidate is string => candidate !== undefined && candidate !== '')
+  const found = candidates.map(candidate => resolve(candidate))
+    .find(candidate => fs.existsSync(join(candidate, 'catalog.json')))
+  if (found === undefined) {
+    throw new LauncherError(
+      '找不到 dsh-remote 插件安装目录。',
+      { hint: '开发模式请重新运行 pnpm run dev；发行包应包含 plugins/catalog.json。' },
+    )
+  }
+  return found
+}
+
+function isObject(value: unknown): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function readJson(path: string): unknown {
+  return JSON.parse(fs.readFileSync(path, 'utf8'))
+}
+
+function writeTextAtomically(path: string, text: string): void {
+  const temporary = join(dirname(path), `.${basename(path)}.${process.pid}.${randomUUID()}.tmp`)
+  try {
+    fs.writeFileSync(temporary, text, { encoding: 'utf8', flag: 'wx' })
+    fs.renameSync(temporary, path)
+  } catch (error) {
+    fs.rmSync(temporary, { force: true })
+    throw error
+  }
+}
+
+function readState(directory: string): LifecycleState | { readonly ensured: readonly string[] } | undefined {
+  try {
+    const value = readJson(join(directory, STATE_FILE))
+    if (!isObject(value)) return undefined
+    if (value.schemaVersion === 2 && Array.isArray(value.offered) && value.offered.every(item => typeof item === 'string')
+      && isObject(value.versions) && Object.values(value.versions).every(item => typeof item === 'string')) {
+      return { schemaVersion: 2, offered: value.offered, versions: value.versions as Record<string, string> }
+    }
+    if (Array.isArray(value.ensured) && value.ensured.every(item => typeof item === 'string')) {
+      return { ensured: value.ensured }
+    }
+  } catch {
+    return undefined
+  }
+  return undefined
+}
+
+function readMedia(directory: string): readonly MediaEntry[] {
+  const raw = readJson(join(directory, 'catalog.json'))
+  if (!isObject(raw) || raw.schemaVersion !== 1 || !Array.isArray(raw.plugins)) {
+    throw new TypeError(`插件安装目录 ${directory} 的 catalog.json 格式无效`)
+  }
+  return raw.plugins.map((value) => {
+    if (!isObject(value) || typeof value.name !== 'string' || typeof value.version !== 'string'
+      || typeof value.directory !== 'string' || !Array.isArray(value.components)
+      || !value.components.every(component => isObject(component)
+        && typeof component.name === 'string' && typeof component.rowId === 'string'
+        && (component.toggleable === undefined || typeof component.toggleable === 'boolean'))) {
+      throw new TypeError(`插件安装目录 ${directory} 的 catalog.json 包含无效条目`)
+    }
+    const packageDirectory = resolve(directory, value.directory)
+    if (!isAbsolute(packageDirectory) || !fs.existsSync(join(packageDirectory, 'package.json'))) {
+      throw new Error(`插件安装介质不存在：${packageDirectory}`)
+    }
+    return {
+      name: value.name,
+      version: value.version,
+      directory: packageDirectory,
+      components: value.components as unknown as MediaEntry['components'],
+    }
+  })
+}
+
+function runtimeDependencyNames(media: readonly MediaEntry[]): ReadonlySet<string> {
+  const names = new Set<string>()
+  for (const entry of media) {
+    const packageDirectories = [entry.directory, ...entry.components
+      .filter(component => component.name !== entry.name)
+      .map(component => join(entry.directory, 'node_modules', ...component.name.split('/')))]
+    for (const packageDirectory of packageDirectories) {
+      const manifestPath = join(packageDirectory, 'package.json')
+      if (!fs.existsSync(manifestPath)) continue
+      const manifest = readJson(manifestPath)
+      if (!isObject(manifest)) continue
+      for (const dependencies of [manifest.dependencies, manifest.optionalDependencies]) {
+        if (!isObject(dependencies)) continue
+        for (const name of Object.keys(dependencies)) {
+          if (!name.startsWith('@dsh-remote/dsh-plugin-')) names.add(name)
+        }
+      }
+    }
+  }
+  return names
+}
+
+function copyRuntimeDependencyClosure(sourceModules: string, targetModules: string, seeds: ReadonlySet<string>): void {
+  const pending = [...seeds]
+  const copied = new Set<string>()
+  while (pending.length > 0) {
+    const requested = pending.shift() as string
+    if (copied.has(requested)) continue
+    const source = join(sourceModules, ...requested.split('/'))
+    const manifestPath = join(source, 'package.json')
+    if (!fs.existsSync(manifestPath)) throw new Error(`随包运行时缺少插件依赖：${requested}`)
+    const manifest = readJson(manifestPath)
+    if (!isObject(manifest) || typeof manifest.name !== 'string') {
+      throw new TypeError(`随包运行时依赖 manifest 无效：${manifestPath}`)
+    }
+    const existing = copied.has(manifest.name)
+    if (existing) continue
+    copied.add(manifest.name)
+    const target = join(targetModules, ...manifest.name.split('/'))
+    fs.mkdirSync(dirname(target), { recursive: true })
+    fs.cpSync(source, target, {
+      recursive: true,
+      filter: path => path === source || basename(path) !== 'node_modules',
+    })
+    if (isObject(manifest.dependencies)) pending.push(...Object.keys(manifest.dependencies))
+    if (isObject(manifest.optionalDependencies)) {
+      for (const name of Object.keys(manifest.optionalDependencies)) {
+        if (fs.existsSync(join(sourceModules, ...name.split('/')))) pending.push(name)
+      }
+    }
+  }
+}
+
+function materializeProfileMedia(
+  directory: string,
+  media: readonly MediaEntry[],
+  runtimeModulesDirectory: string | undefined,
+): readonly MediaEntry[] {
+  const cache = join(directory, PROFILE_MEDIA_DIRECTORY)
+  fs.mkdirSync(cache, { recursive: true })
+  const result = media.map((entry) => {
+    const target = join(cache, basename(entry.directory))
+    // dsh 尚未启动，直接刷新缓存可避开 Windows 对含嵌套包目录 rename 的限制。
+    fs.rmSync(target, { recursive: true, force: true })
+    fs.cpSync(entry.directory, target, { recursive: true })
+    return { ...entry, directory: target }
+  })
+  const dependencies = runtimeDependencyNames(result)
+  if (dependencies.size > 0) {
+    if (runtimeModulesDirectory === undefined) throw new Error('没有提供随包运行时依赖目录')
+    const targetModules = join(cache, 'node_modules')
+    fs.rmSync(targetModules, { recursive: true, force: true })
+    fs.mkdirSync(targetModules, { recursive: true })
+    copyRuntimeDependencyClosure(runtimeModulesDirectory, targetModules, dependencies)
+  }
+  return result
+}
+
+function profileManifest(path: string): JsonObject & {
+  dependencies: Record<string, string>
+  dsh: { profile: { bundles: string[] } }
+} {
+  const value = readJson(path)
+  if (!isObject(value) || !isObject(value.dependencies) || !isObject(value.dsh)
+    || !isObject(value.dsh.profile) || !Array.isArray(value.dsh.profile.bundles)
+    || !value.dsh.profile.bundles.every(item => typeof item === 'string')) {
+    throw new TypeError(`无效的 dsh profile manifest：${path}`)
+  }
+  return value as JsonObject & { dependencies: Record<string, string>, dsh: { profile: { bundles: string[] } } }
+}
+
+function insertDistributions(existing: readonly string[], enabled: ReadonlySet<string>): string[] {
+  const allComponents = new Set(PLUGIN_DISTRIBUTIONS.flatMap(item => item.components.map(component => component.name)))
+  const allDistributions = new Set(PLUGIN_DISTRIBUTIONS.map(item => item.name))
+  const kept = existing.filter(name => !allComponents.has(name) && !allDistributions.has(name))
+  const insertion = PLUGIN_DISTRIBUTIONS.filter(item => enabled.has(item.name)).map(item => item.name)
+  const webIndex = kept.indexOf(DSH_WEB_APP_BUNDLE)
+  kept.splice(webIndex < 0 ? kept.length : webIndex + 1, 0, ...insertion)
+  return kept
+}
+
+function preserveDisabledRows(path: string, rows: readonly { readonly rowId: string }[]): void {
+  if (rows.length === 0) return
+  const text = fs.existsSync(path) ? fs.readFileSync(path, 'utf8') : '[]\n'
+  const document = parseDocument(text, { customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: (value: string) => value }] })
+  const error = document.errors[0]
+  if (error !== undefined) throw error
+  if (!isSeq(document.contents)) throw new TypeError(`Profile patch 必须是 YAML 数组：${path}`)
+  let changed = false
+  for (const row of rows) {
+    const present = document.contents.items.some((item, index) => isMap(item)
+      && document.getIn([index, 'id']) === row.rowId && !item.has('insert'))
+    if (present) continue
+    document.add({ id: row.rowId, disabled: true })
+    changed = true
+  }
+  if (changed) writeTextAtomically(path, String(document))
+}
+
+function sameDistribution(a: PluginDistribution, b: MediaEntry): boolean {
+  return a.name === b.name
+    && a.components.length === b.components.length
+    && a.components.every((component, index) => component.name === b.components[index]?.name
+      && component.rowId === b.components[index]?.rowId
+      && component.toggleable === b.components[index]?.toggleable)
+}
+
+function pnpmMajor(value: string | undefined): number | undefined {
+  const match = /^(?:pnpm@)?(\d+)(?:\.|$)/u.exec(value ?? '')
+  return match === null ? undefined : Number(match[1])
+}
+
+function profilePackageManager(directory: string): string | undefined {
+  const modulesManifest = join(directory, 'node_modules', '.modules.yaml')
+  if (!fs.existsSync(modulesManifest)) return undefined
+  try {
+    const metadata = parseDocument(fs.readFileSync(modulesManifest, 'utf8')).toJS() as { packageManager?: unknown }
+    return typeof metadata.packageManager === 'string' ? metadata.packageManager : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function restorePackageManagerMigration(directory: string): void {
+  const migration = join(directory, PACKAGE_MANAGER_MIGRATION_DIRECTORY)
+  if (!fs.existsSync(migration)) return
+  const savedModules = join(migration, 'node_modules')
+  if (fs.existsSync(savedModules)) {
+    fs.rmSync(join(directory, 'node_modules'), { recursive: true, force: true })
+    fs.renameSync(savedModules, join(directory, 'node_modules'))
+  }
+  const savedManifest = join(migration, 'package.json')
+  if (fs.existsSync(savedManifest)) fs.copyFileSync(savedManifest, join(directory, 'package.json'))
+  const savedLockfile = join(migration, 'pnpm-lock.yaml')
+  if (fs.existsSync(savedLockfile)) fs.copyFileSync(savedLockfile, join(directory, 'pnpm-lock.yaml'))
+  else {
+    const metadataPath = join(migration, 'metadata.json')
+    const metadata = fs.existsSync(metadataPath) ? readJson(metadataPath) : undefined
+    if (isObject(metadata) && metadata.lockfileExisted === false) {
+      fs.rmSync(join(directory, 'pnpm-lock.yaml'), { force: true })
+    }
+  }
+  fs.rmSync(migration, { recursive: true, force: true })
+}
+
+/** 暂存旧 node_modules；pnpm 主版本改变时只能删除后重装，失败则恢复原 profile。 */
+function beginPackageManagerMigration(directory: string): { commit: () => void, rollback: () => void } {
+  restorePackageManagerMigration(directory)
+  const migration = join(directory, PACKAGE_MANAGER_MIGRATION_DIRECTORY)
+  fs.mkdirSync(migration)
+  const lockfile = join(directory, 'pnpm-lock.yaml')
+  writeTextAtomically(join(migration, 'metadata.json'), `${JSON.stringify({ lockfileExisted: fs.existsSync(lockfile) })}\n`)
+  fs.copyFileSync(join(directory, 'package.json'), join(migration, 'package.json'))
+  if (fs.existsSync(lockfile)) fs.copyFileSync(lockfile, join(migration, 'pnpm-lock.yaml'))
+  const modules = join(directory, 'node_modules')
+  if (fs.existsSync(modules)) fs.renameSync(modules, join(migration, 'node_modules'))
+  return {
+    commit: () => fs.rmSync(migration, { recursive: true, force: true }),
+    rollback: () => restorePackageManagerMigration(directory),
+  }
+}
+
+/**
+ * 首次安装、旧 profile 迁移以及后续配套升级。
+ * 当前安装事实来自 profile dependencies；状态文件只区分“尚未提供”和“用户已经卸载”。
+ */
+export async function synchronizePluginDistributions(options: {
+  readonly home: string
+  readonly profile: string
+  readonly mediaDirectory: string
+  readonly installAnchor: string
+  readonly runtimeModulesDirectory?: string
+  readonly profileCreated: boolean
+  readonly packageManager?: PackageManagerCommand
+  readonly onOutput?: (text: string, stream: 'stdout' | 'stderr') => void
+}): Promise<PluginSyncResult> {
+  const directory = profileDirectory(options.home, options.profile)
+  restorePackageManagerMigration(directory)
+  const manifestPath = join(directory, 'package.json')
+  const patchPath = join(directory, 'cordis.patch.yml')
+  const sourceMedia = readMedia(options.mediaDirectory)
+  if (sourceMedia.length !== PLUGIN_DISTRIBUTIONS.length
+    || sourceMedia.some((entry, index) => !sameDistribution(PLUGIN_DISTRIBUTIONS[index] as PluginDistribution, entry))) {
+    throw new Error('插件安装介质与 launcher 清单不一致')
+  }
+  // profile 可能与安装介质分处不同 Windows 盘符；先复制到同盘缓存再交给 pnpm 建 link。
+  const media = materializeProfileMedia(directory, sourceMedia, options.runtimeModulesDirectory)
+  const before = profileManifest(manifestPath)
+  const dependencies = new Set(Object.keys(before.dependencies))
+  const selected = new Set(before.dsh.profile.bundles)
+  const previousState = readState(directory)
+  const currentState = previousState !== undefined && 'schemaVersion' in previousState ? previousState : undefined
+  const legacyEnsured = new Set(previousState !== undefined && 'ensured' in previousState ? previousState.ensured : [])
+  const hasLegacySelection = PLUGIN_DISTRIBUTIONS.some(item => item.components.some(component => selected.has(component.name)))
+  const migrate = currentState === undefined && (legacyEnsured.size > 0 || hasLegacySelection)
+  const offered = new Set(currentState?.offered ?? [])
+  const install: MediaEntry[] = []
+  const enabled = new Set<string>()
+  const disabledRows: { rowId: string }[] = []
+
+  for (const entry of media) {
+    const known = offered.has(entry.name)
+    const alreadyInstalled = dependencies.has(entry.name)
+    const newlyOffered = !known && !migrate
+    let shouldInstall = alreadyInstalled || options.profileCreated || newlyOffered
+    let shouldEnable = selected.has(entry.name) || options.profileCreated || newlyOffered
+
+    if (migrate) {
+      const componentInstalled = entry.components.some(component => dependencies.has(component.name))
+      const componentSelected = entry.components.filter(component => selected.has(component.name))
+      const componentKnown = entry.components.some(component => legacyEnsured.has(component.name))
+      const legacyFilesRemoved = entry.name === LEGACY_FILES
+        && !componentInstalled && componentSelected.length === 0
+      shouldInstall = alreadyInstalled || componentInstalled || componentSelected.length > 0 || (componentKnown && !legacyFilesRemoved)
+      shouldEnable = selected.has(entry.name) || componentSelected.length > 0
+      if (shouldInstall && entry.components.length > 1) {
+        for (const component of entry.components) {
+          if (component.toggleable !== false && !selected.has(component.name)) disabledRows.push({ rowId: component.rowId })
+        }
+      }
+    } else if (known && !alreadyInstalled) {
+      shouldInstall = false
+      shouldEnable = false
+    }
+
+    offered.add(entry.name)
+    if (shouldInstall) install.push(entry)
+    if (shouldInstall && shouldEnable) enabled.add(entry.name)
+  }
+
+  const installedBefore = new Set(media.filter(entry => dependencies.has(entry.name)).map(entry => entry.name))
+  const { version: packageManagerVersion, ...packageManager } = options.packageManager ?? {}
+  const existingPackageManager = profilePackageManager(directory)
+  const needsPackageManagerMigration = install.length > 0
+    && pnpmMajor(existingPackageManager) !== undefined
+    && pnpmMajor(packageManagerVersion) !== undefined
+    && pnpmMajor(existingPackageManager) !== pnpmMajor(packageManagerVersion)
+  const migration = needsPackageManagerMigration ? beginPackageManagerMigration(directory) : undefined
+  if (migration !== undefined) {
+    options.onOutput?.(
+      `[dsh-remote] Profile 由 ${existingPackageManager} 安装，正在用随包 pnpm@${packageManagerVersion} 重建依赖链接。\n`,
+      'stdout',
+    )
+  }
+  if (install.length > 0) {
+    const result = await runPluginCommand({
+      profile: options.profile,
+      dir: directory,
+      home: options.home,
+      installAnchor: options.installAnchor,
+      cwd: process.cwd(),
+    }, ['add', ...install.map(entry => entry.directory)], {
+      execution: 'service',
+      outputBytes: 64 * 1024,
+      activateNewBundles: false,
+      ...packageManager,
+      ...options.onOutput === undefined ? {} : { onOutput: options.onOutput },
+    })
+    if (result.exitCode !== 0) {
+      migration?.rollback()
+      throw new Error(`安装或升级随附插件失败：${result.output || result.logPath}`)
+    }
+    migration?.commit()
+  }
+
+  if (migrate) {
+    const groupedComponents = media.flatMap(entry => entry.components)
+      .filter(component => !media.some(candidate => candidate.name === component.name))
+      .map(component => component.name)
+      .filter(name => profileManifest(manifestPath).dependencies[name] !== undefined)
+    if (groupedComponents.length > 0) {
+      const result = await runPluginCommand({
+        profile: options.profile,
+        dir: directory,
+        home: options.home,
+        installAnchor: options.installAnchor,
+        cwd: process.cwd(),
+      }, ['remove', ...groupedComponents], {
+        execution: 'service',
+        outputBytes: 64 * 1024,
+        activateNewBundles: false,
+        ...packageManager,
+        ...options.onOutput === undefined ? {} : { onOutput: options.onOutput },
+      })
+      if (result.exitCode !== 0) throw new Error(`清理旧插件依赖失败：${result.output || result.logPath}`)
+    }
+    preserveDisabledRows(patchPath, disabledRows)
+  }
+
+  const after = profileManifest(manifestPath)
+  after.dsh.profile.bundles = insertDistributions(after.dsh.profile.bundles, enabled)
+  writeTextAtomically(manifestPath, `${JSON.stringify(after, undefined, 2)}\n`)
+  const versions = Object.fromEntries(install.map(entry => [entry.name, entry.version]))
+  writeTextAtomically(join(directory, STATE_FILE), `${JSON.stringify({
+    schemaVersion: 2,
+    offered: [...offered],
+    versions,
+  } satisfies LifecycleState, undefined, 2)}\n`)
+
+  return {
+    installed: install.filter(entry => !installedBefore.has(entry.name)).map(entry => entry.name),
+    upgraded: install.filter(entry => installedBefore.has(entry.name)).map(entry => entry.name),
+    skippedRemoved: media.filter(entry => offered.has(entry.name) && !install.includes(entry)).map(entry => entry.name),
+    migrated: migrate,
+  }
+}
+
+/** 默认 profile 的最小基础层；第三方插件由 synchronizePluginDistributions 安装。 */
+export const BASE_PROFILE_BUNDLES = [DSH_BASE_BUNDLE, DSH_WEB_APP_BUNDLE] as const

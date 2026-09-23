@@ -1,8 +1,6 @@
-/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
+/** 子代理深度配置页文案。 */
 
 export const en = {
-  title: 'Subagent depth',
-  description: 'Set the maximum delegation depth for model-facing subagent tools.',
   maxDepth: 'Maximum delegation depth',
   depth0: '0 — Disable subagent delegation',
   depth1: '1 — Direct subagents only',
@@ -17,16 +15,11 @@ export const en = {
   saving: 'Saving…',
   saveFailed: 'dsh refused this change or the stored value did not match. Your draft was kept.',
   loading: 'Loading…',
-  unavailable: 'This dsh has not exposed the subagent depth setting.',
-  expand: 'Expand',
-  collapse: 'Collapse',
 } as const
 
 export type SubagentDepthKey = keyof typeof en
 
 export const zh: Record<SubagentDepthKey, string> = {
-  title: '子代理深度',
-  description: '设置模型委派子代理时允许的最大层数。',
   maxDepth: '最大委派深度',
   depth0: '0 — 禁用子代理委派',
   depth1: '1 — 只允许直接子代理',
@@ -41,7 +34,4 @@ export const zh: Record<SubagentDepthKey, string> = {
   saving: '正在保存…',
   saveFailed: 'dsh 拒绝了这次修改，或回读的值不一致。已保留你的草稿。',
   loading: '正在读取…',
-  unavailable: '这个 dsh 没有提供子代理深度设置。',
-  expand: '展开',
-  collapse: '收起',
 }

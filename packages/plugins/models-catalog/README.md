@@ -96,6 +96,9 @@ pnpm --filter @dsh-remote/dsh-plugin-models-catalog build
 pnpm --filter @dsh-remote/dsh-plugin-models-catalog exec vitest run --pool=threads
 ```
 
-## 停用与补回
+## 分发与管理
 
-本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：设置里的「模型目录更新」消失；已应用的模型条目保留，「删除本插件添加的模型」按钮也随之消失（改用 dsh 原生模型编辑）。launcher 不再自动补回；右键托盘图标选「补回模型目录更新」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-models-catalog` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。
+本包不作为独立安装项分发，而是 `@dsh-remote/dsh-plugin-model-enhancements`（模型增强 Bundle）的组件。
+模型目录与模型能力共同参与 `llm-pi-ai` 启动屏障，当前不支持在 Bundle 详情中单独关闭这两行；需要停用时应停用整个模型增强 Bundle。停用后，模型目录更新入口消失；已应用的模型条目保留。
+安装、卸载和升级也以整个模型增强 Bundle 为单位。launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，并保留停用状态；卸载后不会自动补回。
+需要重装时，在 dsh「添加插件」中填写发行包 `plugins/model-enhancements` 或开发环境 `.dev/plugins/model-enhancements` 的绝对目录。

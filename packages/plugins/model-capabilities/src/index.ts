@@ -155,7 +155,7 @@ export function apply(ctx: Context): void {
   const initial = overridesOf(scope.get())
   runtime.applyProtocolOverrides(initial)
   // 必须在 llm-pi-ai 条目的 settings validator 运行前完成。
-  ctx.provide(BOOTSTRAP_SERVICE, true)
+  if (ctx.root.get(BOOTSTRAP_SERVICE) === undefined) ctx.root.provide(BOOTSTRAP_SERVICE, true)
 
   scope.watch((next, previous) => {
     const nextOverrides = overridesOf(next)

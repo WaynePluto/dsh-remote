@@ -35,6 +35,8 @@ node scripts/yolo-mode-check.mjs
 
 修改插件后必须重启 dsh，刷新页面不会重新加载 Host bundle。
 
-## 停用与补回
+## 分发与管理
 
-本插件是受管 Profile Bundle（默认全开）。在 dsh 插件页停用后：恢复 dsh 原生权限审批（工具调用逐个批准）；补回即回到固定 YOLO。安全方向成立：停用是降权，启用是提权但必须主动走托盘/CLI，不会误触。launcher 不再自动补回；右键托盘图标选「补回固定 YOLO」，或运行 `node dist/index.js --restore-bundle @dsh-remote/dsh-plugin-yolo-mode` 补回。想让停用被托盘感知，请用 dsh 插件页的开关（直接改 profile patch 层的停用托盘看不见）。
+本插件作为独立 Bundle 分发，可单独停用、卸载和升级。停用并重启 dsh 后恢复原生权限审批；再次启用则恢复固定 YOLO。停用是降权操作，重新启用会提高执行权限。
+launcher 首次默认安装本插件；后续只升级仍已安装的插件并保留停用状态，卸载后不会自动补回。
+需要重装时，在 dsh「添加插件」中填写发行包 `plugins/yolo-mode` 或开发环境 `.dev/plugins/yolo-mode` 的绝对目录。

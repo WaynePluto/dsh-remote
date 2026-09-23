@@ -21,7 +21,7 @@ function project(): string {
 
 /** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`&`、`sh`、`node -e`） */
 function nodeCommand(snippet: string): string {
-  const quoted = `"${process.execPath}" -e "${snippet}"`
+  const quoted = `"${process.execPath}" --no-warnings -e "${snippet}"`
   return process.platform === 'win32' ? `& ${quoted}` : quoted
 }
 
@@ -59,11 +59,11 @@ describe('a real detached service', () => {
     expect(existsSync(started.record?.logFile as string)).toBe(true)
     const tail = logsOf(root, 'probe').tail
     expect(tail).toContain('SERVICE-UP')
-    // 测试契约：此处说明本测试锁定的行为和回归边界。（涉及：`-NoProfile`）
-    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
-    // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`Set-PSReadLineOption`）
-    // 实现说明：此处记录相关接口、边界和生命周期约束。
-    expect(tail.split('\n')[0]).toBe('SERVICE-UP')
+    // Node 的 experimental warning 可能由服务启动器在用户命令之前写入同一日志；
+    // 首条业务输出仍必须是服务自己的就绪标记。
+    const firstServiceLine = tail.split('\n').find(line => line !== ''
+      && !line.includes('[UNDICI-EHPA]') && !line.startsWith('(Use `node --trace-warnings'))
+    expect(firstServiceLine).toBe('SERVICE-UP')
 
     // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
     expect(readRegistry(root).services.map(row => row.name)).toEqual(['probe'])

@@ -1,6 +1,7 @@
 {
   "name": "@dsh-remote/dsh-plugin-browser-compat",
   "version": "0.0.2-20260922",
+  "description": "为旧版 WebKit 补齐 dsh 所需浏览器 API，并提供浏览器日志。",
   "license": "MIT",
   "private": true,
   "type": "module",

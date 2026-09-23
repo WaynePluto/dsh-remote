@@ -19,8 +19,6 @@ export const en = {
   imageZoomFit: 'Fit image to window',
   imageZoomFitShort: 'Fit',
   imageZoomPercent: '{value}%',
-  directoryGuideTitle: 'Workspace files',
-  directoryGuideDescription: 'Browse files in this session\'s workspace',
 } as const
 
 export type FilesKey = keyof typeof en
@@ -47,8 +45,6 @@ export const zh: Record<FilesKey, string> = {
   imageZoomFit: '适应窗口',
   imageZoomFitShort: '适应',
   imageZoomPercent: '{value}%',
-  directoryGuideTitle: '工作区文件',
-  directoryGuideDescription: '浏览会话工作区的文件',
 }
 
 export const NS = 'dsh-plugin-files'

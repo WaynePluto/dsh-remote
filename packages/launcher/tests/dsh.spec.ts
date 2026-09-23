@@ -1,29 +1,21 @@
-import { join } from 'node:path'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { delimiter, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { connectorArguments, resolveConnectorEntry } from '../src/connector.js'
-import { dshArguments, dshTokenFromLine } from '../src/dsh.js'
+import { dshArguments, dshTokenFromLine, preparePnpmShim, withBundledPnpmPath } from '../src/dsh.js'
 import {
-  MANAGED_PLUGIN_PACKAGES,
-  PLUGIN_BUNDLE_PATCH_FILE,
   PLUGIN_OVERLAY_FILE,
   SHELL_PLUGIN_PACKAGES,
-  checkManagedPluginBundles,
   resolveDshPluginOverlays,
 } from '../src/dsh-plugins.js'
 import { LauncherError } from '../src/errors.js'
 
 const DSH_BIN = join('C:', 'green', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
 
-/** 接受壳级 overlay 与每个受管 Bundle 产物的 `exists` 谓词。 */
+/** 接受壳级 overlay 的 `exists` 谓词。 */
 const installedAt = (roots: Readonly<Record<string, string>>) => (path: string): boolean =>
   SHELL_PLUGIN_PACKAGES.some(name => path === join(roots[name] as string, PLUGIN_OVERLAY_FILE))
-  || MANAGED_PLUGIN_PACKAGES.some(({ name, artifacts }) => {
-    const root = roots[name]
-    if (root === undefined) return false
-    return path === join(root, 'package.json')
-      || path === join(root, PLUGIN_BUNDLE_PATCH_FILE)
-      || artifacts.some(artifact => path === join(root, ...artifact))
-  })
 
 describe('dsh arguments', () => {
   it('runs mode A: loopback bind plus every authority a browser may send', () => {
@@ -85,6 +77,29 @@ describe('dsh arguments', () => {
   })
 })
 
+describe('dsh plugin package manager environment', () => {
+  it('keeps the bundled pnpm binary ahead of the inherited PATH', () => {
+    const pnpmCli = join('D:', 'runtime', 'node_modules', 'pnpm', 'bin', 'pnpm.cjs')
+    const environment = withBundledPnpmPath({ PATH: 'C:\\Windows\\System32' }, pnpmCli)
+    expect(environment.PATH).toBe(`${join('D:', 'runtime', 'node_modules', '.bin')}${delimiter}C:\\Windows\\System32`)
+  })
+
+  it('puts the local-directory pnpm shim before the bundled pnpm binary', () => {
+    const pnpmCli = join('D:', 'runtime', 'node_modules', 'pnpm', 'bin', 'pnpm.cjs')
+    const directory = mkdtempSync(join(tmpdir(), 'dsh-remote-pnpm-shim-'))
+    try {
+      const shim = preparePnpmShim(directory, pnpmCli)
+      const environment = withBundledPnpmPath({ Path: 'C:\\Windows' }, pnpmCli, shim)
+      expect(environment.Path).toBe(`${shim}${delimiter}${join('D:', 'runtime', 'node_modules', '.bin')}${delimiter}C:\\Windows`)
+      expect(existsSync(join(shim, 'pnpm-wrapper.mjs'))).toBe(true)
+      expect(existsSync(join(shim, process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'))).toBe(true)
+      expect(readFileSync(join(shim, 'pnpm-wrapper.mjs'), 'utf8')).toContain("join(process.cwd(), '.dsh-remote-plugin-media')")
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('dsh browser login token', () => {
   it('reads the token out of the URL line dsh prints on start-up', () => {
     expect(dshTokenFromLine('dsh web: http://127.0.0.1:3080/?token=abc123_-token'))
@@ -140,69 +155,38 @@ function barePluginName(name: string): string {
   return (name.split('/')[1] ?? name).replace(/^dsh-plugin-/u, '')
 }
 
-describe('dsh plugin overlays and managed bundles', () => {
+describe('dsh shell plugin overlay', () => {
   const packed = join('C:', 'green', 'dist')
   const source = join('D:', 'dev', 'dsh-remote', 'packages', 'launcher', 'src')
-  const allPackages = [...SHELL_PLUGIN_PACKAGES, ...MANAGED_PLUGIN_PACKAGES.map(plugin => plugin.name)]
-  /** 每个插件在绿色包中的位置。 */
-  const deployedRoots = Object.fromEntries(allPackages.map(name =>
+  const deployedRoots = Object.fromEntries(SHELL_PLUGIN_PACKAGES.map(name =>
     [name, join(packed, '..', 'node_modules', ...name.split('/'))]))
-  /** 每个插件在 workspace 中的位置。 */
-  const workspaceRoots = Object.fromEntries(allPackages.map(name =>
+  const workspaceRoots = Object.fromEntries(SHELL_PLUGIN_PACKAGES.map(name =>
     [name, join(source, '..', '..', 'plugins', barePluginName(name))]))
 
-  it('keeps exactly one shell overlay: the connection injection that nothing can disable', () => {
+  it('keeps exactly one non-removable shell overlay', () => {
     expect([...SHELL_PLUGIN_PACKAGES]).toEqual(['@dsh-remote/dsh-plugin-remote-privileged'])
   })
 
-  it('orders managed bundles with proxy before network plugins and yolo-mode last', () => {
-    const names = MANAGED_PLUGIN_PACKAGES.map(({ name }) => name)
-    expect(names.at(-1)).toBe('@dsh-remote/dsh-plugin-yolo-mode')
-    expect(names.indexOf('@dsh-remote/dsh-plugin-proxy'))
-      .toBeLessThan(names.indexOf('@dsh-remote/dsh-plugin-copilot-auth'))
-    expect(names).toContain('@dsh-remote/dsh-plugin-concise-mode')
+  it('keeps connection and model HMR prerequisites in the shell overlay', () => {
+    const root = workspaceRoots['@dsh-remote/dsh-plugin-remote-privileged'] as string
+    const overlay = readFileSync(join(root, PLUGIN_OVERLAY_FILE), 'utf8')
+    expect(overlay).toContain('id: connection')
+    expect(overlay).toContain('id: llm-pi-ai')
+    expect(overlay).toContain('modelsCatalogBootstrap')
+    expect(overlay).toContain('modelCapabilitiesBootstrap')
+    expect(overlay).toContain("name: './model-bootstrap.mjs'")
+    expect(existsSync(join(root, 'model-bootstrap.mjs'))).toBe(true)
   })
 
-  it('finds the shell overlay deployed into the package own node_modules', () => {
+  it('finds the overlay in packaged and workspace layouts', () => {
     expect(resolveDshPluginOverlays(packed, installedAt(deployedRoots)))
       .toEqual(SHELL_PLUGIN_PACKAGES.map(name => join(deployedRoots[name] as string, PLUGIN_OVERLAY_FILE)))
-  })
-
-  it('finds the shell overlay from the launcher own workspace location', () => {
     expect(resolveDshPluginOverlays(source, installedAt(workspaceRoots)))
       .toEqual(SHELL_PLUGIN_PACKAGES.map(name => join(workspaceRoots[name] as string, PLUGIN_OVERLAY_FILE)))
   })
 
-  it('refuses to start dsh without the shell overlay, instead of serving a half-broken UI', () => {
+  it('refuses to start without the shell overlay', () => {
     expect(() => resolveDshPluginOverlays(packed, () => false)).toThrow(LauncherError)
-  })
-
-  it('accepts complete managed bundles deployed into the package node_modules', () => {
-    expect(() => checkManagedPluginBundles(packed, installedAt(deployedRoots))).not.toThrow()
-    expect(() => checkManagedPluginBundles(source, installedAt(workspaceRoots))).not.toThrow()
-  })
-
-  it('refuses a managed bundle whose package cannot be resolved at all', () => {
-    const onlyShell = (path: string): boolean =>
-      SHELL_PLUGIN_PACKAGES.some(name => path === join(deployedRoots[name] as string, PLUGIN_OVERLAY_FILE))
-    expect(() => checkManagedPluginBundles(packed, onlyShell)).toThrow(LauncherError)
-  })
-
-  it('refuses a managed bundle whose patch layer is missing', () => {
-    const withoutPatchLayer = (path: string): boolean =>
-      installedAt(deployedRoots)(path) && !path.endsWith(PLUGIN_BUNDLE_PATCH_FILE)
-    expect(() => checkManagedPluginBundles(packed, withoutPatchLayer)).toThrow(LauncherError)
-  })
-
-  it('refuses a managed bundle whose build artifacts are missing, which would fail dsh\'s whole web UI', () => {
-    // dsh 的 client module scan 会将缺少 bundle 汇总成一个明确的 throw
-    //，使提供页面的 fiber 失败，因此检查不能只停在
-    // Host 模块。
-    const withoutClientBundle = (path: string): boolean =>
-      installedAt(deployedRoots)(path) && !path.endsWith(join('dist', 'client.js'))
-    expect(MANAGED_PLUGIN_PACKAGES.some(({ artifacts }) =>
-      artifacts.some(artifact => artifact.join('/') === 'dist/client.js'))).toBe(true)
-    expect(() => checkManagedPluginBundles(packed, withoutClientBundle)).toThrow(LauncherError)
   })
 })
 
