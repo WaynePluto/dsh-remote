@@ -60,7 +60,7 @@ models.dev 提供 reasoning_options，但 effort/toggle/budget_tokens 形态不�
 models 是持久的整份替换，卸载插件不会自动撤销配置。切回未加载该插件的官方 profile 前，
 应使用“删除本插件添加的模型”，避免未知混合协议模型无法恢复。
 
-在 dsh `0.1.6-alpha.2` 中，`llm-pi-ai` 读取已存但因目录漂移而不可服务的模型配置时，会保留该路由和编辑入口，
+在 dsh `0.1.7-rc.1` 中，`llm-pi-ai` 读取已存但因目录漂移而不可服务的模型配置时（`assertServiceable` 只校验新建或变更路由），会保留该路由和编辑入口，
 并在提供方目录显示诊断；只有新建或实际变更的路由仍按完整目录严格校验。项目 models-catalog 的恢复流程仍须先于
 写入校验运行，copilot-auth 使用的 `llm-pi-ai/github-copilot` 凭据格式不变。升级后的项目构建与冒烟验证见
 [源码依据](../02-dsh-facts.md)。
@@ -82,7 +82,7 @@ model-capabilities 编辑已有非空 models 列表的图片/推理字段；自�
 只开放单模型协议覆盖。协议覆盖保存在 dsh-plugin-model-capabilities，Host 先修改同一份外部
 pi-ai 运行时 map，再将 api 镜像到 dsh 保留的 models/modelOverrides 字段，优先级为用户覆盖 >
 pi-ai 默认 > models-catalog 推断。使用项目 provider-card 子槽与 React portal 挂到原生模型展开行，
-保存后回读；原生 DOM 不匹配时不显示附加控件，不能把字段写到错误模型。
+保存后按 mutate 布尔结果确认；原生 DOM 不匹配时不显示附加控件，不能把字段写到错误模型。
 
 ## 常用模型
 
@@ -106,6 +106,6 @@ EnvHttpProxyAgent 的所有字段显式传值，包括空串，避免回退读�
 - 卸载恢复保存的 ambient dispatcher，并关闭本实例创建的代理 Agent。
 - loopback 默认绕过代理；地址禁止 userinfo，不提供忽略 TLS 错误开关。
 - models-catalog 与 copilot-auth 共用该出口，不设置独立代理。
-- 保存使用 [设置写入契约](plugins.md)，先校验、后回读，失败保留草稿。
+- 保存使用 [设置写入契约](plugins.md)，先校验，mutate 返回 false 即拒绝，失败保留草稿。
 
 代理实现依据位于项目 packages/plugins/proxy/src；配置或测试不要通过关闭 TLS 校验来绕过证书问题。

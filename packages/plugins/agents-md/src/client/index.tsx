@@ -1,4 +1,4 @@
-/** 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。（涉及：`settings.section`、`$DSH_HOME/AGENTS.md`、`ctx.settingsScope`、`./nav-glyph.ts`） */
+/** 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。（涉及：`settings.section`、`$DSH_HOME/AGENTS.md`、`./nav-glyph.ts`） */
 
 import type { Context } from '@deepseek-ai/cordis'
 // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
@@ -28,7 +28,7 @@ const NS = NAMESPACE
 /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 const ORDER = 55
 
-/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`slots`、`locale`、`connection`、`settingsScope`） */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`slots`、`locale`、`connection`） */
 export const inject = ['slots', 'locale', 'connection']
 
 /** 实现说明：此处记录相关接口、边界和生命周期约束。 */

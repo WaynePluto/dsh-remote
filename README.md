@@ -247,7 +247,7 @@ pnpm start     # 运行已有 dist 产物；先确保上述开发介质和运行
 
 | 项 | 值 |
 |---|---|
-| dsh 版本 | `0.1.6-alpha.2`（alpha 通道，developer preview，**会有破坏性变更**） |
+| dsh 版本 | `0.1.7-rc.1`（next 通道，developer preview，**会有破坏性变更**） |
 | dsh 要求 Node | `^22.19.0 \|\| >=24.0.0` |
 | 运行时策略 | 使用用户本机 Node，不携带 Node 二进制 |
 | 原生模块 | 自身零原生模块（口令哈希用 Node 内置 scrypt）；dsh 自带按平台安装的二进制，所以发行包分平台 |

@@ -49,7 +49,7 @@ function createCard(): { card: HTMLElement; disclosure: HTMLButtonElement; advan
   return { card, disclosure, advanced }
 }
 
-function scope() {
+function form() {
   const snapshot = {
     status: 'ready' as const,
     value: { providers: { custom: { models: [{ id: 'vision-model' }] } } } as PiAiSettings,
@@ -62,7 +62,7 @@ function scope() {
   return {
     getSnapshot: () => snapshot,
     subscribe: () => () => {},
-    mutate: async () => {},
+    mutate: async () => true,
   }
 }
 
@@ -76,7 +76,7 @@ describe('ProviderCapabilitiesPortal', () => {
         provider={provider}
         configured
         keyConfigured
-        scope={scope() as never}
+        form={form() as never}
         t={(key: keyof typeof en) => en[key]}
       />,
       { container: card.firstElementChild as HTMLElement },

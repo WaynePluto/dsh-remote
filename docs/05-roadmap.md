@@ -17,7 +17,8 @@
 - [x] 22 个功能组件，按 4 个组合包与 7 个独立包随发行版提供，功能入口见插件索引。
 - [x] concise 与 concise-ptc 两个简洁预设，PTC 复用官方工具执行链。
 - [x] 固定 YOLO，用户提问保留人工回答。
-- [ ] dsh 0.1.6-alpha.2 适配；自动检查已完成，仍需真实链路验收（登录 → 发消息 → 流式输出），复核入口见 [源码依据](02-dsh-facts.md)。
+- [ ] dsh 0.1.7-rc.1 适配；代码迁移与各冒烟 check 已完成，仍需真实链路验收（登录 → 发消息 → 流式输出），复核入口见 [源码依据](02-dsh-facts.md)。
+- [ ] 上游已知问题：dsh 0.1.7-rc.1 停用 yolo-mode Bundle 时 session-controller 重挂载竞态（file-upload Agent resolver 二次注册失败，重启可恢复；concise-mode-check 已按签名精确豁免并标注）。等上游修复后移除豁免。
 - [x] 插件第三方化与组合分发（D20）代码已完成：22 个功能组件分为 4 个组合包与 7 个独立包，首次默认安装；配套升级所有仍安装项并保留 Bundle/组件停用，卸载后不补回，可从发行版 `plugins/` 或开发 `.dev/plugins/` 重装。directory-picker 独立；模型组两个启动屏障组件不可单独停用；connection 注入与模型 HMR 屏障仍为壳级 overlay。11 个 Bundle 的在线停用/启用自动检查与隔离启动已通过，实机界面验收仍见下一项及 [计划](plugin-optional-plan.md)。
 - [ ] 插件生命周期实机验收：组合包/组件停用后重启仍保持，卸载后 launcher 不补回，从随附目录重装当前版本；影子型插件（user-message-fork、files）层序生效，并检查深浅主题与中英文界面。
 - [x] 插件使用说明归属各包 README，docs 按主题组织且每篇不超过 600 行。

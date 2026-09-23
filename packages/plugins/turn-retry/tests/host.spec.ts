@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import {
   apply, BAD_PAYLOAD_CODE, dispatch, NOTICE_MESSAGE_LIMIT,
-  retryNoticeSummary, retryNoticeText, retrySession, SELF_NAMESPACE,
+  retryNoticeSummary, retryNoticeText, retrySession,
   UNKNOWN_ENDPOINT_CODE,
 } from '../src/index.js'
 import type { FailedTurnView, StoppedTurnView, TurnRetryState } from '../src/shared.js'
@@ -150,9 +150,9 @@ describe('retrySession', () => {
     expect(agent.followup).toHaveBeenCalledTimes(1)
     const message = agent.followup.mock.calls[0]?.[0] as {
       content: { type: string; text: string }[]
-      source: { kind: string; plugin: string; form: string; summary: string }
+      source: { kind: string; form: string; summary: string }
     }
-    expect(message.source).toMatchObject({ kind: 'plugin', plugin: SELF_NAMESPACE, form: 'notice' })
+    expect(message.source).toMatchObject({ kind: 'turn-retry', form: 'notice' })
     // 实现说明：此处记录相关接口、边界和生命周期约束。
     // 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。
     expect(message.content[0]?.text).toBe(retryNoticeText(PENDING))
@@ -193,7 +193,7 @@ describe('retrySession', () => {
   })
 
   it('allows plugin context waiting for the next step', async () => {
-    const context = { id: 'context-1', source: { kind: 'plugin' } }
+    const context = { id: 'context-1', source: { kind: 'turn-retry' } }
     const agent = fakeAgent({ inbox: { nextTurn: [], nextStep: [context] } })
     const built = fakeCtx({ agent, projection: PENDING })
     await expect(retrySession(built.ctx, 's1')).resolves.toEqual({ started: true })

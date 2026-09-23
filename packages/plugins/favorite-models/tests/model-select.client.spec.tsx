@@ -3,10 +3,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
-  IconCheckOutline16: () => null,
-  IconChevronDownOutline14: () => null,
-  IconChevronRightOutline14: () => null,
-  IconWarningOutline16: () => null,
+  IconCheckOutlineMedium: () => null,
+  IconChevronDownOutlineMedium: () => null,
+  IconChevronRightOutlineMedium: () => null,
+  IconWarningOutlineMedium: () => null,
   Toast: () => null,
 }))
 
@@ -18,7 +18,8 @@ import { en } from '../src/client/locales.js'
 
 const t = (key: keyof typeof en): string => en[key]
 
-function settingsScope(favorites: Array<{ provider: string; model: string }>) {
+/** dsh 0.1.7 起收藏快照来自 configForms 绑定的 ConfigForm；mutate/set/unset 都以 boolean 回答。 */
+function favoritesForm(favorites: Array<{ provider: string; model: string }>) {
   const snapshot = {
     status: 'ready' as const,
     value: { favorites },
@@ -31,9 +32,9 @@ function settingsScope(favorites: Array<{ provider: string; model: string }>) {
   return {
     getSnapshot: () => snapshot,
     subscribe: () => () => {},
-    mutate: vi.fn(async () => {}),
-    set: vi.fn(async () => {}),
-    unset: vi.fn(async () => {}),
+    mutate: vi.fn(async () => true),
+    set: vi.fn(async () => true),
+    unset: vi.fn(async () => true),
   }
 }
 
@@ -77,7 +78,7 @@ describe('FavoriteModelSelect', () => {
       directory={createSnapshotStore<ModelDirectoryState>(modelState())}
       load={vi.fn()}
       select={vi.fn().mockResolvedValue(true)}
-      favorites={settingsScope([])}
+      favorites={favoritesForm([])}
       t={t}
     />)
 
@@ -100,7 +101,7 @@ describe('FavoriteModelSelect', () => {
       directory={directory}
       load={vi.fn()}
       select={vi.fn().mockResolvedValue(true)}
-      favorites={settingsScope([{ provider: 'provider-b', model: 'b-only' }])}
+      favorites={favoritesForm([{ provider: 'provider-b', model: 'b-only' }])}
       t={t}
     />)
 
@@ -123,7 +124,7 @@ describe('FavoriteModelSelect', () => {
       directory={directory}
       load={vi.fn()}
       select={select}
-      favorites={settingsScope([{ provider: 'provider-a', model: 'a-only' }])}
+      favorites={favoritesForm([{ provider: 'provider-a', model: 'a-only' }])}
       t={t}
     />)
 
@@ -145,7 +146,7 @@ describe('FavoriteModelSelect', () => {
       directory={createSnapshotStore<ModelDirectoryState>(modelState())}
       load={load}
       select={vi.fn().mockResolvedValue(false)}
-      favorites={settingsScope([])}
+      favorites={favoritesForm([])}
       t={t}
     />)
     expect(screen.queryByRole('button')).toBeNull()

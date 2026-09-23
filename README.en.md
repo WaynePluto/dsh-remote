@@ -252,7 +252,7 @@ The tunnel, authentication, portable packages, and 22 functional plugin componen
 
 | Item | Value |
 |---|---|
-| dsh version | `0.1.6-alpha.2` (alpha channel, developer preview, **breaking changes expected**) |
+| dsh version | `0.1.7-rc.1` (next channel, developer preview, **breaking changes expected**) |
 | dsh Node requirement | `^22.19.0 \|\| >=24.0.0` |
 | Runtime policy | uses your local Node; no Node binary bundled |
 | Native modules | zero in our own code (scrypt from Node core); dsh ships prebuilt per-platform binaries, hence per-platform packages |

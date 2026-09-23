@@ -79,7 +79,7 @@ describe('log fullscreen', () => {
   })
   it('renders the public toggle and hides drag handles while fullscreen', () => {
     const dialogSource = readFileSync(new URL('../src/client/ServiceLogDialog.tsx', import.meta.url), 'utf8')
-    expect(dialogSource).toContain('IconFullscreenOutline16')
+    expect(dialogSource).toContain('IconFullscreenOutlineMedium')
     expect(dialogSource).toContain('DialogFullscreenButton')
     expect(dialogSource).toContain('dataAttribute={LOG_DIALOG_FULLSCREEN_ATTR}')
     expect(dialogSource).toMatch(/\{!fullscreen && <LogMoveHandle/u)

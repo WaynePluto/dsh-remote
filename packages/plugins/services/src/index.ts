@@ -47,8 +47,8 @@ export interface Config {
   approvalInConfinedSandbox: boolean
 }
 
-/** {@link Config} 的 runtime schema。 */
-export const Config: zs<Config> = zs.object({
+/** {@link Config} 的 runtime schema；schemastery 3.18 起常量不再显式注解 `zs<Config>`，类型由上方 interface 单独声明。 */
+export const Config = zs.object({
   approvalInConfinedSandbox: zs.boolean().default(true),
 })
 

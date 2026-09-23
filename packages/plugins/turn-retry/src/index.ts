@@ -12,14 +12,23 @@ import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 // `createUserMessage` 是唯一需要的 runtime dsh import，必须放在 dependencies；它生成 branded MessageId 并 deep-freeze notice message，不能在插件内重实现。
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { ConnectionRpcResult } from '@deepseek-ai/dsh-client-connection'
 import { foldTurnRetry, INITIAL_STATE } from './projection.js'
 import {
   BAD_PAYLOAD_CODE, CHANNEL, INTERNAL_CODE, isRetryRequest, isTurnRetryEndpoint,
-  PROJECTION_KEY, SELF_NAMESPACE, UNKNOWN_ENDPOINT_CODE,
+  PROJECTION_KEY, UNKNOWN_ENDPOINT_CODE,
 } from './shared.js'
 import type { RetryResult, TurnRetryState, TurnRetryView } from './shared.js'
+
+// dsh 0.1.7 起没有共享的 `plugin` kind：每种生产者在自己的模块里声明专属 kind，
+// 消费者对未知 kind 走 fall-through。本插件的 notice 以 `turn-retry` 为身份。
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'turn-retry': { kind: 'turn-retry' } & ContextFormed
+  }
+}
 
 export {
   BAD_PAYLOAD_CODE, CHANNEL, clampMessage, HOPELESS_CODES, INTERNAL_CODE, isWorthRetrying,
@@ -114,8 +123,7 @@ export async function retrySession(ctx: Context, sessionId: string): Promise<Ret
     content: [{ type: 'text', text: retryNoticeText(pending) }],
     // 使用 dsh 自己的 `form: 'notice'` + `summary` shape，让 notice 以折叠行进入 history，而不是 user bubble。
     source: {
-      kind: 'plugin',
-      plugin: SELF_NAMESPACE,
+      kind: 'turn-retry',
       form: 'notice',
       summary: retryNoticeSummary(pending),
     },

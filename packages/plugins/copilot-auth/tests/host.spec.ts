@@ -17,6 +17,7 @@ vi.mock('@earendil-works/pi-ai/providers/github-copilot', () => ({
 
 const { credentialStoreFor, describeGrant, jsonImage, RECORD_KEY, toRecord } = await import('../src/credential-store.js')
 const { describedModelIds, ensureProviderRoute, isRouteConfigured } = await import('../src/provider-route.js')
+const { PI_AI_NAMESPACE } = await import('../src/shared.js')
 const { CopilotSignIn } = await import('../src/sign-in.js')
 const { dispatch, UNKNOWN_ENDPOINT_CODE } = await import('../src/index.js')
 
@@ -36,12 +37,12 @@ function fakeCredentials(initial?: CredentialRecord) {
   }
 }
 
-/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
+/** 设置写入契约：dsh 0.1.7 起读取经 describe()（返回按 entry id 寻址的 SettingsDescriptor），写入仍是 mutate(ns, ops)。 */
 function fakeSettings(initial: Record<string, unknown> = {}) {
   const section: Record<string, unknown> = { ...initial }
   const ops: unknown[] = []
   return {
-    get: vi.fn(() => section),
+    describe: vi.fn(() => [{ ns: PI_AI_NAMESPACE, value: section }]),
     mutate: vi.fn(async (_ns: string, next: readonly { op: string; path: readonly string[]; value?: unknown }[]) => {
       ops.push(...next)
       for (const op of next) {

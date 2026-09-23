@@ -47,10 +47,10 @@ function inspectBundle() {
       ['react/jsx-runtime', { jsx: NOOP, jsxs: NOOP, Fragment: NOOP }],
       ['@deepseek-ai/dsh-client-ui-primitives', {
         Button: NOOP,
-        IconCheckOutline16: NOOP,
-        IconChevronDownOutline14: NOOP,
-        IconChevronRightOutline14: NOOP,
-        IconWarningOutline16: NOOP,
+        IconCheckOutlineMedium: NOOP,
+        IconChevronDownOutlineMedium: NOOP,
+        IconChevronRightOutlineMedium: NOOP,
+        IconWarningOutlineMedium: NOOP,
         Input: NOOP,
         Tag: NOOP,
         Toast: NOOP,
@@ -60,10 +60,12 @@ function inspectBundle() {
     unknownExternal: (id) => new Error('client bundle requested a non-platform module: ' + id),
     buildContext: ({ source, exports }) => {
       const registrations = []
-      const scope = {
+      const form = {
         getSnapshot: () => ({ status: 'ready', value: { favorites: [] }, writable: true }),
         subscribe: () => NOOP,
-        mutate: async () => {},
+        mutate: async () => true,
+        set: async () => true,
+        unset: async () => true,
       }
       const directory = {
         store: { getSnapshot: () => ({ current: null, routable: null, groups: [], failures: [], status: 'idle', error: null }), subscribe: () => NOOP },
@@ -73,7 +75,7 @@ function inspectBundle() {
       const ctx = {
         effect: (run) => { run() },
         locale: { register: () => NOOP, bind: () => (key) => key },
-        settingsScope: { bind: () => scope },
+        configForms: { get: () => form },
         sessions: { subagentAddress: () => undefined, list: { getSnapshot: () => ({ current: 'session-1' }), subscribe: () => NOOP } },
         modelDirectories: { directoryFor: () => directory },
         slots: {

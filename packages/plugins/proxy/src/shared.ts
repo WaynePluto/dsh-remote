@@ -3,6 +3,12 @@
 /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。（涉及：`config`、`Config`、`@dsh-remote/dsh-plugin-proxy`、`settings.yaml`、`dsh-plugin-`） */
 export const NAMESPACE = 'dsh-plugin-proxy'
 
+/**
+ * dsh 0.1.7 起 configForms/设置表单以 profile 行的 entry id 寻址（`cordis.patch.yml`
+ * 里 `insert` 行的 `id` 字段），与文案命名空间不再是同一个字符串。
+ */
+export const ENTRY_ID = 'proxy'
+
 /** 本插件拥有的逻辑 RPC 通道；dsh 像处理 `/api` 一样对其设门。 */
 export const CHANNEL = '/proxy'
 

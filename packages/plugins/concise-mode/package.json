@@ -5,7 +5,9 @@
   "license": "MIT",
   "private": true,
   "type": "module",
-  "files": ["cordis.patch.yml", "presets"],
+  "files": [
+    "cordis.patch.yml"
+  ],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"

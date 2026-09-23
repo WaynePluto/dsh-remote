@@ -11,11 +11,12 @@ interface PiAiSection {
   providers?: Record<string, unknown>
 }
 
-/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。（涉及：`llm-pi-ai`） */
+/** 设置写入契约：dsh 0.1.7 起跨命名空间读取经 `settings.describe()`，表单命名空间是 profile 行 entry id（`llm-pi-ai` 行 id 不变）。（涉及：`llm-pi-ai`、`github-copilot`） */
 function section(ctx: Context): PiAiSection | undefined {
   const settings = ctx.get('settings')
   if (settings === undefined) return undefined
-  const value = settings.get(PI_AI_NAMESPACE)
+  const descriptor = settings.describe().find(item => item.ns === PI_AI_NAMESPACE)
+  const value = descriptor?.value
   return typeof value === 'object' && value !== null ? (value as PiAiSection) : undefined
 }
 

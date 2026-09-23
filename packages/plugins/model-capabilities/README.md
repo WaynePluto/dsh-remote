@@ -8,9 +8,9 @@
 
 ## 协议覆盖
 
-dsh 的 `PiAiModelProfile` 没有公开的单模型 `api` 字段。本插件使用自己的
-`dsh-plugin-model-capabilities` 设置命名空间保存稀疏的用户覆盖，同时把 `api` 镜像到 dsh
-能接受的 `models` / `modelOverrides` 设置字段。Host 半在写入前修改 dsh 实际使用的外部 pi-ai
+dsh 的 `PiAiModelProfile` 没有公开的单模型 `api` 字段。本插件在自己的行 config（entry id
+`model-capabilities` 的 `protocolOverrides` volatile 字段）里保存稀疏的用户覆盖，同时把 `api`
+镜像到 dsh 能接受的 `models` / `modelOverrides` 设置字段。Host 半在写入前修改 dsh 实际使用的外部 pi-ai
 目录，确保 dsh 重新解析路由时采用用户选择的协议；启动时也会在 `llm-pi-ai` 校验之前恢复覆盖。
 
 优先级为：**用户覆盖 > pi-ai 目录默认协议 > models-catalog 的协议推断**。选择「默认」会删除
@@ -29,7 +29,8 @@ dsh 的 `PiAiModelProfile` 没有公开的单模型 `api` 字段。本插件使�
 wire 值，表示不发送推理参数；其他已启用等级必须填写非空值。
 
 能力编辑仍然只修改已有的非空 `models` 列表；自带模型没有列表时只开放协议覆盖，不创建整份
-模型列表。写入时按模型 id 更新并保留其他字段；保存后回读确认，dsh 拒绝写入时保留草稿。
+模型列表。写入时按模型 id 更新并保留其他字段；dsh 0.1.7 起表单写入显式返回接受与否，
+被拒绝时保留草稿。
 
 ## 装载与开发
 

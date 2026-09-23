@@ -7,7 +7,7 @@ import type { ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selec
 
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
   Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props}>{children}</button>,
-  IconChevronDownOutline14: () => null,
+  IconChevronDownOutlineMedium: () => null,
   Input: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
   Tag: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
 }))
@@ -19,6 +19,7 @@ afterEach(cleanup)
 
 const t = (key: keyof typeof en): string => en[key]
 
+/** dsh 0.1.7 起面板经 ConfigForm 读写：mutate 返回 boolean，false=宿主拒绝；接受时更新快照并通知订阅者。 */
 function setup(rejectWrite: boolean) {
   let snapshot = {
     status: 'ready' as const,
@@ -30,19 +31,20 @@ function setup(rejectWrite: boolean) {
     mode: 'host' as const,
   }
   const listeners = new Set<() => void>()
-  const scope = {
+  const form = {
     getSnapshot: () => snapshot,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
     mutate: vi.fn(async (ops: readonly { op: string; path: string[]; value?: unknown }[]) => {
-      if (rejectWrite) return
+      if (rejectWrite) return false
       const next = ops[0]?.value
       if (Array.isArray(next)) {
         snapshot = { ...snapshot, value: { favorites: next as Array<{ provider: string; model: string }> } }
         for (const listener of listeners) listener()
       }
+      return true
     }),
-    set: vi.fn(async () => {}),
-    unset: vi.fn(async () => {}),
+    set: vi.fn(async () => true),
+    unset: vi.fn(async () => true),
   }
   const directoryState: ModelDirectoryState = {
     current: null,
@@ -65,14 +67,14 @@ function setup(rejectWrite: boolean) {
     getSnapshot: () => sessionSnapshot,
     subscribe: () => () => {},
   }
-  return { scope, directory, session }
+  return { form, directory, session }
 }
 
 describe('FavoriteModelsPanel settings persistence', () => {
   it('starts compact and opens the editor from the disclosure header', () => {
     const fixture = setup(false)
     render(<FavoriteModelsPanel
-      scope={fixture.scope}
+      form={fixture.form}
       session={fixture.session}
       getDirectory={() => fixture.directory}
       t={t}
@@ -90,7 +92,7 @@ describe('FavoriteModelsPanel settings persistence', () => {
   it('saves the selected provider/model pair and shows the saved state', async () => {
     const fixture = setup(false)
     render(<FavoriteModelsPanel
-      scope={fixture.scope}
+      form={fixture.form}
       session={fixture.session}
       getDirectory={() => fixture.directory}
       t={t}
@@ -100,7 +102,7 @@ describe('FavoriteModelsPanel settings persistence', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'A only' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => {
-      expect(fixture.scope.mutate).toHaveBeenCalledWith([{
+      expect(fixture.form.mutate).toHaveBeenCalledWith([{
         op: 'set',
         path: ['favorites'],
         value: [{ provider: 'provider-a', model: 'a-only' }],
@@ -109,10 +111,10 @@ describe('FavoriteModelsPanel settings persistence', () => {
     })
   })
 
-  it('keeps the checked draft when mutate resolves without changing the stored snapshot', async () => {
+  it('keeps the checked draft when the host refuses the write (mutate answers false)', async () => {
     const fixture = setup(true)
     render(<FavoriteModelsPanel
-      scope={fixture.scope}
+      form={fixture.form}
       session={fixture.session}
       getDirectory={() => fixture.directory}
       t={t}

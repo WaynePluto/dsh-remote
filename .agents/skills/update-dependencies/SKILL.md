@@ -163,10 +163,10 @@ pnpm dev                             # 起 relay + connector + dsh，浏览器�
 首页是否被 relay 的 `?token=` 重定向换成了 dsh 的 cookie（不应看到 dsh 的 401 文本）、
 `/api/remote.mux` 是否 101、`/plugins/??…` combo bundle 是否 200、审批卡片能否点。
 
-⚠️ **`proxy-check.mjs` 还盯着一条 dsh 行为**：`SettingsScope.mutate` 在宿主拒绝时是 **resolve
-不是 reject**（见 `docs/dsh/plugins.md`）。哪天 dsh 改成 reject（或给 snapshot 加上 error 字段），
-代理页里那段「写完再核对是否落地」的代码就可以简化 —— 但**在确认之前不要删**，
-它现在是页面唯一能知道「被拒了」的途径。
+⚠️ **`proxy-check.mjs` 盯着的 dsh 行为已随 0.1.7 更新**：`ConfigForm.mutate/set/unset` 现在**返回
+Promise<boolean>，false 即宿主拒绝**（见 `docs/dsh/plugins.md`）。0.1.6 时代「resolve 但需写后回读比对」
+的补丁代码已在 0.1.7 迁移时删除；若某次升级 check 报「拒绝未识别」，先确认 boolean 契约是否又变了
+（例如改回 reject 或增加错误字段），同步插件页与 check 脚本。
 
 **插件侧额外要复核的四件事**（后三条由两个 check 脚本覆盖，它们报错就是其中一条变了）：
 
@@ -201,7 +201,7 @@ pnpm dev                             # 起 relay + connector + dsh，浏览器�
 重启会打断当时正在进行的任务（生成中的回复、执行中的工具调用；会话历史与 services 常驻服务不受影响）。
 重启的唯一原因是 dsh 的 trustedHosts 在进程内**不可变**，而换入口必然改变 Host 集合，不重启就会 403。
 
-**源码依据（基线 ddefc45fbc / dsh 0.1.6-alpha.2，升级时逐条复核）**：
+**源码依据（基线 46a7f68b09 / dsh 0.1.7-rc.1，升级时逐条复核）**：
 
 - trustedHosts 来自 connection 插件启动配置，加载时一次性解析
   （`packages/client/connection/src/index.ts` 的 `apply()`，非法条目启动即失败）

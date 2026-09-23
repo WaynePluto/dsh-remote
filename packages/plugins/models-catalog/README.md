@@ -23,9 +23,9 @@ dsh 发版才会出现。这个插件在运行时读同一份上游文档，把�
    找不到时按 `gpt-* → openai-responses`、`claude-* → anthropic-messages`、其他 →
    `openai-completions`。混合协议路由会先把完整模型记录加入 pi-ai 的同一运行时目录，再写 dsh
    的模型列表；启动时从本插件溯源恢复这些记录。
-3. **保留已有条目。** 本插件在自己的设置命名空间 `dsh-plugin-models-catalog` 里记溯源；用户或其他
-   插件已有的 `models` 条目原样带过，只追加本插件发现的新 ID，并且撤销时只删除自己的 ID。
-   这让 Copilot 的订阅筛选列表也可以继续使用。
+3. **保留已有条目。** 本插件在自己的行 config（entry id `models-catalog` 的 `overlays` volatile
+   字段）里记溯源；用户或其他插件已有的 `models` 条目原样带过，只追加本插件发现的新 ID，并且撤销时
+   只删除自己的 ID。这让 Copilot 的订阅筛选列表也可以继续使用。
 
 ## 已知的降级
 
@@ -42,8 +42,8 @@ pi-ai 目录更新后让插件自动交还原生条目。协议与能力限制�
 ## 配置
 
 `sourceUrl` 是 **cordis 插件的 config**（`export const Config` + `apply(ctx, config)`），
-**不是设置页里的东西** —— dsh 的「插件配置」页编辑的是*设置命名空间*（bash、web-search 那些卡片），
-够不到 cordis 的 plugin config。
+**不是设置页里的东西** —— dsh 0.1.7 起设置页编辑的是各插件行 config 的 volatile 字段
+（本插件行只有内部记账的 `overlays`），`sourceUrl` 不是 volatile，设置页够不到它。
 
 | 键 | 默认 | 说明 |
 |---|---|---|
@@ -69,7 +69,8 @@ pi-ai 目录更新后让插件自动交还原生条目。协议与能力限制�
 
 ## 「删除本插件添加的模型」这个按钮为什么必须有
 
-插件写的是**用户真实的、持久的 `settings.yaml`**，而且 `models` 是**整份替换**语义。由此推出三件事：
+插件写的是**用户真实的、持久的 profile 配置文件**（dsh 0.1.7 起 `llm-pi-ai` 行 config 的
+`providers` 字段，落在 profile patch 里），而且 `models` 是**整份替换**语义。由此推出三件事：
 
 1. **卸载插件不会带走这些写入。** 设置文件独立于插件存在；插件没了，它写下的模型列表还在生效。
 2. **自动清理只管「dsh 已经自带了」那一种情况**，不管「我不想要了」——比如从 models.dev 抄来的

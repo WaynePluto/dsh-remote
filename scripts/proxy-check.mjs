@@ -1,6 +1,8 @@
 /**
  * 冒烟：确认代理设置写入在真 dsh 上通过。
- * 回归线上 bug：宿主校验器拒绝无协议 `127.0.0.1:7890`；`SettingsScope.mutate` 被宿主拒绝时 resolve 不 reject（`packages/client/ui-settings/src/client/settings-scope.ts:132-135`），会静默重载状态，把「拒绝」显示成「已保存」并丢掉草稿。
+ * dsh 0.1.7 起设置写入走插件行 volatile Config，命名空间是 profile 行 entry id（`proxy`）；
+ * `settings/mutate` 被宿主拒绝时返回 `{ok:false}`（不再是 resolve-后-回读）。
+ * 回归用例保留：宿主校验器拒绝无协议 `127.0.0.1:7890` 的问题曾把「拒绝」显示成「已保存」。
  * 单测只能覆盖纯函数；必须真实调用 `/api/settings/mutate` 才能验证宿主是否接受写入。
  * 运行：`node scripts/proxy-check.mjs [--port 3097]`。
  * 全程不出网、不改用户 DSH_HOME（使用临时 home）。
@@ -11,7 +13,7 @@ import { DSH_BIN, DSH_PROFILE, DEV_DIRECTORY, ROOT, dshPluginOverlays } from './
 import { createCheckContext, runLiveDshCheck } from './lib/check-context.mjs'
 
 const PACKAGE_ID = '@dsh-remote/dsh-plugin-proxy'
-const NAMESPACE = 'dsh-plugin-proxy'
+const ENTRY_ID = 'proxy'
 const portArgument = process.argv.indexOf('--port')
 const PORT = portArgument === -1 ? 3097 : Number(process.argv[portArgument + 1])
 const HOME = join(DEV_DIRECTORY, 'proxy-check-home')
@@ -45,7 +47,7 @@ const { prepareHome } = context
  * @returns {Promise<{ ok: boolean, detail: string }>} 宿主是否接受。
  */
 async function mutate(cookie, ops) {
-  const { body } = await context.callApi('settings/mutate', { ns: NAMESPACE, ops }, cookie)
+  const { body } = await context.callApi('settings/mutate', { ns: ENTRY_ID, ops }, cookie)
   const ok = body?.result?.ok === true
   return { ok, detail: JSON.stringify(body?.result?.error ?? body?.result?.value?.user ?? body).slice(0, 160) }
 }
@@ -66,8 +68,8 @@ async function main() {
       const described = await context.callApi('settings/describe', {}, cookie)
       const namespaces = described.body?.result?.value?.namespaces ?? []
       check(
-        Array.isArray(namespaces) && namespaces.some(entry => entry?.ns === NAMESPACE),
-        `宿主注册了设置命名空间 ${NAMESPACE}`,
+        Array.isArray(namespaces) && namespaces.some(entry => entry?.ns === ENTRY_ID),
+        `宿主注册了设置条目 ${ENTRY_ID}`,
         JSON.stringify(namespaces.map(entry => entry?.ns)).slice(0, 160),
       )
 

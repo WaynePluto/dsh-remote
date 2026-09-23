@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
-import { Button, IconChevronDownOutline14, Input, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconChevronDownOutlineMedium, Input, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ModelDirectory, ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selection/client'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { staleFavorites } from '../filter.js'
 import {
   canonicalizeFavorites, favoriteKey, favoritesFault, sameFavorites, DEFAULT_SETTINGS,
@@ -19,7 +19,7 @@ interface SessionBindingSource {
 }
 
 export interface FavoriteModelsPanelProps {
-  scope?: SettingsScope<FavoriteModelsSettings>
+  form?: ConfigForm<FavoriteModelsSettings>
   session?: SessionBindingSource
   getDirectory?: (sessionId: string) => Pick<ModelDirectory, 'store' | 'load'>
   t?: (key: FavoriteModelsKey) => string
@@ -38,31 +38,26 @@ const noopSubscribe = (): (() => void) => () => {}
 /** 缺省快照必须是稳定引用，否则 useSyncExternalStore 会无限重渲染。 */
 const NO_SESSION_BINDING = { key: undefined }
 
+/** 没有 form 时报告不可写、不可用，保持渲染分支一致。 */
+const NO_FORM_SNAPSHOT: ConfigFormSnapshot<FavoriteModelsSettings> = {
+  status: 'unavailable',
+  value: undefined,
+  base: undefined,
+  user: undefined,
+  revision: undefined,
+  writable: false,
+  mode: 'memory',
+}
+
 function textOf(t: ((key: FavoriteModelsKey) => string) | undefined, key: FavoriteModelsKey): string {
   return t?.(key) ?? key
 }
 
-export function FavoriteModelsPanel({ scope, session, getDirectory, t }: FavoriteModelsPanelProps): ReactNode {
+export function FavoriteModelsPanel({ form, session, getDirectory, t }: FavoriteModelsPanelProps): ReactNode {
   const settingsSnapshot = useSyncExternalStore(
-    listener => scope?.subscribe(listener) ?? noopSubscribe(),
-    () => scope?.getSnapshot() ?? {
-      status: 'unavailable' as const,
-      value: undefined,
-      base: undefined,
-      user: undefined,
-      revision: undefined,
-      writable: false,
-      mode: 'memory' as const,
-    },
-    () => scope?.getSnapshot() ?? {
-      status: 'unavailable' as const,
-      value: undefined,
-      base: undefined,
-      user: undefined,
-      revision: undefined,
-      writable: false,
-      mode: 'memory' as const,
-    },
+    listener => form?.subscribe(listener) ?? noopSubscribe(),
+    () => form?.getSnapshot() ?? NO_FORM_SNAPSHOT,
+    () => form?.getSnapshot() ?? NO_FORM_SNAPSHOT,
   )
   const sessionBinding = useSyncExternalStore(
     listener => session?.subscribe(listener) ?? noopSubscribe(),
@@ -149,8 +144,9 @@ export function FavoriteModelsPanel({ scope, session, getDirectory, t }: Favorit
     setSaved(false)
   }, [])
 
+  /** 设置写入契约：dsh 0.1.7 起 `form.mutate` 返回 boolean（false=宿主拒绝），无需再写后回读比对。 */
   const commit = useCallback(async (): Promise<void> => {
-    if (scope === undefined) return
+    if (form === undefined) return
     const next = canonicalizeFavorites(draft ?? settings.favorites)
     const fault = favoritesFault({ favorites: next })
     if (fault !== undefined) {
@@ -166,9 +162,8 @@ export function FavoriteModelsPanel({ scope, session, getDirectory, t }: Favorit
     setBusy(true)
     try {
       const wireFavorites = next.map(favorite => ({ provider: favorite.provider, model: favorite.model }))
-      await scope.mutate([{ op: 'set', path: ['favorites'], value: wireFavorites }])
-      const stored = scope.getSnapshot().value
-      if (stored === undefined || !sameFavorites(stored.favorites, next)) {
+      const accepted = await form.mutate([{ op: 'set', path: ['favorites'], value: wireFavorites }])
+      if (!accepted) {
         setFailure(textOf(t, 'rejected'))
         return
       }
@@ -180,9 +175,9 @@ export function FavoriteModelsPanel({ scope, session, getDirectory, t }: Favorit
     } finally {
       setBusy(false)
     }
-  }, [draft, scope, settings.favorites, t])
+  }, [draft, form, settings.favorites, t])
 
-  if (t === undefined || scope === undefined) return null
+  if (t === undefined || form === undefined) return null
   if (settingsSnapshot.status === 'loading') return <p style={css.note}>{t('loading')}</p>
   if (settingsSnapshot.status === 'unavailable') return <p style={css.errorText}>{t('unavailable')}</p>
 
@@ -209,7 +204,7 @@ export function FavoriteModelsPanel({ scope, session, getDirectory, t }: Favorit
             style={{ ...css.chevron, transform: open ? 'rotate(180deg)' : undefined }}
             aria-hidden="true"
           >
-            <IconChevronDownOutline14 />
+            <IconChevronDownOutlineMedium />
           </span>
         </button>
       </div>

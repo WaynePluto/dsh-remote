@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  FileTypeIcon, IconBranchOutline16, IconCheckOutline16, IconCopyOutline16,
+  FileTypeIcon, IconBranchOutlineMedium, IconCheckOutlineMedium, IconCopyOutlineMedium,
   JsonBlock, Tooltip, fileSizeText, projectUserText, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { UserMessageNode } from '@deepseek-ai/dsh-client-ui-chat/client'
@@ -154,7 +154,7 @@ function UserMessageActions({
       <span className={`${ACTIONS_CLASS}__time`}>{formatMessageClock(time, t)}</span>
       <Tooltip label={copied ? t('copied') : t('copy')} side="bottom">
         <button type="button" className={ACTION_CLASS} aria-label={copied ? t('copied') : t('copy')} onClick={copy}>
-          {copied ? <IconCheckOutline16 /> : <IconCopyOutline16 />}
+          {copied ? <IconCheckOutlineMedium /> : <IconCopyOutlineMedium />}
         </button>
       </Tooltip>
       <Tooltip label={reason === '' ? t('branch') : reason} side="bottom">
@@ -167,7 +167,7 @@ function UserMessageActions({
           data-unavailable={unavailable || undefined}
           onClick={unavailable ? undefined : branch}
         >
-          <IconBranchOutline16 />
+          <IconBranchOutlineMedium />
         </button>
       </Tooltip>
       {reason !== '' && <span id={reasonId} className={VISUALLY_HIDDEN_CLASS}>{reason}</span>}

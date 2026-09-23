@@ -3,7 +3,7 @@
 import { useCallback, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
@@ -15,9 +15,9 @@ import type { NAMESPACE, SubagentDepthSettings } from '../../shared.js'
 import type { SubagentDepthKey } from './locales.js'
 import { DepthSelect } from './DepthSelect.js'
 
-/** 配置组件从注册项取得的设置作用域。 */
+/** 配置组件从注册项取得的 config form。 */
 export interface SubagentDepthConfigInjected {
-  scope: SettingsScope<SubagentDepthSettings>
+  form: ConfigForm<SubagentDepthSettings>
 }
 
 /** Bundle 配置槽运行时属性、语言与设置能力的组合。 */
@@ -65,12 +65,12 @@ const localeKeyForDepth = (value: number): SubagentDepthKey => {
   }
 }
 
-/** 直接渲染 Bundle 配置字段，并保留草稿与写后回读确认。 */
+/** 直接渲染 Bundle 配置字段，保留草稿；mutate 的 boolean 回答确认保存。 */
 export function SubagentDepthConfig(props: SubagentDepthConfigProps): ReactNode {
-  const { scope, t, view } = props
-  const subscribe = useCallback((listener: () => void) => scope.subscribe(listener), [scope])
-  const getSnapshot = useCallback(() => scope.getSnapshot(), [scope])
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const { form, t, view } = props
+  const subscribe = useCallback((listener: () => void) => form.subscribe(listener), [form])
+  const getSnapshot = useCallback(() => form.getSnapshot(), [form])
+  const snapshot: ConfigFormSnapshot<SubagentDepthSettings> = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
   const [draft, setDraft] = useState<number | undefined>(undefined)
   const [saving, setSaving] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -100,12 +100,12 @@ export function SubagentDepthConfig(props: SubagentDepthConfigProps): ReactNode 
     setSaved(false)
     const expectedRevision = snapshot.revision
     try {
-      await scope.mutate(
+      // dsh 0.1.7 起 mutate 返回 boolean：false 即宿主拒绝，不再需要写后回读比对。
+      const accepted = await form.mutate(
         [{ op: 'set', path: ['maxDepth'], value: draft }],
         expectedRevision,
       )
-      const landed = scope.getSnapshot().value?.maxDepth === draft
-      if (!landed) {
+      if (!accepted) {
         setFailed(true)
         return
       }

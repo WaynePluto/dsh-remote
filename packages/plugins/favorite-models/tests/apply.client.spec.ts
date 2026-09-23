@@ -1,18 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
-  IconCheckOutline16: () => null,
-  IconChevronDownOutline14: () => null,
-  IconChevronRightOutline14: () => null,
-  IconWarningOutline16: () => null,
+  IconCheckOutlineMedium: () => null,
+  IconChevronDownOutlineMedium: () => null,
+  IconChevronRightOutlineMedium: () => null,
+  IconWarningOutlineMedium: () => null,
   Toast: () => null,
 }))
 
 import { apply, inject } from '../src/client/index.js'
+import { ENTRY_ID } from '../src/shared.js'
 
 function context() {
   const registrations: Array<{ options: Record<string, unknown>; component: unknown }> = []
-  const scope = {
+  const form = {
     getSnapshot: () => ({
       status: 'ready' as const,
       value: { favorites: [] },
@@ -23,9 +24,9 @@ function context() {
       mode: 'host' as const,
     }),
     subscribe: () => () => {},
-    mutate: vi.fn(async () => {}),
-    set: vi.fn(async () => {}),
-    unset: vi.fn(async () => {}),
+    mutate: vi.fn(async () => true),
+    set: vi.fn(async () => true),
+    unset: vi.fn(async () => true),
   }
   const ctx = {
     effect: (run: () => unknown) => run(),
@@ -33,11 +34,12 @@ function context() {
       register: vi.fn(() => () => {}),
       bind: vi.fn(() => (key: string) => key),
     },
-    settingsScope: { bind: vi.fn(() => scope) },
+    configForms: { get: vi.fn(() => form) },
     sessions: {
       subagentAddress: vi.fn(() => undefined),
       list: { getSnapshot: () => ({ current: 'session-1' }), subscribe: () => () => {} },
     },
+    uiSession: { adapter: { current: { getSnapshot: () => ({ key: 'session-1' }), subscribe: () => () => {} } } },
     modelDirectories: {
       directoryFor: vi.fn(() => ({
         store: {
@@ -56,7 +58,7 @@ function context() {
       },
     },
   }
-  return { ctx, registrations, scope }
+  return { ctx, registrations, form }
 }
 
 describe('favorite-models client wiring', () => {
@@ -70,6 +72,17 @@ describe('favorite-models client wiring', () => {
     expect(selector?.options.id).toBeUndefined()
     expect(footer?.options.id).toBe('dsh-plugin-favorite-models')
     expect(footer?.options.name).toBe('settings.models.footer')
+  })
+
+  it('binds the settings form to the plugin profile entry id, not the locale namespace', () => {
+    const { ctx, registrations, form } = context()
+    apply(ctx as never)
+    expect(ctx.configForms.get).toHaveBeenCalledWith(ENTRY_ID)
+    expect(ctx.configForms.get).not.toHaveBeenCalledWith('dsh-plugin-favorite-models')
+    // 注入槽位的 form 必须就是 configForms.get(entry id) 返回的同一个对象。
+    const footer = registrations.find(item => item.options.name === 'settings.models.footer')
+    const injected = footer === undefined ? undefined : (footer.options as { inject?: () => { form?: unknown } }).inject?.()
+    expect(injected?.form).toBe(form)
   })
 
   it('declares the remote faces needed by the session model directory', () => {

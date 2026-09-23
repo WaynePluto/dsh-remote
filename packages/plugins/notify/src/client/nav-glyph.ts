@@ -1,4 +1,4 @@
-import { IconAlarmClockOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconAlarmClockOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
 import { installNavigationGlyph, navigationGlyphStylesheet } from '@dsh-remote/plugin-ui'
 import { en, zh } from './locales.js'
 
@@ -8,7 +8,7 @@ const CELL = `button[class*="navCell"]:not([${MARKER}])`
 const LABEL = '[class*="navLabel"]'
 const LABELS: ReadonlySet<string> = new Set([en.nav, zh.nav])
 const INTERESTING = ['overlay', 'navCell']
-const OPTIONS = { marker: MARKER, cellSelector: CELL, labelSelector: LABEL, labels: LABELS, interesting: INTERESTING, icon: IconAlarmClockOutline16, maskSize: '16px' } as const
+const OPTIONS = { marker: MARKER, cellSelector: CELL, labelSelector: LABEL, labels: LABELS, interesting: INTERESTING, icon: IconAlarmClockOutlineMedium, maskSize: '16px' } as const
 
 /** 保留原导出名，生成通知设置页的导航样式。 */
 export function stylesheet(): string {

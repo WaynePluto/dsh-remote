@@ -13,6 +13,8 @@ import { createCheckContext, runLiveDshCheck } from './lib/check-context.mjs'
 
 const PACKAGE_ID = '@dsh-remote/dsh-plugin-notify'
 const NAMESPACE = 'dsh-plugin-notify'
+// dsh 0.1.7 起设置表单按 profile 行 entry id 寻址，与文案命名空间解耦。
+const ENTRY_ID = 'notify'
 const CHANNEL = 'notify'
 const portArgument = process.argv.indexOf('--port')
 const PORT = portArgument === -1 ? 3099 : Number(process.argv[portArgument + 1])
@@ -64,12 +66,12 @@ async function main() {
     },
     liveAssertions: async ({ cookie }) => {
       const described = await context.callApi('settings/describe', {}, cookie)
-      const sections = described.body?.result?.value?.sections ?? described.body?.result?.value ?? null
+      const sections = described.body?.result?.value?.namespaces ?? described.body?.result?.value?.sections ?? described.body?.result?.value ?? null
       const rendered = JSON.stringify(sections ?? described.body)
-      check(rendered.includes(NAMESPACE), '设置里出现了本插件的命名空间', rendered.slice(0, 200))
+      check(rendered.includes(ENTRY_ID), `设置里出现了本插件的表单条目 ${ENTRY_ID}`, rendered.slice(0, 200))
 
       const mutated = await context.callApi('settings/mutate', {
-        ns: NAMESPACE,
+        ns: ENTRY_ID,
         ops: [{ op: 'set', path: ['enabled'], value: false }],
       }, cookie)
       check(
@@ -77,7 +79,7 @@ async function main() {
         '开关能被写入（页面上的那次点击走的就是这条路）',
         JSON.stringify(mutated.body?.result?.error ?? '').slice(0, 200),
       )
-      await context.callApi('settings/mutate', { ns: NAMESPACE, ops: [{ op: 'set', path: ['enabled'], value: true }] }, cookie)
+      await context.callApi('settings/mutate', { ns: ENTRY_ID, ops: [{ op: 'set', path: ['enabled'], value: true }] }, cookie)
 
       const unknownEndpoint = await context.callChannel('nope', {}, cookie)
       check(

@@ -1,9 +1,9 @@
-/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`SettingsScope.mutate`、`packages/client/ui-settings/src/client/settings-scope.ts:132-135`、`catch`） */
+/** 设置写入契约：dsh 0.1.7 起 `ConfigForm.mutate` 返回 boolean（false=宿主拒绝），无需再写后回读比对。 */
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Button, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CSSProperties, ReactNode } from 'react'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { DEFAULT_SETTINGS, FIELDS } from '../shared.js'
 import type { NotifySettings, NotifyTestResult } from '../shared.js'
 import { fill } from './locales.js'
@@ -11,8 +11,8 @@ import type { NotifyKey } from './locales.js'
 
 /** 本插件注册时注入的内容。 */
 export interface NotifySectionInjected {
-  /** 绑定的 `dsh-plugin-notify` settings scope。 */
-  scope: SettingsScope<NotifySettings>
+  /** 绑定到本插件 entry id 的 config form。 */
+  form: ConfigForm<NotifySettings>
   /** 请求宿主立即发送一条通知。 */
   test: () => Promise<NotifyTestResult>
 }
@@ -47,11 +47,11 @@ const okStyle: CSSProperties = { color: 'var(--dsw-alias-state-success-primary, 
 
 /** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 export function NotifySection(props: NotifySectionProps): ReactNode {
-  const { scope, test, t } = props
-  const snapshot: SettingsScopeSnapshot<NotifySettings> | undefined = useSyncExternalStore(
-    useCallback((listener: () => void) => scope?.subscribe(listener) ?? (() => {}), [scope]),
-    useCallback(() => scope?.getSnapshot(), [scope]),
-    useCallback(() => scope?.getSnapshot(), [scope]),
+  const { form, test, t } = props
+  const snapshot: ConfigFormSnapshot<NotifySettings> | undefined = useSyncExternalStore(
+    useCallback((listener: () => void) => form?.subscribe(listener) ?? (() => {}), [form]),
+    useCallback(() => form?.getSnapshot(), [form]),
+    useCallback(() => form?.getSnapshot(), [form]),
   )
 
   const settings = snapshot?.value ?? DEFAULT_SETTINGS
@@ -73,18 +73,15 @@ export function NotifySection(props: NotifySectionProps): ReactNode {
     setSaved(false)
   }, [settings.enabled, settings.waiting])
 
-  /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
+  /** 设置写入契约：mutate 返回 false 即宿主拒绝（dsh 0.1.7 起显式回答，不再需要回读比对）。 */
   const commit = useCallback(async (key: typeof FIELDS[number], value: boolean): Promise<void> => {
-    if (scope === undefined) return
+    if (form === undefined) return
     setFailure(undefined)
     setBusy(true)
     const next: NotifySettings = { ...settings, [key]: value }
     try {
-      await scope.mutate([{ op: 'set', path: [key], value }])
-      // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`catch`）
-      // 能诚实回答“是否保存”。
-      const stored = scope.getSnapshot().value
-      if (stored === undefined || stored[key] !== value) {
+      const accepted = await form.mutate([{ op: 'set', path: [key], value }])
+      if (!accepted) {
         setFailure(t?.('rejected') ?? 'rejected')
         return
       }
@@ -95,7 +92,7 @@ export function NotifySection(props: NotifySectionProps): ReactNode {
     } finally {
       setBusy(false)
     }
-  }, [scope, settings, t])
+  }, [form, settings, t])
 
   const runTest = useCallback(async (): Promise<void> => {
     if (test === undefined) return
@@ -111,7 +108,7 @@ export function NotifySection(props: NotifySectionProps): ReactNode {
     }
   }, [test])
 
-  if (t === undefined || scope === undefined) return null
+  if (t === undefined || form === undefined) return null
   if (snapshot === undefined || snapshot.status === 'loading') return <p style={note}>{t('loading')}</p>
   if (snapshot.status === 'unavailable') return <p style={note}>{t('unavailable')}</p>
 

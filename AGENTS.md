@@ -44,7 +44,7 @@ TypeScript + ESM + pnpm workspace，构建 tsdown，开发 tsx，测试 Vitest�
 | 改动 | 必须阅读 | 关键约束 |
 |---|---|---|
 | 转发、登录、目录选择 | [传输](docs/dsh/transport.md)、[安全](docs/04-security.md) | 认证 → 原始安全检查 → 隧道；HTTP 用 node:http；upgrade 单独处理 |
-| 插件装载、设置、界面 | [插件机制](docs/dsh/plugins.md) | mutate 后回读，失败保留草稿；同 cell 同 priority 冲突；primitives external |
+| 插件装载、设置、界面 | [插件机制](docs/dsh/plugins.md) | mutate 返回 boolean（false 即拒绝），失败保留草稿；同 cell 同 priority 冲突；primitives external |
 | 模型与代理 | [模型](docs/dsh/models.md) | 保留用户条目、只清理插件溯源；混合协议先恢复同一 pi-ai map；代理唯一配置源 |
 | 重试、过程、分叉、通知 | [会话](docs/dsh/conversation.md) | 保护 nextTurn 队列；不移动 React DOM；保持 turn-tail 最后；idle 去抖 |
 | 权限、服务、PTY、工具统计 | [运行时](docs/dsh/runtime.md) | 不 append 自定义事件；统计回放历史；进程身份复核；交互终端仅用于人类输入 |
@@ -55,7 +55,7 @@ TypeScript + ESM + pnpm workspace，构建 tsdown，开发 tsx，测试 Vitest�
 
 ## 高风险约束
 
-- SettingsScope.mutate 在宿主拒绝时正常 resolve；两半共享校验，保存后回读确认，失败保留草稿并就地报错。
+- 设置写入走插件行 volatile Config：宿主半 loader/volatile-update + internal/config 校验钩子，浏览器半 configForms。mutate/set/unset 返回 boolean，false 即宿主拒绝；两半共享校验，失败保留草稿并就地报错（契约见 docs/dsh/plugins.md）。
 - 插件不能 append 自定义 Session 事件，否则持久化加载会拒绝会话；projection 只折叠已知事件，
   无关事件返回同一引用。工具/技能历史使用 snapshotEvents，查询 scope 必须传 live Agent。
 - yolo-mode 固定 danger-full-access + ask，合法 approval 自动 allowed-once，用户提问不自动回答。
@@ -77,8 +77,8 @@ TypeScript + ESM + pnpm workspace，构建 tsdown，开发 tsx，测试 Vitest�
 任何图标文字对齐先加载 flex-centering skill。dock 必须沿用 dsh todo 风格：specific-tip 背景、
 0.5px border-l1、12px 圆角、13px 标题、原生 outline 图标、整行 button 与 aria-expanded、共享宽度轴。
 表头嵌套 flex，图标必要时 translateY(0.115em)，摘要省略号在内层 span。
-箭头收起用 IconChevronUpOutline14，展开用 IconChevronDownOutline14，不用文本箭头。
-services 与 terminal 共用 IconApiOutline14。
+箭头收起用 IconChevronUpOutlineMedium，展开用 IconChevronDownOutlineMedium（dsh 0.1.7 起数字后缀改为 Medium/Regular），不用文本箭头。
+services 与 terminal 共用 IconApiOutlineMedium。
 
 深浅主题都验收；border-l1 的 l 是字母，浅色 bg-layer-1/2/3 都为白，font-mono 要完整 fallback 栈。
 消息整行隐藏保留零高度有序 rect，行内思考块用 display:none；sticky 在 wrapper 上按段尾自行推出。

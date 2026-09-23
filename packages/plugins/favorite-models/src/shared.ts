@@ -1,7 +1,13 @@
 /** favorites settings 的共享 contract。 */
 
-/** 本包拥有的 settings 命名空间。 */
+/** 本包拥有的文案命名空间；dsh 0.1.7 起仅用于 locale，不再寻址设置表单。 */
 export const NAMESPACE = 'dsh-plugin-favorite-models'
+
+/**
+ * dsh 0.1.7 起 configForms/设置表单以 profile 行的 entry id 寻址（`cordis.patch.yml`
+ * 里 `insert` 行的 `id` 字段），与文案命名空间不再是同一个字符串。
+ */
+export const ENTRY_ID = 'favorite-models'
 
 /** 一个收藏项，由 provider 和 model 两个身份字段组成。 */
 export interface FavoriteModel {

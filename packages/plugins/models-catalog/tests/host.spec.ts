@@ -38,16 +38,18 @@ function applyOp(section: Record<string, unknown>, op: { op: string; path: reado
 /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 const writes: string[] = []
 
-/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
-function fakeCtx(sections: Record<string, Record<string, unknown>>): Context {
-  return {
+/**
+ * 进程与运行时契约：dsh 0.1.7 起伪 settings 服务用 `describe()` 暴露各 entry 行的
+ * config 投影、用 `mutate(entryId, ops)` 写入；provenance 从本插件行 `overlays` volatile 引用实时读取。
+ */
+function mount(sections: Record<string, Record<string, unknown>>): InstanceType<typeof CatalogService> {
+  const ctx: Context = {
     settings: {
-      get: (ns: string) => sections[ns],
-      register: vi.fn(),
+      describe: () => Object.entries(sections).map(([ns, value]) => ({ ns, value })),
       mutate: vi.fn(async (ns: string, ops: { op: string; path: string[]; value?: unknown }[]) => {
         writes.push(ns)
         const section = sections[ns]
-        if (section === undefined) throw new Error(`settings namespace "${ns}" is not registered`)
+        if (section === undefined) throw new Error(`settings entry "${ns}" is not registered`)
         for (const op of ops) applyOp(section, op)
       }),
     },
@@ -59,6 +61,11 @@ function fakeCtx(sections: Record<string, Record<string, unknown>>): Context {
       ],
     },
   } as unknown as Context
+  const config = {
+    sourceUrl: 'https://example.test/api.json',
+    overlays: { get: () => sections['models-catalog']?.overlays as Record<string, unknown> | undefined ?? {} },
+  }
+  return new CatalogService(ctx, config as never)
 }
 
 /** 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。 */
@@ -85,20 +92,14 @@ describe('reaching the source', () => {
     // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`@dsh-remote/dsh-plugin-proxy`）
     // 实现说明：此处记录相关接口、边界和生命周期约束。
     // 与 dsh 的行为一致。
-    const service = new CatalogService(
-      fakeCtx({ 'llm-pi-ai': { providers: { anthropic: {} } }, 'dsh-plugin-models-catalog': {} }),
-      'https://example.test/api.json',
-    )
+    const service = mount({ 'llm-pi-ai': { providers: { anthropic: {} } }, 'models-catalog': { overlays: {} } })
     await service.preview()
     expect(requests).toEqual(['https://example.test/api.json'])
   })
 
   it('names the source in the failure, since the transport error names nothing', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('Connect Timeout Error') }))
-    const service = new CatalogService(
-      fakeCtx({ 'llm-pi-ai': { providers: { anthropic: {} } }, 'dsh-plugin-models-catalog': {} }),
-      'https://example.test/api.json',
-    )
+    const service = mount({ 'llm-pi-ai': { providers: { anthropic: {} } }, 'models-catalog': { overlays: {} } })
     const view = await service.preview()
     expect(view.error).toContain('https://example.test/api.json')
     expect(view.error).toContain('Connect Timeout Error')
@@ -106,46 +107,40 @@ describe('reaching the source', () => {
 })
 
 describe('which routes are offered', () => {
-  it('offers only routes the pi-ai section configures, not every dormant catalog provider', async () => {
-    const ctx = fakeCtx({ 'llm-pi-ai': { providers: { anthropic: {} } }, 'dsh-plugin-models-catalog': {} })
-    const view = await new CatalogService(ctx, 'https://example.test/api.json').status()
+  it('offers only routes the pi-ai row configures, not every dormant catalog provider', async () => {
+    const service = mount({ 'llm-pi-ai': { providers: { anthropic: {} } }, 'models-catalog': { overlays: {} } })
+    const view = await service.status()
     expect(view.routes.map(route => route.route)).toEqual(['anthropic'])
     expect(view.builtinSnapshotAt).toBe(1_700_000_000_000)
   })
 
-  it('answers with nothing at all when the pi-ai namespace is not registered', async () => {
-    const ctx = fakeCtx({ 'dsh-plugin-models-catalog': {} })
-    expect((await new CatalogService(ctx, 'https://example.test/api.json').status()).routes).toEqual([])
+  it('answers with nothing at all when the pi-ai row is not composed', async () => {
+    const service = mount({ 'models-catalog': { overlays: {} } })
+    expect((await service.status()).routes).toEqual([])
   })
 })
 
 describe('applying', () => {
   it('writes provenance before the models, so a refused write self-heals', async () => {
-    const sections = { 'llm-pi-ai': { providers: { anthropic: {} } }, 'dsh-plugin-models-catalog': {} }
-    const service = new CatalogService(fakeCtx(sections), 'https://example.test/api.json')
+    const sections = { 'llm-pi-ai': { providers: { anthropic: {} } }, 'models-catalog': { overlays: {} } }
+    const service = mount(sections)
     await service.preview()
     await service.apply(['anthropic'])
-    expect(writes).toEqual(['dsh-plugin-models-catalog', 'llm-pi-ai'])
-    const providers = sections['llm-pi-ai'].providers as unknown as Record<string, { models?: { id: string }[] }>
+    expect(writes).toEqual(['models-catalog', 'llm-pi-ai'])
+    const providers = sections['llm-pi-ai']?.providers as unknown as Record<string, { models?: { id: string }[] }>
     expect(providers['anthropic']?.models?.map(entry => entry.id)).toEqual(['old-1', 'new-1'])
-    expect(sections['dsh-plugin-models-catalog']).toEqual({
+    expect(sections['models-catalog']).toEqual({
       overlays: { anthropic: { addedIds: ['new-1'], updatedAt: expect.any(String) } },
     })
   })
 
   it('refuses a route that is not configured instead of quietly doing less', async () => {
-    const service = new CatalogService(
-      fakeCtx({ 'llm-pi-ai': { providers: { anthropic: {} } }, 'dsh-plugin-models-catalog': {} }),
-      'https://example.test/api.json',
-    )
+    const service = mount({ 'llm-pi-ai': { providers: { anthropic: {} } }, 'models-catalog': { overlays: {} } })
     await expect(service.apply(['nope'])).rejects.toThrow('not a configured pi-ai provider')
   })
 
   it('offers additions for a mixed-protocol route using the runtime catalog path', async () => {
-    const service = new CatalogService(
-      fakeCtx({ 'llm-pi-ai': { providers: { openai: {} } }, 'dsh-plugin-models-catalog': {} }),
-      'https://example.test/api.json',
-    )
+    const service = mount({ 'llm-pi-ai': { providers: { openai: {} } }, 'models-catalog': { overlays: {} } })
     const view = await service.preview()
     expect(view.routes[0]?.blocked).toBeUndefined()
     expect(view.routes[0]?.additions.map(model => model.id)).toEqual(['gpt-next'])
@@ -156,18 +151,18 @@ describe('the unasked cleanup', () => {
   it('hands a model back the moment the installed catalog ships it, without being asked', async () => {
     const sections = {
       'llm-pi-ai': { providers: { anthropic: { models: [{ id: 'old-1' }, { id: 'new-1', name: 'guessed' }] } } },
-      'dsh-plugin-models-catalog': { overlays: { anthropic: { addedIds: ['new-1'], updatedAt: 'then' } } },
+      'models-catalog': { overlays: { anthropic: { addedIds: ['new-1'], updatedAt: 'then' } } },
     }
     installed.set('anthropic', { ids: ['old-1', 'new-1'], apis: ['anthropic-messages'] })
-    const view = await new CatalogService(fakeCtx(sections), 'https://example.test/api.json').status()
+    const view = await mount(sections).status()
     // 实现说明：此处记录相关接口、边界和生命周期约束。
     // 删除会自我报告，而不是显示为待处理工作。
     expect(view.reconciled).toEqual([{ route: 'anthropic', displayName: 'Anthropic', ids: ['new-1'] }])
     expect(view.routes[0]?.reclaimed).toEqual([])
     // 实现说明：此处记录相关接口、边界和生命周期约束。
     // 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。
-    expect(sections['llm-pi-ai'].providers).toEqual({ anthropic: {} })
-    expect(sections['dsh-plugin-models-catalog']).toEqual({ overlays: {} })
+    expect(sections['llm-pi-ai']?.providers).toEqual({ anthropic: {} })
+    expect(sections['models-catalog']).toEqual({ overlays: {} })
   })
 })
 
@@ -175,22 +170,19 @@ describe('reverting', () => {
   it('removes what this plugin wrote and forgets it', async () => {
     const sections = {
       'llm-pi-ai': { providers: { anthropic: { models: [{ id: 'old-1' }, { id: 'new-1' }] } } },
-      'dsh-plugin-models-catalog': { overlays: { anthropic: { addedIds: ['new-1'], updatedAt: 'then' } } },
+      'models-catalog': { overlays: { anthropic: { addedIds: ['new-1'], updatedAt: 'then' } } },
     }
-    const service = new CatalogService(fakeCtx(sections), 'https://example.test/api.json')
+    const service = mount(sections)
     await service.revert(['anthropic'])
-    expect(sections['llm-pi-ai'].providers).toEqual({ anthropic: {} })
-    expect(sections['dsh-plugin-models-catalog']).toEqual({ overlays: {} })
+    expect(sections['llm-pi-ai']?.providers).toEqual({ anthropic: {} })
+    expect(sections['models-catalog']).toEqual({ overlays: {} })
   })
 })
 
 describe('the channel', () => {
   /** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
   function service(): InstanceType<typeof CatalogService> {
-    return new CatalogService(
-      fakeCtx({ 'llm-pi-ai': { providers: { anthropic: {} } }, 'dsh-plugin-models-catalog': {} }),
-      'https://example.test/api.json',
-    )
+    return mount({ 'llm-pi-ai': { providers: { anthropic: {} } }, 'models-catalog': { overlays: {} } })
   }
 
   it('refuses an endpoint it does not serve', async () => {

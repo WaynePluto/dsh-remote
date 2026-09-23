@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactElement } from 'react'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { ProviderCardExtrasOwnerProps } from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import { createPortal } from 'react-dom'
 import type { PiAiSettings, ProtocolOverrideSettings } from '../shared.js'
@@ -26,21 +26,23 @@ const MODEL_ENTRY_SELECTOR = '[class*="_modelEntry"]'
 const MODEL_ROW_SELECTOR = '[class*="_modelRow"]'
 const MODEL_ADVANCED_SELECTOR = '[class*="_modelAdvanced"]'
 
-const unavailableProtocolSnapshot = {
-  status: 'unavailable' as const,
+const unavailableProtocolSnapshot: ConfigFormSnapshot<ProtocolOverrideSettings> = {
+  status: 'unavailable',
   value: undefined,
   base: undefined,
   user: undefined,
   revision: undefined,
   writable: false,
-  mode: 'memory' as const,
+  mode: 'memory',
 }
 
 const noopSubscribe = (): (() => void) => () => {}
 
 export interface ProviderCapabilitiesPortalProps extends ProviderCardExtrasOwnerProps {
-  scope: SettingsScope<PiAiSettings>
-  protocolScope?: SettingsScope<ProtocolOverrideSettings>
+  /** 绑定到 llm-pi-ai 行 entry id 的 config form。 */
+  form: ConfigForm<PiAiSettings>
+  /** 绑定到本插件 entry id 的协议覆盖 form。 */
+  protocolForm?: ConfigForm<ProtocolOverrideSettings>
   t: (key: CapabilityKey) => string
 }
 
@@ -90,14 +92,14 @@ export function ProviderCapabilitiesPortal(props: ProviderCapabilitiesPortalProp
   const anchor = useRef<HTMLSpanElement>(null)
   const [targets, setTargets] = useState<readonly PortalTarget[]>([])
   const snapshot = useSyncExternalStore(
-    listener => props.scope.subscribe(listener),
-    () => props.scope.getSnapshot(),
-    () => props.scope.getSnapshot(),
+    listener => props.form.subscribe(listener),
+    () => props.form.getSnapshot(),
+    () => props.form.getSnapshot(),
   )
   const protocolSnapshot = useSyncExternalStore(
-    listener => props.protocolScope?.subscribe(listener) ?? noopSubscribe(),
-    () => props.protocolScope?.getSnapshot() ?? unavailableProtocolSnapshot,
-    () => props.protocolScope?.getSnapshot() ?? unavailableProtocolSnapshot,
+    listener => props.protocolForm?.subscribe(listener) ?? noopSubscribe(),
+    () => props.protocolForm?.getSnapshot() ?? unavailableProtocolSnapshot,
+    () => props.protocolForm?.getSnapshot() ?? unavailableProtocolSnapshot,
   )
 
   useEffect(() => {
@@ -137,7 +139,7 @@ export function ProviderCapabilitiesPortal(props: ProviderCapabilitiesPortalProp
   const models = snapshot.value?.providers?.[props.provider.provider]?.models ?? []
   const modelsById = useMemo(() => new Map(models.map(model => [model.id, model])), [models])
   const writable = snapshot.status === 'ready' && snapshot.writable
-    && (props.protocolScope === undefined || (protocolSnapshot.status === 'ready' && protocolSnapshot.writable))
+    && (props.protocolForm === undefined || (protocolSnapshot.status === 'ready' && protocolSnapshot.writable))
 
   return (
     <span ref={anchor} data-model-capabilities-anchor="true" style={{ display: 'none' }} aria-hidden="true">
@@ -149,8 +151,8 @@ export function ProviderCapabilitiesPortal(props: ProviderCapabilitiesPortalProp
             route={props.provider.provider}
             model={model}
             configured={modelsById.has(target.modelId)}
-            scope={props.scope}
-            {...props.protocolScope === undefined ? {} : { protocolScope: props.protocolScope }}
+            form={props.form}
+            {...props.protocolForm === undefined ? {} : { protocolForm: props.protocolForm }}
             writable={writable}
             t={props.t}
             inline

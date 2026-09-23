@@ -14,13 +14,25 @@ D:\github\deepseek-harness
 ```
 
 - 若该路径不存在，**先问用户**新位置，不要在别处猜测或搜索。
-- 本仓库的结论文档（`docs/02-dsh-facts.md`）当前核实于 `git ddefc45fbc` / tag `dsh-v0.1.6-alpha.2`；本地 checkout 可能已经更新（用 `git -C D:\github\deepseek-harness rev-parse --short HEAD` 确认）。**版本不一致时，以源码为准，并提示用户回写 `docs/02-dsh-facts.md`。**
+- 本仓库的结论文档（`docs/02-dsh-facts.md`）当前核实于 `git 46a7f68b09` / tag `dsh-v0.1.7-rc.1`；本地 checkout 可能已经更新（用 `git -C D:\github\deepseek-harness rev-parse --short HEAD` 确认）。**版本不一致时，以源码为准，并提示用户回写 `docs/02-dsh-facts.md`。**
 
 ```powershell
 # 确认版本
 git -C D:\github\deepseek-harness rev-parse --short HEAD
 git -C D:\github\deepseek-harness branch --show-current
 ```
+
+## 切换到指定版本
+
+需要把源码切到某个新 tag（如升级前核对）时，**优先**用精确拉取单个 tag 再分离切换：
+
+```powershell
+git -C D:\github\deepseek-harness fetch origin tag <tag>   # 只拉该 tag，不动远端跟踪分支
+git -C D:\github\deepseek-harness switch --detach <tag>    # detached HEAD 停在 tag 上，不建本地分支
+```
+
+- tag 命名为 `dsh-v<版本号>`，如 `dsh-v0.1.7-rc.1`。
+- 切换前确认 `git status --porcelain` 为空，工作区有残留先处理，不要强切。
 
 ## 常用位置（相对 dsh 仓库根）
 

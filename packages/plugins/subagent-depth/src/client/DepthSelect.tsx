@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
-import { IconChevronDownOutline14, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronDownOutlineMedium, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 
 interface DepthSelectProps {
   label: string
@@ -166,7 +166,7 @@ export function DepthSelect({ label, hint, labels, value, disabled, onChange }: 
             }}
           >
             <span className={`${SELECT_CLASS}-text`}><span>{labels[value]}</span></span>
-            <span className={`${SELECT_CLASS}-icon`} aria-hidden="true"><IconChevronDownOutline14 /></span>
+            <span className={`${SELECT_CLASS}-icon`} aria-hidden="true"><IconChevronDownOutlineMedium /></span>
           </button>
         )}
       />

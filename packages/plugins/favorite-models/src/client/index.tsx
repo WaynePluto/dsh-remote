@@ -11,7 +11,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import type { ModelDirectoryResolver } from '@deepseek-ai/dsh-client-ui-model-selection/client'
 
 import type { FavoriteModelsSettings } from '../shared.js'
-import { NAMESPACE } from '../shared.js'
+import { ENTRY_ID, NAMESPACE } from '../shared.js'
 import { FavoriteModelSelect } from './FavoriteModelSelect.js'
 import { FavoriteModelsPanel } from './FavoriteModelsPanel.js'
 import { en, zh } from './locales.js'
@@ -24,9 +24,9 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（dsh 0.1.7 起设置表单经 `configForms` 按 entry id 绑定） */
 export const inject = [
-  'slots', 'locale', 'settingsScope', 'sessions', 'modelDirectories',
+  'slots', 'locale', 'configForms', 'sessions', 'modelDirectories',
   'uiSession',
   'remote', 'remote.session',
 ]
@@ -37,7 +37,7 @@ type DirectorySessionId = Parameters<ModelDirectoryResolver['directoryFor']>[0]
 export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NAMESPACE, { zh, en }), 'favorite-models: copy dictionaries')
   const t = ctx.locale.bind(NAMESPACE)
-  const scope = ctx.settingsScope.bind<FavoriteModelsSettings>({ namespace: NAMESPACE })
+  const favorites = ctx.configForms.get<FavoriteModelsSettings>(ENTRY_ID)
   const getDirectory = (sessionId: string) => ctx.modelDirectories.directoryFor(sessionId as DirectorySessionId)
 
   ctx.slots.inject('settings.models.footer', () => ctx.slots.register({
@@ -45,7 +45,7 @@ export function apply(ctx: Context): void {
     id: NAMESPACE,
     locale: NAMESPACE,
     inject: () => ({
-      scope,
+      form: favorites,
       session: ctx.uiSession.adapter.current,
       getDirectory,
       t,
@@ -68,7 +68,7 @@ export function apply(ctx: Context): void {
         select: (selection: ModelSelection) => available
           ? directory.select(selection).then(() => true, () => false)
           : Promise.resolve(false),
-        favorites: scope,
+        favorites,
       }
     },
   }, FavoriteModelSelect))

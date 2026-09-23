@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 // 使用 dsh primitives 和本插件的 dialog resize helper；布局保持 dock-card 约定。
-import { Button, IconFullscreenOutline16, IconRefreshOutline14, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconFullscreenOutlineMedium, IconRefreshOutlineMedium, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { DialogFullscreenButton, useDialogFullscreen } from '@dsh-remote/plugin-ui'
 import type { RetryResult, TurnRetryState } from '../shared.js'
 import { fill } from './locales.js'
@@ -243,7 +243,7 @@ export function RetryBanner({ pending, running, onRetry, t }: RetryDockOwnProps)
     <div ref={rootRef} style={bannerStyle} role="status">
       <div style={headerRowStyle}>
         {/* 使用 refresh 图标：retry banner 的动作是重新驱动上一轮，而不是新增普通消息。 */}
-        <span aria-hidden style={leadStyle}><IconRefreshOutline14 /></span>
+        <span aria-hidden style={leadStyle}><IconRefreshOutlineMedium /></span>
         <span style={titleStyle}>{translate(title)}</span>
         {hasDetails && (
           <Button
@@ -290,7 +290,7 @@ export function RetryBanner({ pending, running, onRetry, t }: RetryDockOwnProps)
           dataAttribute={REASON_DIALOG_FULLSCREEN_ATTR}
           label={translate(reasonFullscreen ? 'exitFullscreen' : 'enterFullscreen')}
           onToggle={toggleReasonFullscreen}
-          icon={<IconFullscreenOutline16 size={14} />}
+          icon={<IconFullscreenOutlineMedium size={14} />}
         />
         {/* 全屏时尺寸已拉满：拖动与八向 resize 都没有意义，一并隐藏。 */}
         {!reasonFullscreen && <ReasonMoveHandle onPointerDown={onReasonMovePointerDown} />}

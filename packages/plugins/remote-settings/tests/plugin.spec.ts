@@ -31,9 +31,8 @@ describe('dsh-remote-remote-settings', () => {
     }
     apply(ctx as never)
 
-    // Windows 兼容仅挂认证后的请求层和私有通道，不能增加 relay 标记。
-    expect([...listeners.keys()]).toEqual(process.platform === 'win32'
-      ? ['webserver/index-inject', 'connection/request'] : ['webserver/index-inject'])
+    // Windows 兼容仅挂私有通道（dsh 0.1.7 删除了预设目录 RPC，请求层拦截随之移除），不能增加 relay 标记。
+    expect([...listeners.keys()]).toEqual(['webserver/index-inject'])
     expect(handle).toHaveBeenCalledTimes(process.platform === 'win32' ? 1 : 0)
     if (process.platform === 'win32') expect(handle.mock.calls[0]?.[0]).toBe(CHANNEL)
     const listener = listeners.get('webserver/index-inject')
@@ -47,9 +46,9 @@ describe('dsh-remote-remote-settings', () => {
     expect(disposeRpc).toHaveBeenCalledTimes(process.platform === 'win32' ? 1 : 0)
   })
 
-  it('等待 Windows 目录兼容使用的原生服务', () => {
+  it('只依赖 webServer 与 connection 服务', () => {
     expect(name).toBe('dsh-remote-remote-privileged')
-    expect(inject).toEqual(['webServer', 'connection', 'agentPresets', 'settingsController'])
+    expect(inject).toEqual(['webServer', 'connection'])
   })
 
   it('is named by the bundle patch through a package-relative path', () => {

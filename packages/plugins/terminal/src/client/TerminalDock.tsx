@@ -7,7 +7,7 @@
  */
 
 import {
-  Button, IconApiOutline14, IconChevronDownOutline14, IconChevronUpOutline14, Pill,
+  Button, IconApiOutlineMedium, IconChevronDownOutlineMedium, IconChevronUpOutlineMedium, Pill,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { terminalLabel } from '../shared.js'
 import type { TerminalPanelProps } from './terminal-dock.types.js'
@@ -44,11 +44,11 @@ export function TerminalPanel(props: TerminalPanelProps) {
         onClick={() => { setCollapsed(value => !value) }}
       >
         {/* dsh dock card 都用 outline glyph 开头、用共用 disclosure chevron 结束；收起向上、展开向下。 */}
-        <span aria-hidden style={leadStyle}><IconApiOutline14 /></span>
+        <span aria-hidden style={leadStyle}><IconApiOutlineMedium /></span>
         <span style={titleStyle}>{translate('title')}</span>
         <span style={summaryStyle}><span style={summaryTextStyle}>{summary}</span></span>
         <span aria-hidden style={chevronStyle}>
-          {collapsed ? <IconChevronUpOutline14 /> : <IconChevronDownOutline14 />}
+          {collapsed ? <IconChevronUpOutlineMedium /> : <IconChevronDownOutlineMedium />}
         </span>
       </button>
 

@@ -267,23 +267,58 @@ describe('the test endpoint', () => {
 })
 
 describe('mounting', () => {
-  it('applies the stored section at load and follows every later write', () => {
-    let watcher: ((next: ReturnType<typeof settings>) => void) | undefined
-    const scope = {
-      get: () => settings({ enabled: true, url: 'http://boot.test:8080' }),
-      watch: (callback: (next: ReturnType<typeof settings>) => void) => { watcher = callback; return () => {} },
+  /** 组一个可变的 volatile Config 与记录事件的伪 ctx；dsh 0.1.7 起挂载签名是 apply(ctx, config)。 */
+  function mount() {
+    let value: ReturnType<typeof settings> = settings({ enabled: true, url: 'http://boot.test:8080' })
+    const config = {
+      enabled: { get: () => value.enabled },
+      url: { get: () => value.url },
+      bypass: { get: () => value.bypass },
     }
+    const listeners = new Map<string, Array<(first: unknown, next: () => unknown) => unknown>>()
+    const fiber = {}
     const ctx = {
-      settings: { register: vi.fn(() => scope) },
+      on: vi.fn((event: string, listener: (first: unknown, next: () => unknown) => unknown) => {
+        const list = listeners.get(event) ?? []
+        list.push(listener)
+        listeners.set(event, list)
+        return () => {}
+      }),
+      fiber,
       connection: { rpc: { handle: vi.fn(() => () => {}) } },
       effect: vi.fn((factory: () => unknown) => { factory() }),
       logger: { info: vi.fn() },
     } as unknown as Context
+    return {
+      ctx,
+      config,
+      fiber,
+      emit: (event: string) => { for (const listener of listeners.get(event) ?? []) listener({}, () => ({})) },
+      set value(next: ReturnType<typeof settings>) { value = next },
+    }
+  }
 
-    apply(ctx)
+  it('applies the composed config at load and follows every volatile update', () => {
+    const mounted = mount()
+    apply(mounted.ctx, mounted.config as never)
     expect(agents[0]?.opts).toMatchObject({ httpProxy: 'http://boot.test:8080/' })
 
-    watcher?.(settings({ enabled: true, url: 'http://changed.test:8080' }))
+    mounted.value = settings({ enabled: true, url: 'http://changed.test:8080' })
+    mounted.emit('loader/volatile-update')
     expect(agents[1]?.opts).toMatchObject({ httpProxy: 'http://changed.test:8080/' })
+  })
+
+  it('rejects a prospective write whose fields do not pass cross-field validation', () => {
+    const mounted = mount()
+    apply(mounted.ctx, mounted.config as never)
+    const hook = (mounted.ctx as unknown as { on: ReturnType<typeof vi.fn> }).on.mock.calls
+      .find(call => call[0] === 'internal/config')?.[1] as (this: unknown, first: unknown, next: () => unknown) => unknown
+    expect(hook).toBeDefined()
+    // fiber 不匹配时放行（别的 fiber 的 config 更新）。
+    expect(hook({}, () => 'pass-through')).toBe('pass-through')
+    // 本 fiber 的候选写入先经 assertServiceable，非法地址即抛错拒绝。
+    expect(() => {
+      hook.call(mounted.fiber, {}, () => ({ enabled: true, url: 'socks5://nope:1', bypass: '' }))
+    }).toThrow('is not a proxy address')
   })
 })

@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
-import { IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronDownOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CollapsedRowsController } from './hidden-rows.js'
 import { foldKey, type FoldStore } from './fold-store.js'
 import { en, fill, type ExecProcessKey } from './locales.js'
@@ -99,7 +99,7 @@ export function ExecProcessTail({ fields }: { fields: SummaryFields }) {
         </span>
       )}
       {fields.running && <span className={`${ROW_CLASS}__dot`} aria-hidden />}
-      <IconChevronDownOutline14 className={`${ROW_CLASS}__chevron`} aria-hidden />
+      <IconChevronDownOutlineMedium className={`${ROW_CLASS}__chevron`} aria-hidden />
     </>
   )
 }

@@ -11,7 +11,7 @@
 
 设置是实时的，但只影响下一次创建子代理。已经运行的子代理不会被终止；当下一次委派会超过上限时，工具调用会返回拒绝结果。
 
-本插件使用 `dsh-plugin-subagent-depth` settings 命名空间。浏览器半以包名 `@dsh-remote/dsh-plugin-subagent-depth` 为 key 注册到 `plugins.bundle.config`，所以表单只出现在本 Bundle 的详情页，不会再作为 `plugins.item` 官方卡片出现。
+dsh 0.1.7 起深度上限存在本插件行的 composition Config（entry id `subagent-depth`）里，经 Loader 热更新免重启生效。浏览器半以包名 `@dsh-remote/dsh-plugin-subagent-depth` 为 key 注册到 `plugins.bundle.config`，所以表单只出现在本 Bundle 的详情页，不会再作为 `plugins.item` 官方卡片出现。
 
 ## 当前限制
 
@@ -37,7 +37,7 @@ pnpm --filter @dsh-remote/dsh-plugin-subagent-depth build
 - 选项弹层复用 dsh `Menu`，与「通用设置 → 语言」菜单使用同一浅色 hover、圆角、阴影与右侧选中勾号。选中项未悬停时不常驻深色背景，选项仍为 `0–3`。
 - Enter/Space 或方向键打开菜单，方向键/Home/End 移动焦点，Enter/Space 确认；Escape 只关闭菜单，焦点回到字段，插件页保留。Tab 关闭并继续表单导航；点击外部关闭不抢焦点。
 - 选项位于 portal 中：滚动插件详情页后仍紧贴触发器，不被详情区裁剪。
-- 修改后「放弃修改」恢复已存值；保存后刷新仍为新值。只读/保存中禁用字段，使用 tertiary 文字；写入失败或回读不一致时保留草稿并就地提示。
+- 修改后「放弃修改」恢复已存值；保存后刷新仍为新值。只读/保存中禁用字段，使用 tertiary 文字；写入被宿主拒绝（mutate 返回 false）或传输失败时保留草稿并就地提示。
 
 触发器和字段排版参照 dsh `packages/client/ui-settings-plugins/src/client/fields.module.css`，表单操作区参照同包 `PluginConfigForm.module.css`，弹层参照 `packages/client/locale/src/client/LanguageRow.tsx` 与 `ui-primitives/src/Menu.tsx`。`tests/styles.spec.ts` 只防止样式与槽位契约退化，不能代替真实浏览器的主题与交互验收。
 

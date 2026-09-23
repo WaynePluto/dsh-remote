@@ -1,6 +1,6 @@
 # 02 · dsh 源码依据
 
-当前适配基线：`@deepseek-ai/dsh@0.1.6-alpha.2`，对应 git `ddefc45fbc`。
+当前适配基线：`@deepseek-ai/dsh@0.1.7-rc.1`，对应 git `46a7f68b09`。
 本目录保留当前实现依赖的契约与已有核实结论，不表示每次文档整理都重新运行过所有实机检查。
 升级 dsh 时加载 `dsh-source` skill，按主题复核；源码路径均相对于 dsh 仓库根。
 

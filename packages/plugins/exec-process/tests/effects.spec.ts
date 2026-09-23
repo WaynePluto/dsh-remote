@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
-  IconChevronDownOutline14: () => null,
+  IconChevronDownOutlineMedium: () => null,
 }))
 
 import type { ExecProcessRowProps } from '../src/client/ExecProcessRow.js'

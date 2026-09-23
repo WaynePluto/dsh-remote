@@ -29,33 +29,35 @@ function setup(rejectWrite = false) {
     mode: 'host' as const,
   }
   const listeners = new Set<() => void>()
-  const scope = {
+  const form = {
     getSnapshot: () => snapshot,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
     mutate: vi.fn(async (ops: readonly { value?: unknown }[]) => {
-      if (rejectWrite) return
+      // dsh 0.1.7 起 mutate 返回 boolean；false 表示宿主拒绝。
+      if (rejectWrite) return false
       snapshot = {
         ...snapshot,
         revision: snapshot.revision + 1,
         value: { providers: { custom: { displayName: 'Custom', models: ops[0]?.value as never } } },
       }
       for (const listener of listeners) listener()
+      return true
     }),
-    set: vi.fn(async () => {}),
-    unset: vi.fn(async () => {}),
+    set: vi.fn(async () => true),
+    unset: vi.fn(async () => true),
   }
-  return scope
+  return form
 }
 
 describe('ModelCapabilitiesPanel', () => {
   it('declares image support and preserves the model row', async () => {
-    const scope = setup()
-    render(<ModelCapabilitiesPanel scope={scope as never} t={t} />)
+    const form = setup()
+    render(<ModelCapabilitiesPanel form={form as never} t={t} />)
 
     fireEvent.change(screen.getByLabelText(en.imageInput), { target: { value: 'image' } })
     fireEvent.click(screen.getByRole('button', { name: en.save }))
 
-    await waitFor(() => expect(scope.mutate).toHaveBeenCalledWith([{
+    await waitFor(() => expect(form.mutate).toHaveBeenCalledWith([{
       op: 'set',
       path: ['providers', 'custom', 'models'],
       value: [{ id: 'vision-model', name: 'Vision', input: ['text', 'image'] }],
@@ -63,8 +65,8 @@ describe('ModelCapabilitiesPanel', () => {
   })
 
   it('keeps the image draft when the host rejects the write', async () => {
-    const scope = setup(true)
-    render(<ModelCapabilitiesPanel scope={scope as never} t={t} />)
+    const form = setup(true)
+    render(<ModelCapabilitiesPanel form={form as never} t={t} />)
     const select = screen.getByLabelText(en.imageInput) as HTMLSelectElement
 
     fireEvent.change(select, { target: { value: 'image' } })
@@ -75,8 +77,8 @@ describe('ModelCapabilitiesPanel', () => {
   })
 
   it('uses dsh native provider-card chrome', () => {
-    const scope = setup()
-    render(<ModelCapabilitiesPanel scope={scope as never} t={t} />)
+    const form = setup()
+    render(<ModelCapabilitiesPanel form={form as never} t={t} />)
     const panel = screen.getByRole('region', { name: en.title })
     expect(panel.style.border).toContain('0.5px solid')
     expect(panel.style.borderRadius).toBe('16px')
@@ -104,12 +106,12 @@ describe('ModelCapabilitiesPanel', () => {
     }
     const modelListeners = new Set<() => void>()
     const protocolListeners = new Set<() => void>()
-    const modelScope = {
+    const modelForm = {
       getSnapshot: () => modelSnapshot,
       subscribe: (listener: () => void) => { modelListeners.add(listener); return () => { modelListeners.delete(listener) } },
-      mutate: vi.fn(async () => {}),
+      mutate: vi.fn(async () => true),
     }
-    const protocolScope = {
+    const protocolForm = {
       getSnapshot: () => protocolSnapshot,
       subscribe: (listener: () => void) => { protocolListeners.add(listener); return () => { protocolListeners.delete(listener) } },
       mutate: vi.fn(async (ops: readonly { op: string; path: readonly string[]; value?: unknown }[]) => {
@@ -127,14 +129,15 @@ describe('ModelCapabilitiesPanel', () => {
         }
         for (const listener of protocolListeners) listener()
         for (const listener of modelListeners) listener()
+        return true
       }),
     }
-    render(<ModelCapabilityEditor route="custom" model={{ id: 'gpt-new', name: 'GPT New' }} scope={modelScope as never} protocolScope={protocolScope as never} writable t={t} />)
+    render(<ModelCapabilityEditor route="custom" model={{ id: 'gpt-new', name: 'GPT New' }} form={modelForm as never} protocolForm={protocolForm as never} writable t={t} />)
 
     fireEvent.change(screen.getByLabelText(en.protocol), { target: { value: 'openai-responses' } })
     fireEvent.click(screen.getByRole('button', { name: en.save }))
 
-    await waitFor(() => expect(protocolScope.mutate).toHaveBeenCalled())
+    await waitFor(() => expect(protocolForm.mutate).toHaveBeenCalled())
     expect(modelSnapshot.value?.providers?.custom?.models?.[0]?.api).toBe('openai-responses')
   })
 })

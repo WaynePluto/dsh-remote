@@ -1,24 +1,28 @@
-/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
+/** 设置写入契约：用户可改字段是本插件行 composition Config 的 volatile 引用，写入经 Loader 热更新，不再走独立 settings 命名空间。 */
 
-import type { Context } from '@deepseek-ai/cordis'
-// 仅类型：启用 `ctx.settings` 和 `ctx.connection` Context 合并。
-import type {} from '@deepseek-ai/dsh-settings'
+import type { Context, Fiber } from '@deepseek-ai/cordis'
+// 仅类型：启用 `ctx.connection` Context 合并。
 import type { ConnectionRpcResult } from '@deepseek-ai/dsh-client-connection'
+// 仅类型：声明 `loader/volatile-update` 事件名。
+import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { ProxyDispatcher } from './dispatcher.js'
-import { assertServiceable, Settings } from './settings.js'
-import { CHANNEL, DEFAULT_SETTINGS, isProxyEndpoint, isTestRequest, NAMESPACE } from './shared.js'
+import { assertServiceable, Config, readConfig } from './settings.js'
+import type { Config as ProxyConfig } from './settings.js'
+import { CHANNEL, isProxyEndpoint, isTestRequest } from './shared.js'
 import type { ProxySettings, ProxyTestResult } from './shared.js'
 
-export { CHANNEL, DEFAULT_BYPASS, DEFAULT_SETTINGS, DEFAULT_TEST_URL, NAMESPACE, proxyFault } from './shared.js'
+export { CHANNEL, DEFAULT_BYPASS, DEFAULT_TEST_URL, ENTRY_ID, NAMESPACE, proxyFault } from './shared.js'
+export { DEFAULT_SETTINGS } from './shared.js'
 export type { ProxySettings, ProxyTestResult } from './shared.js'
-export { assertServiceable, normalizeBypass, parseProxyUrl, Settings } from './settings.js'
+export { assertServiceable, normalizeBypass, parseProxyUrl, Config, readConfig } from './settings.js'
+export type { Config as ProxyConfig } from './settings.js'
 export { ProxyDispatcher } from './dispatcher.js'
 
 /** Cordis 插件名；它会出现在 dsh 插件树和诊断信息中。 */
 export const name = 'dsh-remote-proxy'
 
-/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`settings`、`connection`） */
-export const inject = ['settings', 'connection']
+/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`connection`） */
+export const inject = ['connection']
 
 /** 本通道对未知端点报告的故障码。 */
 export const UNKNOWN_ENDPOINT_CODE = 'proxy/unknown-endpoint'
@@ -67,13 +71,9 @@ export async function dispatch(
   return { ok: true, value: await runTest(dispatcher, payload.url) }
 }
 
-/** 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。 */
-export function apply(ctx: Context): void {
+/** 传输契约：RPC 通道不变；设置读取与校验改挂 composition Config。 */
+export function apply(ctx: Context, config: ProxyConfig): void {
   const dispatcher = new ProxyDispatcher()
-  const scope = ctx.settings.register(NAMESPACE, Settings, {
-    base: DEFAULT_SETTINGS,
-    validate: assertServiceable,
-  })
 
   const applyNow = (settings: ProxySettings): void => {
     const state = dispatcher.apply(settings)
@@ -84,8 +84,17 @@ export function apply(ctx: Context): void {
     )
   }
 
-  applyNow(scope.get())
-  ctx.effect(() => scope.watch((next) => { applyNow(next) }), 'proxy: follow the settings section')
+  applyNow(readConfig(config))
+  ctx.on('loader/volatile-update', () => { applyNow(readConfig(config)) })
+  // 表单写入在落盘前经过 internal/config：跨字段校验（开代理必须有地址等）失败即拒绝，旧配置继续生效。
+  // schema 调用会把候选值包成 volatile 引用；对带默认值的标量字段输出类型是值|引用 联合，此处按运行时约定断言。
+  ctx.on('internal/config', function (this: Fiber, _raw: unknown, next: () => unknown) {
+    const raw = next()
+    if (this !== ctx.fiber) return raw
+    const candidate = Config(raw as Record<string, unknown>) as unknown as ProxyConfig
+    assertServiceable(readConfig(candidate))
+    return raw
+  })
   const dispose = ctx.connection.rpc.handle(
     CHANNEL,
     async (endpoint, payload) => await dispatch(dispatcher, endpoint, payload),

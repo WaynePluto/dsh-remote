@@ -111,20 +111,31 @@ global 行注入 `__DSH_TRANSPORT__`；browser-compat 用 head script 行在旧 
 Iterator/AbortSignal/Promise 能力，并建立当前页面内存中的诊断桥（函数体 `toString()` 序列化，
 必须自包含、不引用模块作用域）。client 半读取该桥显示临时日志，不向 Host 发 RPC。
 
-## 设置写入
+## 设置写入（dsh 0.1.7 重写）
 
-出处：`packages/settings/settings/src/index.ts`、`packages/client/ui-settings/src/client/settings-scope.ts`。
+出处：`packages/settings/settings/src/index.ts`（SettingsForms）、`packages/client/ui-settings/src/client/config-form.ts`（configForms 服务）、
+`packages/client/ui-primitives/src/settings-form/`。
 
-宿主支持 get/update/replace/mutate，mutate 使用 set/unset 路径操作，只改所属字段。
-namespace 统一为 dsh-plugin-<名字>，全局提示词正文直接保存文件，不放入 settings。
+dsh 0.1.7 移除了 `settings.register` / `ctx.settingsScope` / `settings.plugin.item`，用户可改字段并入插件行的
+composition Config：
 
-浏览器 SettingsScope.mutate 在宿主拒绝写入时会 recover 并正常 resolve，不是 reject。
-因此必须：
+- 宿主半导出 `Config`（z schema，可热改字段链 `.volatile()`）与同名 interface（`Volatile<T>` 字段）。
+  `apply(ctx, config)` 收到解析后的 config；读值 `config.x.get()`（兼容 schema 直接解析出的普通值），
+  响应热更新用 `ctx.on('loader/volatile-update', cb)`（事件名声明来自 `@deepseek-ai/cordis-plugin-loader`）。
+- 跨字段校验挂 `ctx.on('internal/config', function (this: Fiber, _raw, next) {...})`：`next()` 取候选，
+  `this !== ctx.fiber` 时放行；校验抛错即拒绝写入、不落盘。参考实现 `packages/plugins/proxy/src/index.ts`。
+- 宿主 SettingsForms 仍提供跨命名空间 `describe()` / `mutate(ns, ops, expectedRevision?)`；
+  表单命名空间是 profile 行的 entry id（`cordis.patch.yml` insert 行的 `id` 字段），不再与文案命名空间同串。
+- 浏览器半 `ctx.configForms.get<T>(entryId)` 返回 ConfigForm（inject 用 `configForms`）：
+  `getSnapshot()/subscribe()`、`mutate(ops)`、`set(field,v)`、`unset(field)`。**mutate/set/unset 返回
+  Promise<boolean>，false 即宿主拒绝**——0.1.7 起无需写后回读比对。快照含 `value/status/writable/revision`。
+- 插件配置页挂侧栏 Plugins 页三槽（`plugins.item` 官方页、`plugins.bundle.config` 按 bundle 包名、
+  `plugins.row.config` 按包名#行id）；`settings.section` 槽仍在，本项目设置分区继续用它。
+- schemastery 3.18.4 起 schema 常量不再写 `z<Config>` 显式注解（exactOptionalPropertyTypes 报错），
+  常量不注解、interface 单独声明。
 
-1. 保存前用宿主与浏览器共享的纯函数校验。
-2. await mutate 后读 getSnapshot().value，核对实际落地值。
-3. 未落地时报错并保留草稿，只有确认成功才清草稿和显示已保存。
-4. 错误贴近字段，成功提交触发的刷新不能立即抹掉成功提示。
+写入 UX 约定不变：保存前用宿主与浏览器共享的纯函数校验；mutate 返回 false 报错并保留草稿，
+确认成功才清草稿和显示已保存；错误贴近字段，成功提交触发的刷新不能立即抹掉成功提示。
 
 ## 槽位与导航
 

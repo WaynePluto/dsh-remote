@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { Button, IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconChevronDownOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CatalogStatusView, RoutePreview } from '../shared.js'
 import { fill } from './locales.js'
 import type { CatalogKey } from './locales.js'
@@ -226,7 +226,7 @@ export function CatalogPanel(props: CatalogPanelProps): ReactNode {
       >
         <span style={titleStyle}>{t('title')}</span>
         <span style={{ ...chevronStyle, transform: open ? 'rotate(180deg)' : undefined }} aria-hidden="true">
-          <IconChevronDownOutline14 />
+          <IconChevronDownOutlineMedium />
         </span>
       </button>
       {open

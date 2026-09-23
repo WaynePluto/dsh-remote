@@ -22,8 +22,8 @@ export interface Config {
   sendWaitMs: number
 }
 
-/** Config 的 runtime schema。 */
-export const Config: zs<Config> = zs.object({
+/** {@link Config} 的 runtime schema；schemastery 3.18 起常量不再显式注解 `zs<Config>`，类型由上方 interface 单独声明。 */
+export const Config = zs.object({
   mountBackend: zs.boolean().default(true),
   mountTools: zs.boolean().default(true),
   shellDialect: zs.union(['auto', 'bash', 'pwsh'] as const).default('auto'),

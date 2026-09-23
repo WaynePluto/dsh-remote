@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { IconChevronUpOutline14, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronUpOutlineMedium, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 // 仅类型：激活 Chat 和 conversation slot merge。
 import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 // 仅类型：激活 Chat 和 conversation slot merge。
@@ -154,7 +154,7 @@ export function AgentMessageStartButton({ messageId, sessionId, useChat, t }: Ag
           aria-label={t('locate')}
           onClick={locate}
         >
-          <IconChevronUpOutline14 />
+          <IconChevronUpOutlineMedium />
         </button>
       </Tooltip>
       <div ref={flashRef} className={FLASH_CLASS} aria-hidden />

@@ -47,42 +47,24 @@ user/message 的 source.kind:skill-invocation 和 source.name。
 `packages/host/open-in-app/src/{catalog.ts,index.ts,resolver.ts}`、`packages/api/session-controller/src/index.ts`；
 项目兼容见 `packages/plugins/remote-settings/src/{client/index.ts,workspace-directory.ts,windows-directory.ts}`。
 
-- 对话顶部「在本地打开」不是 session Remote：原生浏览器调用 `POST /open-in-app/open`，传 app id 与当前会话 cwd；
+- 对话顶部「在本地打开」不是 session Remote：原生浏览器调用 open-in-app 的 HTTP 路由，传 app id 与当前会话 cwd；
   宿主先做 connection trust/auth、绝对路径和真实目录检查。其它文件动作仍可使用
-  `remote.session.canOpenWorkspacePath/openWorkspacePath`。
-- Windows catalog 的 Explorer 是 `shell-open`，最终同样进入 `openNativePath` 的隐藏 PowerShell，实测产生
-  `Visible:false` 的工作区窗口。remote-settings 用 `priority:-1` shadow
+  `remote.session.canOpenWorkspacePath/openWorkspacePath`（0.1.7 起 Session Remote 提供打开/揭示与应用列表）。
+- dsh 0.1.7 的 Windows 原生 opener 已改为直接 `explorer.exe` + 单一 file URI 参数（无 shell、无 PowerShell 中转），
+  Explorer 交接退出码 1 视为成功；`Visible:false` 问题不再存在。原生实现等待交接应答，且不做窗口激活。
+  remote-settings 仍用 `priority:-1` shadow
   `conversation.session.header.utilities` 的原生 `open-in-app` 项，保留原组件、菜单、store、inject 和 locale；
   仅 Explorer 转到认证私有通道 `/remote-settings/open-workspace-directory`，宿主复核绝对路径和现存目录后启动
-  可见 Explorer。路径验证完成后同样在 spawn 成功时立即响应；VS Code、Cursor、JetBrains 等其它 app
-  仍调用原生 `/open-in-app/open`。
-  本机真实链路已确认顶部按钮改走 `/remote-settings/open-workspace-directory`，RPC 返回 `{opened:true}`，
-  Windows 出现可见的 `xdip` Explorer；远程目标仍待另一台机器复测。
+  可见 Explorer：spawn 成功即响应（不等交接），并异步尝试置前；VS Code、Cursor、JetBrains 等其它 app
+  仍调用原生路由。置前与立即返回相对原生实现的增益、以及是否改回原生，待实机验收后定。
 - 动作发生在运行 dsh 的目标机器桌面，手机看不到；不按 Host 判断同机，不修改 relay。
 
-## Agent 预设目录
+## Agent 预设
 
-出处：`packages/api/settings-controller/src/index.ts`、`packages/client/ui-agent-preset/src/client/{section-store.ts,AgentPresetSection.tsx}`、
-`packages/util/native-command/src/path-opener.ts`；已核对安装的 0.1.6-alpha.2 产物。
-
-- 本项目不区分浏览器是否与目标同机；本机免登录 relay 入口、成员端口和域名访问都在运行 dsh 的
-  目标机器上打开文件管理器。复制预设后的自动动作遵循同一行为。
-- `canOpenAgentPresetDirectory()` 由宿主的 nativeOpen 配置/平台能力决定，不检查浏览器地址。
-  无 opener 时仍交给原生实现返回 `{opened:false,path}`；桌面窗口可能在另一屏幕，无图形桌面或非交互
-  服务环境不能保证出现可见窗口。
-- 已安装 0.1.6-alpha.2 的 `packages/util/native-command/src/runner.ts` 对 PowerShell 使用
-  `windowsHide:true`；Windows 11 实测 `Invoke-Item` 返回成功但创建的 Explorer 为 `Visible:false`。
-  remote-settings 在认证与 trust fence 后接管 Windows 的 `settings/openAgentPresetDirectory`，宿主以
-  `agentPresets.resolve` 核对合法 id 与 `trust:user`，用单一 file URI 参数直接启动
-  `explorer.exe` 且 `windowsHide:false`。宿主在进程成功 spawn 后立即响应并 `unref`，不等待 Windows Shell
-  完成交接；同步启动失败和 spawn 前取消仍响亮失败，窗口实际绘制仍由 Windows 异步完成。
-  spawn 后的隐藏 PowerShell helper 最多 5 秒内按规范目录匹配可见 Shell 窗口，恢复最小化状态，并通过
-  `AttachThreadInput`、`BringWindowToTop`、`SetForegroundWindow` 尝试置前；路径以 base64 数据进入固定脚本。
-  helper 完全异步且失败不改变 RPC 结果。该动作是 best-effort，并会在成功时抢占目标机器当前焦点；
-  本机经 `30809` 实测 RPC 约 13 ms 返回，随后 `xdip` Explorer 的 HWND 成为系统前台窗口。
-  非 Windows/无 opener 交回原生。插件不添加菜单、复制按钮或 relay 判定元数据。
-  本机真实链路已从 Chrome 的 `127.0.0.1:30809` 点击验证：RPC 返回 `{opened:true}`，Windows
-  出现可见的 `test-2` Explorer；窗口位于第二显示器。远程目标仍需在另一台机器复测。
+dsh 0.1.7 起 Agent 预设改为 profile YAML 声明（上游 `d1e22a7e24`，包 `@deepseek-ai/dsh-agent-preset-registry`），
+`settings/openAgentPresetDirectory` RPC、`agentPresets.resolve` 的 path/trust 概念均已移除；本项目原先针对
+0.1.6-alpha.2 隐藏 PowerShell opener 的预设目录接管已随之删除。预设的创建、编辑与默认选择全部走原生 UI；
+上游 Windows opener 行为见上节。
 
 ## 全局提示词
 

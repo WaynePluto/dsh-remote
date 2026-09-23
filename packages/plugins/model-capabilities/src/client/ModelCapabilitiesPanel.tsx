@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   SUPPORTED_APIS, THINKING_LEVELS, configuredModels, draftOf, modelCapabilitiesEqual, patchCapabilities,
   protocolOverrideOf, reasoningFault,
@@ -14,21 +14,31 @@ import type { CapabilityKey } from './locales.js'
 import * as css from './styles.js'
 
 export interface ModelCapabilitiesPanelProps {
-  scope?: SettingsScope<PiAiSettings>
-  protocolScope?: SettingsScope<ProtocolOverrideSettings>
+  form?: ConfigForm<PiAiSettings>
+  protocolForm?: ConfigForm<ProtocolOverrideSettings>
   t?: (key: CapabilityKey) => string
 }
 
 const noopSubscribe = (): (() => void) => () => {}
 
-const unavailableProtocolSnapshot = {
-  status: 'unavailable' as const,
+const unavailableProtocolSnapshot: ConfigFormSnapshot<ProtocolOverrideSettings> = {
+  status: 'unavailable',
   value: undefined,
   base: undefined,
   user: undefined,
   revision: undefined,
   writable: false,
-  mode: 'memory' as const,
+  mode: 'memory',
+}
+
+const unavailableSnapshot: ConfigFormSnapshot<PiAiSettings> = {
+  status: 'unavailable',
+  value: undefined,
+  base: undefined,
+  user: undefined,
+  revision: undefined,
+  writable: false,
+  mode: 'memory',
 }
 
 function sameDraft(left: CapabilityDraft, right: CapabilityDraft): boolean {
@@ -40,13 +50,13 @@ function protocolValue(value: string): SupportedApi | undefined {
 }
 
 function protocolSettled(
-  scope: SettingsScope<PiAiSettings>,
+  form: ConfigForm<PiAiSettings>,
   route: string,
   modelId: string,
   configured: boolean,
   expected: SupportedApi | undefined,
 ): boolean {
-  const profile = scope.getSnapshot().value?.providers?.[route]
+  const profile = form.getSnapshot().value?.providers?.[route]
   const actual = configured
     ? profile?.models?.find(model => model.id === modelId)?.api
     : profile?.modelOverrides?.[modelId]?.api
@@ -55,19 +65,19 @@ function protocolSettled(
 
 /** 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。 */
 async function waitForProtocol(
-  scope: SettingsScope<PiAiSettings>,
+  form: ConfigForm<PiAiSettings>,
   route: string,
   modelId: string,
   configured: boolean,
   expected: SupportedApi | undefined,
 ): Promise<boolean> {
   for (let attempt = 0; attempt < 30; attempt += 1) {
-    if (protocolSettled(scope, route, modelId, configured, expected)) return true
-    // 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。
-    // eslint-disable-next-line no-await-in-loop -- 有界轮询等待宿主 settings watcher
+    if (protocolSettled(form, route, modelId, configured, expected)) return true
+    // 设置写入契约：协议覆盖先落在本插件行，宿主半再物化到 llm-pi-ai 行。
+    // eslint-disable-next-line no-await-in-loop -- 有界轮询等待宿主 volatile 更新
     await new Promise<void>(resolve => { setTimeout(resolve, 10) })
   }
-  return protocolSettled(scope, route, modelId, configured, expected)
+  return protocolSettled(form, route, modelId, configured, expected)
 }
 
 export interface ModelCapabilityEditorProps {
@@ -75,8 +85,8 @@ export interface ModelCapabilityEditorProps {
   model: ModelEntry
   /** 该行是否来自 dsh 明确配置的 models 列表。 */
   configured?: boolean
-  scope: SettingsScope<PiAiSettings>
-  protocolScope?: SettingsScope<ProtocolOverrideSettings>
+  form: ConfigForm<PiAiSettings>
+  protocolForm?: ConfigForm<ProtocolOverrideSettings>
   writable: boolean
   t: (key: CapabilityKey) => string
   /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
@@ -87,9 +97,9 @@ export function ModelCapabilityEditor(props: ModelCapabilityEditorProps): ReactN
   const initial = draftOf(props.model)
   const configured = props.configured !== false
   const protocolSnapshot = useSyncExternalStore(
-    listener => props.protocolScope?.subscribe(listener) ?? noopSubscribe(),
-    () => props.protocolScope?.getSnapshot() ?? unavailableProtocolSnapshot,
-    () => props.protocolScope?.getSnapshot() ?? unavailableProtocolSnapshot,
+    listener => props.protocolForm?.subscribe(listener) ?? noopSubscribe(),
+    () => props.protocolForm?.getSnapshot() ?? unavailableProtocolSnapshot,
+    () => props.protocolForm?.getSnapshot() ?? unavailableProtocolSnapshot,
   )
   const initialProtocol = protocolOverrideOf(protocolSnapshot.value, props.route, props.model.id)
   const [draft, setDraft] = useState<CapabilityDraft | undefined>(initial)
@@ -115,7 +125,7 @@ export function ModelCapabilityEditor(props: ModelCapabilityEditorProps): ReactN
   const dirty = capabilityDirty || protocolDirty
   const fault = configured && draft !== undefined ? reasoningFault(draft) : undefined
   const disabled = !props.writable || busy
-  const protocolDisabled = disabled || props.protocolScope === undefined
+  const protocolDisabled = disabled || props.protocolForm === undefined
     || protocolSnapshot.status !== 'ready' || !protocolSnapshot.writable
 
   const setImageMode = (imageMode: ImageMode): void => {
@@ -148,35 +158,36 @@ export function ModelCapabilityEditor(props: ModelCapabilityEditorProps): ReactN
     setFailure(undefined)
   }
 
+  // 设置写入契约：dsh 0.1.7 起 ConfigForm.mutate 返回 boolean（false=宿主拒绝），
+  // 删除写后回读比对；仅协议覆盖保留有界轮询，等待宿主半把它物化进 llm-pi-ai 行。
   const save = async (): Promise<void> => {
     setBusy(true)
     setFailure(undefined)
     try {
       if (protocolDirty) {
-        const protocolScope = props.protocolScope
-        if (protocolScope === undefined) {
+        const protocolForm = props.protocolForm
+        if (protocolForm === undefined) {
           setFailure(props.t('rejected'))
           return
         }
-        const before = protocolScope.getSnapshot()
+        const before = protocolForm.getSnapshot()
         const current = protocolOverrideOf(before.value, props.route, props.model.id)
         if (current !== initialProtocol) {
           setFailure(props.t('disappeared'))
           return
         }
         const path = ['protocolOverrides', props.route, props.model.id]
-        await protocolScope.mutate(protocol === undefined
+        const accepted = await protocolForm.mutate(protocol === undefined
           ? [{ op: 'unset', path }]
           : [{ op: 'set', path, value: protocol }], before.revision)
-        const stored = protocolOverrideOf(protocolScope.getSnapshot().value, props.route, props.model.id)
-        if (stored !== protocol || !await waitForProtocol(props.scope, props.route, props.model.id, configured, protocol)) {
+        if (!accepted || !await waitForProtocol(props.form, props.route, props.model.id, configured, protocol)) {
           setFailure(props.t('rejected'))
           return
         }
       }
 
       if (capabilityDirty && draft !== undefined && initial !== undefined) {
-        const before = props.scope.getSnapshot()
+        const before = props.form.getSnapshot()
         const latest = before.value
         const latestModel = latest?.providers?.[props.route]?.models?.find(model => model.id === props.model.id)
         if (latestModel === undefined || !modelCapabilitiesEqual(latestModel, initial)) {
@@ -188,15 +199,13 @@ export function ModelCapabilityEditor(props: ModelCapabilityEditorProps): ReactN
           setFailure(fault === undefined ? props.t('disappeared') : props.t(fault))
           return
         }
-        await props.scope.mutate([{
+        const accepted = await props.form.mutate([{
           // 值来自 JSON settings mirror，patch 只加入 JSON
           // 数组/对象；本地开放模型类型也允许 `undefined`，因此
           // 序列化前可以表达可选字段。
           op: 'set', path: ['providers', props.route, 'models'], value: models.map(model => ({ ...model })) as never,
         }], before.revision)
-        const stored = props.scope.getSnapshot().value?.providers?.[props.route]?.models
-          ?.find(model => model.id === props.model.id)
-        if (stored === undefined || !modelCapabilitiesEqual(stored, draft)) {
+        if (!accepted) {
           setFailure(props.t('rejected'))
           return
         }
@@ -301,11 +310,11 @@ export function ModelCapabilityEditor(props: ModelCapabilityEditorProps): ReactN
   )
 }
 
-export function ModelCapabilitiesPanel({ scope, protocolScope, t }: ModelCapabilitiesPanelProps): ReactNode {
+export function ModelCapabilitiesPanel({ form, protocolForm, t }: ModelCapabilitiesPanelProps): ReactNode {
   const snapshot = useSyncExternalStore(
-    listener => scope?.subscribe(listener) ?? noopSubscribe(),
-    () => scope?.getSnapshot() ?? { status: 'unavailable' as const, value: undefined, base: undefined, user: undefined, revision: undefined, writable: false, mode: 'memory' as const },
-    () => scope?.getSnapshot() ?? { status: 'unavailable' as const, value: undefined, base: undefined, user: undefined, revision: undefined, writable: false, mode: 'memory' as const },
+    listener => form?.subscribe(listener) ?? noopSubscribe(),
+    () => form?.getSnapshot() ?? unavailableSnapshot,
+    () => form?.getSnapshot() ?? unavailableSnapshot,
   )
   const models = configuredModels(snapshot.value)
   const groups = useMemo(() => {
@@ -314,7 +323,7 @@ export function ModelCapabilitiesPanel({ scope, protocolScope, t }: ModelCapabil
     return [...grouped.entries()]
   }, [models])
 
-  if (scope === undefined || t === undefined) return null
+  if (form === undefined || t === undefined) return null
   return (
     <section style={css.panel} aria-label={t('title')}>
       <div><div style={css.title}>{t('title')}</div><p style={css.note}>{t('intro')}</p></div>
@@ -330,8 +339,8 @@ export function ModelCapabilitiesPanel({ scope, protocolScope, t }: ModelCapabil
               key={`${route}\u0000${entry.model.id}`}
               route={route}
               model={entry.model}
-              scope={scope}
-              {...protocolScope === undefined ? {} : { protocolScope }}
+              form={form}
+              {...protocolForm === undefined ? {} : { protocolForm }}
               writable={snapshot.writable}
               t={t}
             />

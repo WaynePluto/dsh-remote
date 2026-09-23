@@ -1,10 +1,11 @@
 /**
  * models-catalog Host half：读取 models.dev，preview/apply/revert pi-ai provider route，并维护本插件 provenance。
  * `apply` 只改本插件拥有的 entries；用户条目和 sibling `copilot-auth` 条目保留。browser 通过 `/models-catalog` RPC 获取 status/preview 并提交选择。
+ * dsh 0.1.7 起 provenance 挂在本插件行 Config 的 `overlays` volatile 字段；llm-pi-ai 行的跨命名空间读写走 `ctx.settings` 的 describe/mutate。
  */
 
 import z from '@deepseek-ai/schemastery'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
 // 仅类型：激活 settings/llm Context merge。
 import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-llm'
@@ -15,11 +16,12 @@ import { fetchCatalog } from './models-dev.js'
 import type { SourceCatalog } from './models-dev.js'
 import { planRevert, planRoute } from './planning.js'
 import type { RouteFacts, RoutePlan } from './planning.js'
-import { commitPlans, Provenance, readRouteFacts } from './section.js'
-import { CHANNEL, DEFAULT_SOURCE_URL, isCatalogEndpoint, isRouteSelection, SELF_NAMESPACE } from './shared.js'
+import { commitPlans, readProvenance, readRouteFacts, routeProvenance } from './section.js'
+import type { Provenance, RouteProvenance } from './section.js'
+import { CHANNEL, DEFAULT_SOURCE_URL, isCatalogEndpoint, isRouteSelection } from './shared.js'
 import type { CatalogStatusView, ReclaimedNotice } from './shared.js'
 
-export { CHANNEL, DEFAULT_SOURCE_URL, PI_AI_NAMESPACE, SELF_NAMESPACE } from './shared.js'
+export { CHANNEL, DEFAULT_SOURCE_URL, ENTRY_ID, PI_AI_NAMESPACE, SELF_NAMESPACE } from './shared.js'
 export type { CatalogStatusView, RoutePreview } from './shared.js'
 
 /** Cordis 插件名；它会出现在 dsh 插件树和诊断信息中。 */
@@ -36,15 +38,18 @@ export type { ModelCatalogRuntime } from './runtime-catalog.js'
 /** 所需 service：connection、settings 和 llm。 */
 export const inject = ['connection', 'settings', 'llm']
 
-/** catalog Host 配置。 */
+/** catalog Host 行配置；provenance 挂在 `overlays` volatile 字段，表单写入经 Loader 热更新。 */
 export interface Config {
   /** models.dev facts 的来源 URL。 */
   sourceUrl: string
+  /** 本插件 provenance（route → 溯源记录）。 */
+  overlays: Volatile<Record<string, RouteProvenance>>
 }
 
-/** Config 的 runtime schema。 */
-export const Config: z<Config> = z.object({
+/** Config 的 runtime schema；`overlays` volatile 后由 settings 服务按 entry id 寻址。 */
+export const Config = z.object({
   sourceUrl: z.string().default(DEFAULT_SOURCE_URL),
+  overlays: z.dict(routeProvenance).default({}).volatile(),
 })
 
 /** 未知 endpoint 的错误码。 */
@@ -59,27 +64,26 @@ export const INTERNAL_CODE = 'models-catalog/internal'
 /** 按 source URL、settings provenance 和 llm catalog 执行 route 规划的 Host service。 */
 export class CatalogService {
   private readonly ctx: Context
+  private readonly config: Config
   private readonly sourceUrl: string
   private catalog: SourceCatalog | undefined
   private fetchedAt: number | undefined
   private reconciled: readonly ReclaimedNotice[] = []
 
-  /** 保存 Host context 和 facts source URL。 */
-  constructor(ctx: Context, sourceUrl: string) {
+  /** 保存 Host context 与本插件行 Config；provenance 从 `overlays` volatile 引用实时读取。 */
+  constructor(ctx: Context, config: Config) {
     this.ctx = ctx
-    this.sourceUrl = sourceUrl
+    this.config = config
+    this.sourceUrl = config.sourceUrl
   }
 
-  /** 读取本插件 settings 中的 overlay provenance；缺席时返回空 map。 */
+  /** 读取本插件行 config 中的 overlay provenance；缺席时返回空 map。 */
   private provenance(): Provenance {
-    const value = this.ctx.settings.get(SELF_NAMESPACE)
-    const overlays = (value as Provenance | undefined)?.overlays
-    return { overlays: overlays ?? {} }
+    return readProvenance(this.config)
   }
 
-  /** 读取当前 llm-pi-ai route facts；没有该 settings section 时为空。 */
+  /** 读取当前 llm-pi-ai route facts；该行没有 providers 时为空。 */
   private facts(): readonly RouteFacts[] {
-    if (this.ctx.settings.get('llm-pi-ai') === undefined) return []
     return readRouteFacts(this.ctx, this.provenance())
   }
 
@@ -229,19 +233,20 @@ export async function dispatch(
 
 /** 注册 provenance/runtime services 和 `/models-catalog` RPC，并启动一次 best-effort cleanup。 */
 export function apply(ctx: Context, config: Config): void {
-  const provenance = ctx.settings.register(SELF_NAMESPACE, Provenance)
-  const failed = hydrateRuntimeModels(provenance.get().overlays)
+  // provenance 是本插件内部记账；关闭 Plugins 表单的自动页面，读写仍走本行 config 与 settings 服务。
+  ctx.effect(() => ctx.settings.configure({ auto: false }, ctx.fiber), 'models-catalog: settings page policy')
+  const failed = hydrateRuntimeModels(readProvenance(config).overlays)
   if (failed.length > 0) {
     ctx.logger?.warn(
       'models-catalog: could not hydrate %d persisted runtime model(s); their settings may need removal or a pi-ai upgrade',
       failed.length,
     )
   }
-  // runtime service 先提供给 sibling plugin，再注册 RPC；provenance 由 settings scope 管理。
+  // runtime service 先提供给 sibling plugin，再注册 RPC；provenance 由本插件行 config 携带。
   const runtime = createModelCatalogRuntime()
   ctx.provide(RUNTIME_SERVICE, runtime)
   if (ctx.root.get(BOOTSTRAP_SERVICE) === undefined) ctx.root.provide(BOOTSTRAP_SERVICE, true)
-  const service = new CatalogService(ctx, config.sourceUrl)
+  const service = new CatalogService(ctx, config)
   const dispose = ctx.connection.rpc.handle(
     CHANNEL,
     async (endpoint, payload, signal) => await dispatch(service, endpoint, payload, signal),

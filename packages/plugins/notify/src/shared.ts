@@ -1,7 +1,13 @@
 /** Host/browser 两半共享的 settings 与 test RPC facts。 */
 
-/** settings namespace；页面写入 shared `settings.yaml`。 */
+/** 文案命名空间；dsh 0.1.7 起仅用于 locale 与设置分区 id，不再寻址设置表单。 */
 export const NAMESPACE = 'dsh-plugin-notify'
+
+/**
+ * dsh 0.1.7 起 configForms/设置表单以 profile 行的 entry id 寻址（`cordis.patch.yml`
+ * 里 `insert` 行的 `id` 字段），与文案命名空间不再是同一个字符串。
+ */
+export const ENTRY_ID = 'notify'
 
 /** 页面“发送测试通知”按钮调用的私有 RPC 通道。 */
 export const CHANNEL = '/notify'
@@ -20,7 +26,7 @@ export interface NotifySettings {
 /** section 的字段，按写入顺序排列。 */
 export const FIELDS = ['enabled', 'waiting'] as const
 
-/** 注册 namespace 没有用户 section 时使用的 base defaults。 */
+/** Config 各字段的默认值，也是页面没有快照时的回退。 */
 export const DEFAULT_SETTINGS: NotifySettings = {
   enabled: true,
   waiting: true,

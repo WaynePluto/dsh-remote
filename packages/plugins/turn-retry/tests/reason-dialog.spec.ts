@@ -56,7 +56,7 @@ describe('reason dialog fullscreen', () => {
   })
   it('renders the public toggle and hides drag handles while fullscreen', () => {
     const source = readFileSync(new URL('../src/client/RetryDock.tsx', import.meta.url), 'utf8')
-    expect(source).toContain('IconFullscreenOutline16')
+    expect(source).toContain('IconFullscreenOutlineMedium')
     expect(source).toContain('DialogFullscreenButton')
     expect(source).toContain('dataAttribute={REASON_DIALOG_FULLSCREEN_ATTR}')
     expect(source).toMatch(/\{!reasonFullscreen && <ReasonMoveHandle/u)

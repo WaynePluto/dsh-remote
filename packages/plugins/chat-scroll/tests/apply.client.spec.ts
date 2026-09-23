@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
-  IconChevronUpOutline14: () => null,
+  IconChevronUpOutlineMedium: () => null,
 }))
 
 import { apply, inject } from '../src/client/index.js'

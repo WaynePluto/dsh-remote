@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import {
   apply,
+  Config,
   currentDepth,
   depthDenial,
   DEFAULT_SETTINGS,
-  Settings,
+  readConfig,
 } from '../src/index.js'
 import { MAX_DEPTH, NAMESPACE } from '../shared.js'
 
@@ -27,12 +28,11 @@ const noop = (): void => {}
 
 function build(): Built {
   const section = { ...DEFAULT_SETTINGS }
+  // 组一个可变的 volatile Config；dsh 0.1.7 起挂载签名是 apply(ctx, config)。
+  const config = { maxDepth: { get: () => section.maxDepth } }
   let guard: Built['guard']
   let dispose: () => void = noop
   const ctx = {
-    settings: {
-      register: () => ({ get: () => section }),
-    },
     tools: {
       guard: (candidate: Built['guard']) => {
         guard = candidate
@@ -41,7 +41,7 @@ function build(): Built {
     },
     effect: (factory: () => () => void) => { dispose = factory() },
   } as unknown as Context
-  apply(ctx)
+  apply(ctx, config)
   return { section, get guard() { return guard }, dispose }
 }
 
@@ -50,7 +50,7 @@ describe('shared depth policy', () => {
     expect(DEFAULT_SETTINGS).toEqual({ maxDepth: 3 })
     expect(MAX_DEPTH).toBe(3)
     expect(NAMESPACE).toBe('dsh-plugin-subagent-depth')
-    expect(Settings(undefined as never)).toEqual({ maxDepth: 3 })
+    expect(readConfig(Config(undefined as never))).toEqual({ maxDepth: 3 })
   })
 
   it('counts a top-level agent as depth zero', () => {

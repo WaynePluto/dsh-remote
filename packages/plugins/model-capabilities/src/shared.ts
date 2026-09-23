@@ -1,6 +1,14 @@
 /** 共享的模型能力形状与校验。 */
 
 export const NAMESPACE = 'dsh-plugin-model-capabilities'
+
+/**
+ * dsh 0.1.7 起表单与设置服务按 profile 行 entry id 寻址（`cordis.patch.yml`
+ * 里 `insert` 行的 `id` 字段），与文案命名空间不再是同一个字符串。
+ */
+export const ENTRY_ID = 'model-capabilities'
+
+/** llm-pi-ai 插件行的 entry id；跨命名空间读写落在其 `providers` 字段。 */
 export const PI_AI_NAMESPACE = 'llm-pi-ai'
 
 /** 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。 */

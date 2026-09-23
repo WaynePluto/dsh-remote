@@ -1,12 +1,11 @@
 /** 安全与权限契约：此处说明固定权限、审批边界及异常回退。 */
 
-import type { Context } from '@deepseek-ai/cordis'
-import zs from '@deepseek-ai/schemastery'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 // pending toast 不能成为保持进程存活的理由。
 // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`dsh-session-title`）
 // 会话与投影契约：此处说明持久事件、投影状态或历史回放边界。（涉及：`title`）
 // 实现说明：此处记录相关接口、边界和生命周期约束。
-import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-projection'
@@ -19,11 +18,12 @@ import type { ConnectionRpcResult } from '@deepseek-ai/dsh-client-connection'
 import { outcomeOf, settledNotice, waitingNotice } from './notice.js'
 import { WindowsToastNotifier } from './toast.js'
 import type { Notifier } from './toast.js'
-import { CHANNEL, DEFAULT_SETTINGS, isNotifyEndpoint, NAMESPACE } from './shared.js'
+import { CHANNEL, DEFAULT_SETTINGS, isNotifyEndpoint } from './shared.js'
 import type { NotifySettings, NotifyTestResult } from './shared.js'
 
-export { CHANNEL, DEFAULT_SETTINGS, FIELDS, isNotifyEndpoint, NAMESPACE, TEST_ENDPOINT } from './shared.js'
+export { CHANNEL, DEFAULT_SETTINGS, ENTRY_ID, FIELDS, isNotifyEndpoint, NAMESPACE, TEST_ENDPOINT } from './shared.js'
 export type { NotifySettings, NotifyTestResult } from './shared.js'
+export type { Config as NotifyConfig }
 export {
   noticeTitle, outcomeOf, projectName, settledNotice, waitingNotice,
 } from './notice.js'
@@ -37,20 +37,37 @@ export type { Notice, Notifier } from './toast.js'
 export const name = 'dsh-remote-notify'
 
 /**
- * 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`settings`、`agents`）
+ * 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`agents`）
  * 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`connection`）
  * 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。
  *
  * 会话与投影契约：此处说明持久事件、投影状态或历史回放边界。（涉及：`sessionProjections`）
  * 实现说明：此处记录相关接口、边界和生命周期约束。
  */
-export const inject = ['settings', 'agents', 'connection']
+export const inject = ['agents', 'connection']
 
-/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。*/
-export const Settings: zs<NotifySettings> = zs.object({
-  enabled: zs.boolean().default(DEFAULT_SETTINGS.enabled),
-  waiting: zs.boolean().default(DEFAULT_SETTINGS.waiting),
+/** 本插件行的 composition Config；两个开关全部 volatile，免重启热改。 */
+export interface Config {
+  enabled: Volatile<boolean>
+  waiting: Volatile<boolean>
+}
+
+/** dsh Loader 从本导出解析行 config；`.volatile()` 让字段出现在 Plugins 表单并经 Loader 热更新。 */
+export const Config = z.object({
+  enabled: z.boolean().default(DEFAULT_SETTINGS.enabled).volatile(),
+  waiting: z.boolean().default(DEFAULT_SETTINGS.waiting).volatile(),
 })
+
+/** Loader 注入的是 volatile 引用，schema 直接解析也会包成引用；两种形态都读成普通值。 */
+function readField<T>(ref: Volatile<T> | T): T {
+  const value = typeof (ref as Volatile<T>).get === 'function' ? (ref as Volatile<T>).get() : ref
+  return value as T
+}
+
+/** 从 Config（引用或解析值）读出一份普通设置；开关都在事件发生时读取，天然跟随热更新。 */
+export function readConfig(config: Config): NotifySettings {
+  return { enabled: readField(config.enabled), waiting: readField(config.waiting) }
+}
 
 /**
  * agent 保持 `idle` 多久后发送 settled notice。
@@ -150,16 +167,14 @@ export interface NotifyOptions {
 }
 
 /**
- * 传输契约：此处说明 RPC 端点、路径段、Host/Origin 围栏或认证边界。
+ * 传输契约：RPC 通道不变；开关读取改挂 composition Config 的 volatile 引用。
  * 实现说明：此处记录相关接口、边界和生命周期约束。
  * 测试契约：此处说明本测试锁定的行为和回归边界。
  */
-export function apply(ctx: Context, options: NotifyOptions = {}): void {
+export function apply(ctx: Context, config: Config, options: NotifyOptions = {}): void {
   const notifier = options.notifier ?? new WindowsToastNotifier()
   const settleDebounceMs = options.settleDebounceMs ?? SETTLE_DEBOUNCE_MS
   const waitingDelayMs = options.waitingDelayMs ?? WAITING_DELAY_MS
-
-  const scope = ctx.settings.register(NAMESPACE, Settings, { base: DEFAULT_SETTINGS })
 
   /** 本插件拥有的全部 timer；卸载时逐一清理。 */
   const timers = new Set<ReturnType<typeof setTimeout>>()
@@ -227,7 +242,7 @@ export function apply(ctx: Context, options: NotifyOptions = {}): void {
     const timer = setTimeout(() => {
       timers.delete(timer)
       settling.delete(agent)
-      if (!scope.get().enabled) return
+      if (!readConfig(config).enabled) return
       // 实现说明：此处记录相关接口、边界和生命周期约束。
       // 实现说明：此处记录相关接口、边界和生命周期约束。
       // 实现说明：此处记录相关接口、边界和生命周期约束。
@@ -260,7 +275,7 @@ export function apply(ctx: Context, options: NotifyOptions = {}): void {
    * 实现说明：此处记录相关接口、边界和生命周期约束。
    */
   const watchWaiting = (agent: Agent | undefined, notice: { title: string; body: string }): (() => void) => {
-    const settings = scope.get()
+    const settings = readConfig(config)
     if (!settings.enabled || !settings.waiting) return () => {}
     if (agent !== undefined && !ctx.agents.roots().includes(agent)) return () => {}
     return arm(waitingDelayMs, () => { show(notice) })

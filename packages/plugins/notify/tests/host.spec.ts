@@ -1,10 +1,10 @@
-/** 会话与投影契约：此处说明持久事件、投影状态或历史回放边界。（涉及：`settings`、`agents`、`connection`、`sessionProjections`、`agent/status → idle`、`kick()`、`agent.ts:226-230`） */
+/** 会话与投影契约：此处说明持久事件、投影状态或历史回放边界。（涉及：`config`、`agents`、`connection`、`sessionProjections`、`agent/status → idle`、`kick()`、`agent.ts:226-230`） */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import {
-  apply, CHANNEL, dispatch, NAMESPACE, SETTLE_DEBOUNCE_MS, Settings, TEST_ENDPOINT, TEST_NOTICE,
-  UNKNOWN_ENDPOINT_CODE, WAITING_DELAY_MS,
+  apply, CHANNEL, Config, dispatch, NAMESPACE, readConfig, SETTLE_DEBOUNCE_MS,
+  TEST_ENDPOINT, TEST_NOTICE, UNKNOWN_ENDPOINT_CODE, WAITING_DELAY_MS,
 } from '../src/index.js'
 import { DEFAULT_SETTINGS } from '../src/shared.js'
 import type { NotifySettings } from '../src/shared.js'
@@ -47,6 +47,8 @@ interface CtxOptions {
 /** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 interface Built {
   ctx: Context
+  /** 组出的可变 volatile Config；改 `section` 即等价一次 Loader 热更新。 */
+  config: Config
   /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   emit: (name: string, ...args: unknown[]) => void
   /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
@@ -54,7 +56,7 @@ interface Built {
   /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   prepended: Map<string, boolean>
   handled: Map<string, (endpoint: string, payload: unknown) => Promise<unknown>>
-  /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
+  /** 设置写入契约：fake volatile 背后的可变设置存储。 */
   section: NotifySettings
   disposers: (() => void)[]
 }
@@ -66,6 +68,11 @@ function fakeCtx(options: CtxOptions = {}): Built {
   const handled = new Map<string, (endpoint: string, payload: unknown) => Promise<unknown>>()
   const disposers: (() => void)[] = []
   const section: NotifySettings = { ...DEFAULT_SETTINGS, ...options.settings }
+  // dsh 0.1.7 起挂载签名是 apply(ctx, config)；两个 volatile 引用都从 section 现读。
+  const config: Config = {
+    enabled: { get: () => section.enabled },
+    waiting: { get: () => section.waiting },
+  }
 
   const services: Record<string, unknown> = {
     sessionProjections: options.projections === false
@@ -74,9 +81,6 @@ function fakeCtx(options: CtxOptions = {}): Built {
   }
 
   const ctx = {
-    settings: {
-      register: () => ({ get: () => section, watch: () => () => {} }),
-    },
     agents: { roots: () => options.roots ?? [] },
     connection: {
       rpc: {
@@ -100,6 +104,7 @@ function fakeCtx(options: CtxOptions = {}): Built {
 
   return {
     ctx,
+    config,
     emit: (nameOfEvent, ...args) => {
       for (const listener of listeners.get(nameOfEvent) ?? []) {
         (listener as (...rest: unknown[]) => unknown)(...args)
@@ -136,12 +141,26 @@ describe('the settings section', () => {
   it('is on out of the box', () => {
     // 实现说明：此处记录相关接口、边界和生命周期约束。
     // 实现说明：此处记录相关接口、边界和生命周期约束。
-    expect(Settings(undefined as never)).toEqual({ enabled: true, waiting: true })
+    expect(readConfig(Config(undefined as never))).toEqual({ enabled: true, waiting: true })
     expect(DEFAULT_SETTINGS).toEqual({ enabled: true, waiting: true })
   })
 
   it('is registered under the package name', () => {
     expect(NAMESPACE).toBe('dsh-plugin-notify')
+  })
+
+  it('follows a settings hot update without remounting', () => {
+    const agent = fakeAgent()
+    const built = fakeCtx({ roots: [agent] })
+    const notifier = recorder()
+    apply(built.ctx, built.config, { notifier })
+
+    // Loader 热更新只改写 volatile 引用背后的值；宿主半事件时现读，立即生效。
+    built.section.enabled = false
+    built.emit('agent/status', { agent, status: 'idle' })
+    vi.advanceTimersByTime(SETTLE_DEBOUNCE_MS)
+
+    expect(notifier.sent).toHaveLength(0)
   })
 })
 
@@ -150,7 +169,7 @@ describe('an agent coming to rest', () => {
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent], title: '通知插件' })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     endTurn(built, agent.session, { kind: 'completed' })
     built.emit('agent/status', { agent, status: 'idle' })
@@ -169,7 +188,7 @@ describe('an agent coming to rest', () => {
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent] })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     endTurn(built, agent.session, { kind: 'completed' })
     built.emit('agent/status', { agent, status: 'idle' })
@@ -185,7 +204,7 @@ describe('an agent coming to rest', () => {
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent] })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     built.emit('agent/status', { agent, status: 'idle' })
     agent.status = 'running'
@@ -198,7 +217,7 @@ describe('an agent coming to rest', () => {
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent] })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     for (let i = 0; i < 5; i += 1) {
       built.emit('agent/status', { agent, status: 'idle' })
@@ -216,7 +235,7 @@ describe('an agent coming to rest', () => {
     const child = fakeAgent()
     const built = fakeCtx({ roots: [fakeAgent()] })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     built.emit('agent/status', { agent: child, status: 'idle' })
     vi.advanceTimersByTime(SETTLE_DEBOUNCE_MS)
@@ -228,7 +247,7 @@ describe('an agent coming to rest', () => {
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent] })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     endTurn(built, agent.session, { kind: 'error', error: { code: 'TRANSPORT', message: 'x' } })
     built.emit('agent/status', { agent, status: 'idle' })
@@ -242,7 +261,7 @@ describe('an agent coming to rest', () => {
     const second = fakeAgent({ session: { header: { cwd: '/srv/other' } } })
     const built = fakeCtx({ roots: [first, second] })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     endTurn(built, first.session, { kind: 'error', error: { code: 'TIMEOUT', message: 'x' } })
     endTurn(built, second.session, { kind: 'completed' })
@@ -256,7 +275,7 @@ describe('an agent coming to rest', () => {
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent] })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     built.emit('session/event', agent.session, { type: 'user/message', data: {} })
     built.emit('agent/status', { agent, status: 'idle' })
@@ -269,7 +288,7 @@ describe('an agent coming to rest', () => {
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent], settings: { enabled: false } })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     built.emit('agent/status', { agent, status: 'idle' })
     vi.advanceTimersByTime(SETTLE_DEBOUNCE_MS)
@@ -281,7 +300,7 @@ describe('an agent coming to rest', () => {
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent], projections: false })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     built.emit('agent/status', { agent, status: 'idle' })
     vi.advanceTimersByTime(SETTLE_DEBOUNCE_MS)
@@ -293,7 +312,7 @@ describe('an agent coming to rest', () => {
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent] })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     built.emit('agent/status', { agent, status: 'idle' })
     built.emit('agent/disposed', { agent })
@@ -308,7 +327,7 @@ describe('a turn stalled on a person', () => {
     // 实现说明：此处记录相关接口、边界和生命周期约束。
     // 实现说明：此处记录相关接口、边界和生命周期约束。
     const built = fakeCtx()
-    apply(built.ctx, { notifier: recorder() })
+    apply(built.ctx, built.config, { notifier: recorder() })
     expect(built.prepended.get('approval/request')).toBe(true)
     expect(built.prepended.get('user-questions/request')).toBe(true)
   })
@@ -317,7 +336,7 @@ describe('a turn stalled on a person', () => {
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent] })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     const outcome = await built.waterfall(
       'approval/request',
@@ -334,7 +353,7 @@ describe('a turn stalled on a person', () => {
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent] })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     const answer = deferred<string>()
     const pending = built.waterfall(
@@ -354,7 +373,7 @@ describe('a turn stalled on a person', () => {
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent] })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     const answer = deferred<unknown>()
     const pending = built.waterfall(
@@ -373,7 +392,7 @@ describe('a turn stalled on a person', () => {
   it('copes with a question that named no agent', async () => {
     const built = fakeCtx()
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     const answer = deferred<unknown>()
     const pending = built.waterfall(
@@ -393,7 +412,7 @@ describe('a turn stalled on a person', () => {
     const child = fakeAgent()
     const built = fakeCtx({ roots: [fakeAgent()] })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     const answer = deferred<string>()
     const pending = built.waterfall(
@@ -413,7 +432,7 @@ describe('a turn stalled on a person', () => {
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent], settings: { waiting: false } })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     const answer = deferred<string>()
     const pending = built.waterfall(
@@ -435,7 +454,7 @@ describe('a turn stalled on a person', () => {
   it('returns what downstream decided, even when it notified', async () => {
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent] })
-    apply(built.ctx, { notifier: recorder() })
+    apply(built.ctx, built.config, { notifier: recorder() })
 
     const answer = deferred<string>()
     const pending = built.waterfall(
@@ -452,7 +471,7 @@ describe('a turn stalled on a person', () => {
   it('lets a downstream failure through untouched', async () => {
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent] })
-    apply(built.ctx, { notifier: recorder() })
+    apply(built.ctx, built.config, { notifier: recorder() })
 
     await expect(built.waterfall(
       'approval/request',
@@ -465,7 +484,7 @@ describe('a turn stalled on a person', () => {
 describe('the test channel', () => {
   it('is served on the channel this plugin owns', () => {
     const built = fakeCtx()
-    apply(built.ctx, { notifier: recorder() })
+    apply(built.ctx, built.config, { notifier: recorder() })
     expect(built.handled.has(CHANNEL)).toBe(true)
   })
 
@@ -491,7 +510,7 @@ describe('the test channel', () => {
     // 实现说明：此处记录相关接口、边界和生命周期约束。
     const built = fakeCtx({ settings: { enabled: false } })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     await built.handled.get(CHANNEL)?.(TEST_ENDPOINT, {})
     expect(notifier.sent).toHaveLength(1)
@@ -508,7 +527,7 @@ describe('unloading', () => {
     const agent = fakeAgent()
     const built = fakeCtx({ roots: [agent] })
     const notifier = recorder()
-    apply(built.ctx, { notifier })
+    apply(built.ctx, built.config, { notifier })
 
     built.emit('agent/status', { agent, status: 'idle' })
     for (const dispose of built.disposers) dispose()

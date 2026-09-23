@@ -6,10 +6,10 @@ import { createPortal } from 'react-dom'
 import type { ModelReasoningEffort, ModelSelection } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selection/client'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
-  IconCheckOutline16, IconChevronDownOutline14, IconChevronRightOutline14,
-  IconWarningOutline16, Toast,
+  IconCheckOutlineMedium, IconChevronDownOutlineMedium, IconChevronRightOutlineMedium,
+  IconWarningOutlineMedium, Toast,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { filterFavoriteGroups } from '../filter.js'
 import { DEFAULT_SETTINGS } from '../shared.js'
@@ -23,7 +23,7 @@ export interface FavoriteModelSelectInjected {
   directory: SnapshotStore<ModelDirectoryState>
   load: () => void
   select: (selection: ModelSelection) => Promise<boolean>
-  favorites: SettingsScope<FavoriteModelsSettings>
+  favorites: ConfigForm<FavoriteModelsSettings>
 }
 
 type Pane = 'root' | 'model' | 'effort'
@@ -274,7 +274,7 @@ export function FavoriteModelSelect({
       >
         <span className={selectorClasses.triggerLabel}>{modelLabel}</span>
         {effortLabel !== undefined ? <span className={selectorClasses.triggerEffort}>{effortLabel}</span> : null}
-        <span className={selectorClasses.chevron}><IconChevronDownOutline14 /></span>
+        <span className={selectorClasses.chevron}><IconChevronDownOutlineMedium /></span>
       </button>
 
       {open && createPortal(
@@ -293,14 +293,14 @@ export function FavoriteModelSelect({
                   <button ref={itemRef()} type="button" role="menuitem" className={selectorClasses.cell} onClick={() => { setPane('model') }}>
                     <span className={selectorClasses.cellLabel}>{translate(t, 'menuModel')}</span>
                     <span className={selectorClasses.cellValue}>{modelLabel}</span>
-                    <span className={selectorClasses.cellChevron}><IconChevronRightOutline14 /></span>
+                    <span className={selectorClasses.cellChevron}><IconChevronRightOutlineMedium /></span>
                   </button>
                   {reasoning !== undefined
                     ? (
                       <button ref={itemRef()} type="button" role="menuitem" className={selectorClasses.cell} onClick={() => { setPane('effort') }}>
                         <span className={selectorClasses.cellLabel}>{translate(t, 'menuEffort')}</span>
                         <span className={selectorClasses.cellValue}>{effortLabel}</span>
-                        <span className={selectorClasses.cellChevron}><IconChevronRightOutline14 /></span>
+                        <span className={selectorClasses.cellChevron}><IconChevronRightOutlineMedium /></span>
                       </button>
                     )
                     : null}
@@ -344,7 +344,7 @@ export function FavoriteModelSelect({
                               onClick={() => { choose({ provider: group.id, model: model.id }) }}
                             >
                               <span className={selectorClasses.optionCopy}><span className={selectorClasses.modelName}>{model.name}</span></span>
-                              <span className={selectorClasses.check}>{selected ? <IconCheckOutline16 /> : null}</span>
+                              <span className={selectorClasses.check}>{selected ? <IconCheckOutlineMedium /> : null}</span>
                             </button>
                           )
                         })}
@@ -380,7 +380,7 @@ export function FavoriteModelSelect({
                         onClick={() => { chooseEffort(level.effort) }}
                       >
                         <span className={selectorClasses.optionCopy}><span className={selectorClasses.modelName}>{level.label}</span></span>
-                        <span className={selectorClasses.check}>{effectiveEffort === level.effort ? <IconCheckOutline16 /> : null}</span>
+                        <span className={selectorClasses.check}>{effectiveEffort === level.effort ? <IconCheckOutlineMedium /> : null}</span>
                       </button>
                     ))}
                 </>
@@ -394,7 +394,7 @@ export function FavoriteModelSelect({
           <Toast
             key={toast.seq}
             text={toast.text}
-            icon={<IconWarningOutline16 />}
+            icon={<IconWarningOutlineMedium />}
             anchor={rootRef.current?.closest<HTMLElement>('[data-composer-card]') ?? null}
             onDone={() => { setToast(null) }}
           />

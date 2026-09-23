@@ -1,9 +1,9 @@
-/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。（涉及：`settings.section`、`settings.general.item`、`settings.yaml`、`SettingsScope.mutate`、`packages/client/ui-settings/src/client/settings-scope.ts:132-135`、`catch`、`proxyFault`） */
+/** 设置写入契约：dsh 0.1.7 起 `ConfigForm.mutate` 返回 boolean（false=宿主拒绝），无需再写后回读比对。 */
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Button, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CSSProperties, ReactNode } from 'react'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { DEFAULT_SETTINGS, DEFAULT_TEST_URL, proxyFault } from '../shared.js'
 import type { ProxySettings, ProxyTestResult } from '../shared.js'
 import { fill } from './locales.js'
@@ -14,8 +14,8 @@ const FIELDS = ['enabled', 'url', 'bypass'] as const
 
 /** 本插件注册时注入的内容。 */
 export interface ProxySectionInjected {
-  /** 绑定的 `proxy` settings scope。 */
-  scope: SettingsScope<ProxySettings>
+  /** 绑定到本插件 entry id 的 config form。 */
+  form: ConfigForm<ProxySettings>
   /** 调用宿主测试端点。 */
   test: (url: string) => Promise<ProxyTestResult>
 }
@@ -85,11 +85,11 @@ type Busy = 'idle' | 'saving' | 'testing'
 
 /** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 export function ProxySection(props: ProxySectionProps): ReactNode {
-  const { scope, test, t } = props
-  const snapshot: SettingsScopeSnapshot<ProxySettings> | undefined = useSyncExternalStore(
-    useCallback((listener: () => void) => scope?.subscribe(listener) ?? (() => {}), [scope]),
-    useCallback(() => scope?.getSnapshot(), [scope]),
-    useCallback(() => scope?.getSnapshot(), [scope]),
+  const { form, test, t } = props
+  const snapshot: ConfigFormSnapshot<ProxySettings> | undefined = useSyncExternalStore(
+    useCallback((listener: () => void) => form?.subscribe(listener) ?? (() => {}), [form]),
+    useCallback(() => form?.getSnapshot(), [form]),
+    useCallback(() => form?.getSnapshot(), [form]),
   )
 
   const settings = snapshot?.value ?? DEFAULT_SETTINGS
@@ -128,9 +128,9 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
     }))
   }, [settings.url, settings.bypass])
 
-  /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。（涉及：`mutate`） */
+  /** 设置写入契约：mutate 返回 false 即宿主拒绝（dsh 0.1.7 起显式回答，不再需要回读比对）。 */
   const commit = useCallback(async (next: ProxySettings): Promise<void> => {
-    if (scope === undefined) return
+    if (form === undefined) return
     setFailure(undefined)
     setNeedsUrl(false)
 
@@ -152,11 +152,8 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
 
     setBusy('saving')
     try {
-      await scope.mutate(ops)
-      // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`catch`）
-      // 能诚实回答“是否保存”。
-      const stored = scope.getSnapshot().value
-      if (stored === undefined || !FIELDS.every(key => stored[key] === next[key])) {
+      const accepted = await form.mutate(ops)
+      if (!accepted) {
         setFailure(t?.('rejected') ?? 'rejected')
         return
       }
@@ -168,7 +165,7 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
     } finally {
       setBusy('idle')
     }
-  }, [scope, t, settings])
+  }, [form, t, settings])
 
   const runTest = useCallback(async (): Promise<void> => {
     if (test === undefined) return
@@ -189,7 +186,7 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
     void commit({ enabled: next, url, bypass })
   }, [commit, url, bypass])
 
-  if (t === undefined || scope === undefined) return null
+  if (t === undefined || form === undefined) return null
   if (snapshot === undefined || snapshot.status === 'loading') return <p style={note}>{t?.('loading') ?? ''}</p>
   if (snapshot.status === 'unavailable') return <p style={note}>{t('unavailable')}</p>
 

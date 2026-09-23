@@ -4,9 +4,9 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
   DocumentFileIcon: () => null,
-  IconBranchOutline16: () => null,
-  IconCheckOutline16: () => null,
-  IconCopyOutline16: () => null,
+  IconBranchOutlineMedium: () => null,
+  IconCheckOutlineMedium: () => null,
+  IconCopyOutlineMedium: () => null,
   JsonBlock: () => null,
   Tooltip: ({ children }: { children: unknown }) => children,
   fileSizeText: () => '',

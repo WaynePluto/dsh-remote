@@ -15,9 +15,16 @@ export const CHANNEL = '/models-catalog'
 export const PI_AI_NAMESPACE = 'llm-pi-ai'
 
 /**
- * 本插件自己的 settings namespace，只保存 provenance。
- * 静态 `models` 无法区分用户、`copilot-auth` 或本插件写入的条目；记录 additions 才能让后续 pass 只触碰本插件拥有的 entries。
- * 名称沿用包名和项目的 plugin namespace 约定，`dsh-plugin-` 前缀也不会与上游 dsh namespace 冲突。
+ * dsh 0.1.7 起表单与设置服务按 profile 行 entry id 寻址（`cordis.patch.yml`
+ * 里 `insert` 行的 `id` 字段），与文案命名空间不再是同一个字符串。
+ * 本插件的 provenance 挂在该行的 `overlays` volatile 字段上。
+ */
+export const ENTRY_ID = 'models-catalog'
+
+/**
+ * 本插件自己的文案命名空间，只用于页面文案与槽位注册。
+ * provenance 的记录动机不变：静态 `models` 无法区分用户、`copilot-auth` 或本插件写入的条目，
+ * 记录 additions 才能让后续 pass 只触碰本插件拥有的 entries。
  */
 export const SELF_NAMESPACE = 'dsh-plugin-models-catalog'
 

@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect } from 'react'
-import { IconApiOutline14, IconChevronDownOutline14, IconChevronUpOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconApiOutlineMedium, IconChevronDownOutlineMedium, IconChevronUpOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
 import { ServiceLogDialog } from './ServiceLogDialog.js'
 import { ServiceRow } from './ServiceRow.js'
 import { installLogDialogStyles } from './styles.js'
@@ -74,12 +74,12 @@ export function ServicesPanel({ sessionId, actions, t }: ServicesPanelProps) {
         onClick={() => { setCollapsed(value => !value) }}
       >
         {/* 复用 dsh 自己的 14px glyph set，leading 和标题均由 flex cell 居中。 */}
-        <span aria-hidden style={leadStyle}><IconApiOutline14 /></span>
+        <span aria-hidden style={leadStyle}><IconApiOutlineMedium /></span>
         <span style={titleStyle}>{translate('title')}</span>
         <span style={summaryStyle}><span style={summaryTextStyle}>{summary}</span></span>
         {/* 收起使用向上图标，展开使用向下图标，与 dsh todo panel 相同。 */}
         <span aria-hidden style={chevronStyle}>
-          {collapsed ? <IconChevronUpOutline14 /> : <IconChevronDownOutline14 />}
+          {collapsed ? <IconChevronUpOutlineMedium /> : <IconChevronDownOutlineMedium />}
         </span>
       </button>
 

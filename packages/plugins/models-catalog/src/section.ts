@@ -1,13 +1,13 @@
-/** settings section 的 provenance 读写与 models list facts。 */
+/** settings 行的 provenance 读写与 models list facts。 */
 
 import z from '@deepseek-ai/schemastery'
-import type { Context } from '@deepseek-ai/cordis'
-// 仅类型：读取 settings scope 和 llm provider display names。
+import type { Context, Volatile } from '@deepseek-ai/cordis'
+// 仅类型：读取 settings 服务和 llm provider display names。
 import type { SettingsPathOp } from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-llm'
 import { installedRoute } from './installed.js'
 import type { ModelEntry, RouteFacts, RoutePlan } from './planning.js'
-import { PI_AI_NAMESPACE, SELF_NAMESPACE } from './shared.js'
+import { ENTRY_ID, PI_AI_NAMESPACE } from './shared.js'
 import type { RuntimeModelSpec } from './shared.js'
 
 /** 一个 route 的本插件 provenance。 */
@@ -20,7 +20,7 @@ export interface RouteProvenance {
   updatedAt: string
 }
 
-/** 本插件 namespace 下全部 route provenance。 */
+/** 本插件行 `overlays` 字段下全部 route provenance。 */
 export interface Provenance {
   /** route 到 provenance 的映射。 */
   overlays: Record<string, RouteProvenance>
@@ -37,12 +37,11 @@ const runtimeModel = z.object({
   input: z.array(z.union(['text', 'image'])),
 })
 
-export const Provenance: z<Provenance> = z.object({
-  overlays: z.dict(z.object({
-    addedIds: z.array(z.string()),
-    models: z.dict(runtimeModel),
-    updatedAt: z.string(),
-  })),
+/** 一个 route 的 provenance schema；本插件行 Config 的 `overlays` 内层。 */
+export const routeProvenance = z.object({
+  addedIds: z.array(z.string()),
+  models: z.dict(runtimeModel),
+  updatedAt: z.string(),
 })
 
 /** 从 settings JSON 读取普通 record。 */
@@ -50,6 +49,17 @@ function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined
+}
+
+/** Loader 注入的是 volatile 引用，schema 直接调用 `Config(plain)` 得到普通值；两种形态都读成普通值。 */
+function readField<T>(ref: Volatile<T> | T): T {
+  const value = typeof (ref as Volatile<T>).get === 'function' ? (ref as Volatile<T>).get() : ref
+  return value as T
+}
+
+/** 从 Config（volatile 引用或解析值）读出一份普通 provenance。 */
+export function readProvenance(config: { overlays: Volatile<Provenance['overlays']> | Provenance['overlays'] }): Provenance {
+  return { overlays: readField(config.overlays) ?? {} }
 }
 
 /** 只读取形状有效的 `models` entries。 */
@@ -65,10 +75,10 @@ function modelEntries(profile: Record<string, unknown>): readonly ModelEntry[] {
   })
 }
 
-/** 从 `llm-pi-ai.providers` 读取 configured route profiles。 */
+/** 从 llm-pi-ai 行 describe 投影读取 configured route profiles；行缺席或尚未激活时为 undefined。 */
 function configuredRoutes(ctx: Context): ReadonlyMap<string, Record<string, unknown>> {
-  const section = record(ctx.settings.get(PI_AI_NAMESPACE))
-  const providers = record(section?.['providers'])
+  const value = ctx.settings.describe().find(row => row.ns === PI_AI_NAMESPACE)?.value
+  const providers = record(record(value)?.['providers'])
   const routes = new Map<string, Record<string, unknown>>()
   for (const [route, raw] of Object.entries(providers ?? {})) {
     const profile = record(raw)
@@ -86,7 +96,7 @@ function displayNames(ctx: Context): ReadonlyMap<string, string> {
   return names
 }
 
-/** 合并 settings、provenance、内置 catalog，构造 planning 所需的 RouteFacts。 */
+/** 合并 llm-pi-ai 行 config、provenance、内置 catalog，构造 planning 所需的 RouteFacts。 */
 export function readRouteFacts(ctx: Context, provenance: Provenance): readonly RouteFacts[] {
   const names = displayNames(ctx)
   return [...configuredRoutes(ctx)].map(([route, profile]) => {
@@ -144,8 +154,8 @@ export async function commitPlans(ctx: Context, plans: readonly RoutePlan[]): Pr
   const provenance = plans.flatMap(plan => [...provenanceOps(plan, now)])
   const models = plans.flatMap(plan => [...modelOps(plan)])
   if (models.length === 0) return false
-  // settings mutate 使用两个 namespace；operation 形状由 dsh SettingsScope 校验。
-  await ctx.settings.mutate(SELF_NAMESPACE, provenance)
+  // settings mutate 使用两个 entry id（本插件行与 llm-pi-ai 行）；operation 形状由 dsh SettingsForms 校验。
+  await ctx.settings.mutate(ENTRY_ID, provenance)
   await ctx.settings.mutate(PI_AI_NAMESPACE, models)
   return true
 }

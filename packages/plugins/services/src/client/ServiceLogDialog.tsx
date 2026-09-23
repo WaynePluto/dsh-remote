@@ -1,7 +1,7 @@
 /** services 日志 Modal；日志读取与八向拖动不再占用 panel 主组件。 */
 
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { Button, IconFullscreenOutline16, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconFullscreenOutlineMedium, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { DialogFullscreenButton } from '@dsh-remote/plugin-ui'
 import type { ServiceLogsResult } from '../shared.js'
 import { fill } from './locales.js'
@@ -67,7 +67,7 @@ export function ServiceLogDialog({
         dataAttribute={LOG_DIALOG_FULLSCREEN_ATTR}
         label={fullscreenLabel}
         onToggle={onToggleFullscreen}
-        icon={<IconFullscreenOutline16 size={14} />}
+        icon={<IconFullscreenOutlineMedium size={14} />}
       />
       {/* 全屏时尺寸已拉满：拖动与八向 resize 都没有意义，一并隐藏。 */}
       {!fullscreen && <LogMoveHandle onPointerDown={onLogMovePointerDown} />}
