@@ -33,7 +33,7 @@
 | D21 | 发行版本分为轻量版（lite）与完整版（full）：lite 不内置 Office 预览引擎，full 把引擎直接打进安装包，不做按需下载 | 两者是同一个程序的两个体积档；引擎压缩后每平台约多 58～121 MB，轻量版面向不需要 Office 预览的用户 |
 | D22 | 桌面版按平台实机验收通过后，win/mac 仅保留桌面版介质；Linux 保留桌面版与服务版 zip（现行绿色包即服务版，始终使用系统 Node） | 会解压绿色包的用户必有 Node 或能自装；需要开箱即用的用户走桌面版，其中完整版附带 Node |
 | D23 | 首次使用不强制创建管理员：本机 loopback 的 dsh 页面按免登录语义直接可用；只有首次打开管理控制台（远程能力入口）时才引导创建账号、密码与 TOTP。未初始化期间非 loopback 访问仍一律拒绝 | 远程只是工作站的一个能力，不使用远程就不该被设置向导挡住；认证边界不变（非 loopback 必须等设置完成且登录） |
-| D24 | 项目名 dsh-station（用户文案「DSH 工作站」）：数据目录默认 `~/.dsh-station`，dsh profile `dsh-station-web`；`remote` 一词只指远程能力（远程入口、remote-* 插件、/api/remote.mux） | 改名后的首次运行把旧 `~/.dsh-remote` 与旧 profile 整体复制迁移（数据不丢）；relay.db 迁移合并为单一 CREATE，旧库经 user_version 兼容继续使用；旧配置文件名 dsh-remote.config.json 仍可读取 |
+| D24 | 项目名 dsh-station（用户文案「DSH 工作站」）：数据目录默认 `~/.dsh-station`，dsh profile `dsh-station-web`；`remote` 一词只指远程能力（远程入口、remote-* 插件、/api/remote.mux） | 不保留对旧 dsh-remote 数据目录/配置文件名的运行时迁移（改名是一次性事件，历史数据由用户手动搬移）；relay.db 迁移合并为单一 CREATE，旧库经 user_version 兼容继续使用 |
 
 ## 2.05 术语
 

@@ -10,9 +10,6 @@ import { defaultMachineSlug } from './relay.js'
 /** 在工作目录中查找的配置文件名。 */
 export const CONFIG_FILE_NAME = 'dsh-station.config.json'
 
-/** 项目改名前的配置文件名；存在新名字时不再读取。 */
-export const LEGACY_CONFIG_FILE_NAME = 'dsh-remote.config.json'
-
 /** dsh-station 运行自己的 profile，从不运行官方的 `web` profile（D14）。 */
 export const DEFAULT_DSH_PROFILE = 'dsh-station-web'
 
@@ -243,14 +240,7 @@ export function loadLauncherConfig(options: {
   } catch (error) {
     const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : undefined
     if (code === 'ENOENT' && !explicit) {
-      // 改名前解压的旧包把配置写在旧文件名里；内容 schema 相同，直接沿用。
-      const legacyPath = join(options.cwd, LEGACY_CONFIG_FILE_NAME)
-      try {
-        raw = readFileSync(legacyPath, 'utf8')
-        return { config: parseLauncherConfig(raw, legacyPath), path: legacyPath }
-      } catch {
-        return { config: launcherConfigSchema.parse({}), path: undefined }
-      }
+      return { config: launcherConfigSchema.parse({}), path: undefined }
     }
     throw new LauncherError(
       `读不到配置文件 ${path}：${error instanceof Error ? error.message : String(error)}`,

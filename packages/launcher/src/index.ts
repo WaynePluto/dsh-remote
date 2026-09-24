@@ -24,7 +24,6 @@ import type { DshRestartStatus, MembershipHub } from '@dsh-station/protocol'
 import { renderBanner } from './banner.js'
 import { createDesktopLink, type DesktopLink, type DesktopPhase, type DesktopUrls } from './desktop-link.js'
 import { acquireInstanceLock, type InstanceLock } from './instance-lock.js'
-import { migrateLegacyData } from './migration.js'
 import { CONNECTOR_CHILD, DSH_CHILD, RELAY_CHILD } from './children.js'
 import { loadLauncherConfig } from './config.js'
 import { connectorArguments, resolveConnectorEntry } from './connector.js'
@@ -146,12 +145,6 @@ export async function run(argv: readonly string[]): Promise<number> {
     dsh: `http://127.0.0.1:${String(config.dsh.port)}/`,
   }
   emit('config', configPath ?? undefined)
-  migrateLegacyData({
-    home: config.home,
-    dshHome: resolveDshHome(),
-    profile: config.dsh.profile,
-    onNote: say,
-  })
 
   const membershipPath = membershipFilePath(config.home)
   const membership = readMembership(membershipPath)

@@ -15,7 +15,7 @@
 - [x] Windows Wails v2 桌面应用：独立模式托管自有后台（launcher `--desktop` 状态行契约、实例锁、随包/系统 Node 发现、Job Object 崩溃回收），attach 开发模式保留；自绘标题栏、托盘（含后台启停/壳自重启恢复）、通知管道（共享令牌握手）与 dsh-station 图标已实现。原生网络/权限隔离（S1.3）仍未完成，不得作为通过安全验收的发行版。
 - [x] 桌面独立模式 Windows 实机验收（2026-09-25，隔离数据 + 随包 Node）：双击启动 → 状态持有 → dsh Web UI 完整渲染（token 交换、工作区、模型选择器）；强制杀壳后 Job Object 4 秒回收全部 4 个后台子进程；重复启动被单实例互斥拒绝。托盘交互（右键/双击/启动/停止/重启后台、Explorer 重启恢复）与通知点击定位会话仍待手动验收。
 - [x] 首次免设置（D23）：relay 未初始化时 loopback 业务直达 dsh，仅管理页（`/_admin`）与登录页被引导到设置向导；非 loopback 访问仍一律拒绝。已在桌面独立模式实机验证（无管理员首次打开直接进入 dsh）。
-- [x] 项目改名 dsh-station（D24）：包名、profile（dsh-station-web）、数据目录（~/.dsh-station）、Go module、图标与用户文案（DSH 工作站）完成迁移；旧 `~/.dsh-remote` 与旧 profile 首次运行整体复制迁移；旧配置文件名兼容读取；relay.db 迁移合并为单一 CREATE（旧库经 user_version=4 无操作兼容，测试锁定）。
+- [x] 项目改名 dsh-station（D24）：包名、profile（dsh-station-web）、数据目录（~/.dsh-station）、Go module、图标与用户文案（DSH 工作站）完成迁移；不保留对旧 dsh-remote 数据目录/配置文件名的运行时迁移（一次性事件，用户手动搬移）；relay.db 迁移合并为单一 CREATE（旧库经 user_version=4 无操作兼容，测试锁定）。
 - [x] Windows x64、Linux x64、macOS arm64 分平台服务版 zip（原绿色包）与构建检查。
 - [x] 桌面版打包管线（S8 最小集）：`scripts/pack-desktop.mjs` 产出 win 便携 zip + NSIS 安装包（CI 装 NSIS）、mac .app zip、linux deb + 便携 zip，各含 lite/full 变体；完整版附带固定版本 Node（官方 SHA-256 校验清单 `packaging/desktop-node.json`）。Windows 双变体已实打并通过自检；mac/linux 由 CI 原生 runner 构建，实机验收待 S10。CI release 工作流改为四路构建 + 汇总发布。
 - [x] manifest 与应用图标。
