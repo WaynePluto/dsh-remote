@@ -80,8 +80,20 @@ async function main() {
         bare.detail,
       )
 
-      const enable = await mutate(cookie, [{ op: 'set', path: ['enabled'], value: true }])
-      check(enable.ok, '地址存好之后可以打开开关', enable.detail)
+      const enable = await mutate(cookie, [{ op: 'set', path: ['mode'], value: 'plugin' }])
+      check(enable.ok, '地址存好之后可以选择插件代理', enable.detail)
+
+      const direct = await mutate(cookie, [{ op: 'set', path: ['mode'], value: 'direct' }])
+      check(direct.ok, '切换强制直连并保留已存地址', direct.detail)
+
+      const follow = await mutate(cookie, [{ op: 'set', path: ['mode'], value: 'environment' }])
+      check(follow.ok, '切换跟随环境并保留已存地址', follow.detail)
+
+      const restore = await mutate(cookie, [{ op: 'set', path: ['mode'], value: 'plugin' }])
+      check(restore.ok, '切回插件代理', restore.detail)
+
+      const badMode = await mutate(cookie, [{ op: 'set', path: ['mode'], value: 'not-a-mode' }])
+      check(!badMode.ok, '宿主拒绝未知模式', badMode.detail)
 
       const socks = await mutate(cookie, [{ op: 'set', path: ['url'], value: 'socks5://127.0.0.1:1080' }])
       check(!socks.ok, '宿主仍然拒绝拨不通的 socks5 地址', socks.detail)
@@ -90,7 +102,7 @@ async function main() {
       check(!creds.ok, '宿主仍然拒绝地址里带凭据', creds.detail)
 
       const cleared = await mutate(cookie, [{ op: 'set', path: ['url'], value: '' }])
-      check(!cleared.ok, '开关开着时不允许把地址清空', cleared.detail)
+      check(!cleared.ok, '插件模式不允许把地址清空', cleared.detail)
     },
   })
   console.log(failures === 0 ? '\n全部通过。' : `\n${failures} 项未通过。`)

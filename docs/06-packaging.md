@@ -56,7 +56,7 @@ supportedArchitectures 是 os × cpu × libc 笛卡尔积，不能直接声明�
 │  ├─ catalog.json
 │  ├─ remote-experience/
 │  ├─ model-enhancements/
-│  └─ …                         # 11 个第三方 Bundle 安装目录
+│  └─ …                         # 10 个第三方 Bundle 安装目录
 └─ node_modules/
    ├─ @dsh-remote/relay/dist/cli.js
    ├─ @dsh-remote/connector/dist/cli.js
@@ -68,7 +68,7 @@ supportedArchitectures 是 os × cpu × libc 笛卡尔积，不能直接声明�
 relay、connector 与壳级 remote-privileged overlay 保持各自包位置，确保 connection 注入、模型 HMR 启动屏障及嵌套依赖从正确目录解析。
 功能插件不再放在 launcher 的安装锚中，而由 `plugin-catalog.json` 生成到 `plugins/`；组合包把组件
 放在自身 `node_modules/@dsh-remote/` 下。浏览器插件必须携带 `dist/client.js`；concise-mode 是
-无可执行入口的纯 Bundle，只携带 patch 与两个 preset 目录。随包 pnpm 供 launcher 和 dsh 原生插件管理页离线调用。
+无可执行入口的纯 Bundle，在 patch 内联声明两个预设。随包 pnpm 供 launcher 和 dsh 原生插件管理页离线调用。
 安装前，launcher 会把介质及其运行时依赖复制到 profile 的 `.dsh-remote-plugin-media/`。原生插件页
 仍接受 `.dev/plugins/<目录>` 或发行 `plugins/<目录>`；launcher 放入 PATH 的 pnpm 代理会按包名把跨盘
 受管介质映射到这份同盘镜像，避免 pnpm hoisted linker 生成指向 `profile/D:\\...` 的坏 junction。

@@ -106,7 +106,7 @@ dsh 的 approval/asked、approval/decided 等审批事件属于 dsh 会话日志
 | relay 账号或服务器失守 | 等价于目标机器用户权限下的 shell；依靠登录、TOTP、限流、TLS 与审计 |
 | 6 字符密码下限 | 组成规则不等同于长密码强度；TOTP 必开、公网 TLS、双维度限流；不复用密码 |
 | 固定 YOLO | 自动允许合法权限请求，模型误判、注入、删除、覆盖、安装或读取凭据不会被权限卡拦下 |
-| ownsHost 固定为 true | 允许已认证用户编辑设置，也开放在目标机器桌面打开文件的能力；Windows 预设目录兼容在 dsh 认证/trust fence 后仅接收合法预设 id，路径由宿主 resolve 且必须 trust:user；顶部 Explorer 私有通道沿用原生 Open In… 的浏览器路径能力，只接受绝对且已存在的目录 |
+| ownsHost 固定为 true | 允许已认证用户编辑设置，也开放在目标机器桌面打开文件的能力；Agent 预设目录动作沿用原生能力；顶部 Explorer 私有通道沿用原生 Open In… 的浏览器路径能力，只接受绝对且已存在的目录 |
 | Explorer 尝试置前 | 已认证的远程点击会异步尝试抢占目标机器焦点；固定 helper 只匹配已验证目录，路径以 base64 数据传递，失败不升级权限或改变打开结果 |
 | dsh token 出现在 URL | 同源交换、no-referrer、HttpOnly cookie；仅向已登录用户发放 |
 | relay 可见明文业务流量 | relay 属于可信部署组件，TLS 在其前端终结；控制与数据隧道使用 WSS |

@@ -57,6 +57,7 @@ function mount(sections: Record<string, Record<string, unknown>>): InstanceType<
       listConfigurableProviders: () => [
         { provider: 'anthropic', displayName: 'Anthropic', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'anthropic'] },
         { provider: 'openai', displayName: 'OpenAI', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'] },
+        { provider: 'github-copilot', displayName: 'github-copilot', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'github-copilot'] },
         { provider: 'deepseek', displayName: 'DeepSeek', settingsNs: 'llm-deepseek', settingsPath: ['providers', 'deepseek'] },
       ],
     },
@@ -137,6 +138,38 @@ describe('applying', () => {
   it('refuses a route that is not configured instead of quietly doing less', async () => {
     const service = mount({ 'llm-pi-ai': { providers: { anthropic: {} } }, 'models-catalog': { overlays: {} } })
     await expect(service.apply(['nope'])).rejects.toThrow('not a configured pi-ai provider')
+  })
+
+  it('previews old owned entries without writing, then upgrades only on explicit apply', async () => {
+    installed.set('github-copilot', { ids: ['grok-4.6'], apis: ['openai-responses', 'anthropic-messages'] })
+    responseBody = () => JSON.stringify({ 'github-copilot': { models: {
+      'grok-4.7': { name: 'Grok 4.7', reasoning: true, reasoning_options: [
+        { type: 'effort', values: ['low', 'medium', 'high', 'xhigh'] },
+      ] },
+    } } })
+    const sections = {
+      'llm-pi-ai': { providers: { 'github-copilot': { models: [
+        { id: 'grok-4.6' }, { id: 'grok-4.7', custom: 'keep me' },
+      ] } } },
+      'models-catalog': { overlays: { 'github-copilot': { addedIds: ['grok-4.7'], updatedAt: 'before',
+        models: { 'grok-4.7': { id: 'grok-4.7', name: 'Grok 4.7', route: 'github-copilot', api: 'openai-completions' } },
+      } } },
+    }
+    const service = mount(sections)
+    const view = await service.preview()
+    expect(view.routes[0]?.upgradableIds).toEqual(['grok-4.7'])
+    expect(writes).toEqual([])
+    await service.apply(['github-copilot'])
+    expect(writes).toEqual(['models-catalog', 'llm-pi-ai'])
+    const providers = sections['llm-pi-ai'].providers as Record<string, { models: Record<string, unknown>[] }>
+    expect(providers['github-copilot']?.models).toEqual([
+      { id: 'grok-4.6' },
+      { id: 'grok-4.7', custom: 'keep me', reasoningEfforts: {
+        low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh',
+      } },
+    ])
+    const overlays = sections['models-catalog'].overlays as Record<string, { models: Record<string, { api: string }> }>
+    expect(overlays['github-copilot']?.models['grok-4.7']?.api).toBe('openai-responses')
   })
 
   it('offers additions for a mixed-protocol route using the runtime catalog path', async () => {

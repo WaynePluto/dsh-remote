@@ -27,7 +27,7 @@ flowchart LR
 | `packages/relay` | 浏览器认证、设备认证、管理页、机器路由与字节转发 |
 | `packages/launcher` | 配置、profile、产物检查、启动和监督三个子进程 |
 | `packages/plugins` | 通过 dsh 插件扩展功能；见 [插件索引](plugins.md) |
-| `packages/plugins`（装载） | 22 个功能组件由 4 个组合包与 7 个独立第三方 Bundle 分发；首次默认安装、仍安装项配套升级、卸载后从随附 `plugins/` 重装；connection 注入和模型 HMR 启动屏障是壳级常驻 overlay（D20） |
+| `packages/plugins`（装载） | 20 个功能组件由 4 个组合包与 6 个独立第三方 Bundle 分发；首次默认安装、仍安装项配套升级、卸载后从随附 `plugins/` 重装；connection 注入和模型 HMR 启动屏障是壳级常驻 overlay（D20） |
 
 dsh 是官方 npm 依赖，不 fork、不改源码。浏览器使用 dsh 自带 UI，relay 提供自己的登录和管理页。
 
@@ -37,10 +37,12 @@ dsh 是官方 npm 依赖，不 fork、不改源码。浏览器使用 dsh 自带 
 内置扩展只加载到 `dsh-remote-web`：
 
 ```text
-dsh-base → dsh-web-app → 已启用的第三方 Bundle（默认 11 个分发包）
+dsh-base → dsh-web-app → 已启用的第三方 Bundle（默认 10 个分发包）
   → profile patch → home patch → --patch（壳级 connection 注入与模型 HMR 启动屏障）
 ```
 
+concise-mode 在 Bundle patch 内联声明两个 Agent preset 行，不使用 preset root 或 locator entry；
+子代理深度由 dsh 原生界面控制，默认 1。
 launcher 首次安装默认分发包，后续配套升级仍在 profile dependencies 中的包并保留 Bundle/组件停用；
 已卸载包不自动补回，从发行版 `plugins/` 或开发 `.dev/plugins/` 目录经官方管理页重装。
 
@@ -52,7 +54,7 @@ launcher 与开发栈都在启动前检查宿主与浏览器产物，缺失即�
 带浏览器半的包同时声明 `dsh.client`，dsh 据此下发 `dist/client.js`。
 
 默认分发与装载顺序以根目录 [plugin-catalog.json](../plugin-catalog.json) 为准：
-代理在模型增强前生效，固定 YOLO 是最后一个第三方 Bundle；唯一随 `--patch` 传入的是
+代理在模型增强前生效（跟随环境、使用插件代理、强制直连三态），固定 YOLO 是最后一个第三方 Bundle；唯一随 `--patch` 传入的是
 remote-privileged（壳级、不可停），负责 connection 注入和模型 Bundle 在线启停所需的稳定启动屏障。
 开发入口为 [dev-stack.mjs](../scripts/dev-stack.mjs)，由 [local-config.mjs](../scripts/local-config.mjs)
 提供 overlay 路径与默认 Bundle 清单（与 launcher 保持一致）。

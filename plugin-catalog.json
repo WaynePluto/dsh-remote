@@ -51,7 +51,6 @@
       "source": "packages/plugins/conversation-enhancements",
       "components": [
         { "name": "@dsh-remote/dsh-plugin-turn-retry", "rowId": "turn-retry" },
-        { "name": "@dsh-remote/dsh-plugin-exec-process", "rowId": "exec-process" },
         { "name": "@dsh-remote/dsh-plugin-chat-scroll", "rowId": "chat-scroll" },
         { "name": "@dsh-remote/dsh-plugin-user-message-fork", "rowId": "user-message-fork" },
         { "name": "@dsh-remote/dsh-plugin-notify", "rowId": "notify" }
@@ -79,13 +78,6 @@
       "source": "packages/plugins/files",
       "components": [
         { "name": "@dsh-remote/dsh-plugin-files", "rowId": "files" }
-      ]
-    },
-    {
-      "name": "@dsh-remote/dsh-plugin-subagent-depth",
-      "source": "packages/plugins/subagent-depth",
-      "components": [
-        { "name": "@dsh-remote/dsh-plugin-subagent-depth", "rowId": "subagent-depth" }
       ]
     },
     {

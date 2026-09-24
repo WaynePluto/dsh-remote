@@ -18,24 +18,27 @@ dsh 发版才会出现。这个插件在运行时读同一份上游文档，把�
 
 1. **不问不写。** `preview` 只读；`apply` 只写用户勾选的供应商。唯一的例外是「dsh 追上来了」
    的清理，它**只会删除本插件写入的条目**，并在面板上报告自己做了什么。
-2. **协议先匹配、再按约定回退。** models.dev 不带 wire protocol，而 dsh 的模型条目也不能自带
-   `api`（`PiAiModelProfile` 没有这个字段）。本插件先按模型 ID 查同一份 pi-ai 目录（目标路由优先），
-   找不到时按 `gpt-* → openai-responses`、`claude-* → anthropic-messages`、其他 →
-   `openai-completions`。混合协议路由会先把完整模型记录加入 pi-ai 的同一运行时目录，再写 dsh
-   的模型列表；启动时从本插件溯源恢复这些记录。
+2. **同路由同系列优先。** models.dev 不带 wire protocol，而 dsh 的模型条目也不能自带
+   `api`（`PiAiModelProfile` 没有这个字段）。插件先匹配同一路由相同系列、版本不晚于目标的最近原生模型，
+   再找其他路由的同 ID，最后按 `gpt-* → openai-responses`、`claude-* → anthropic-messages`、其他 →
+   `openai-completions` 回退。混合协议路由先将模型注册到 dsh 使用的同一份 pi-ai 目录，再写 dsh
+   的模型列表；启动时从本插件溯源恢复这些记录。用户的单模型协议覆盖始终优先。
 3. **保留已有条目。** 本插件在自己的行 config（entry id `models-catalog` 的 `overlays` volatile
    字段）里记溯源；用户或其他插件已有的 `models` 条目原样带过，只追加本插件发现的新 ID，并且撤销时
    只删除自己的 ID。这让 Copilot 的订阅筛选列表也可以继续使用。
 
 ## 已知的降级
 
-models.dev 带 `reasoning_options`，但那是**档位名单**不是 wire 拼写，而且形态不统一
-（`effort` / `toggle` / `budget_tokens`，groq 甚至用 `none` / `default` 这种不在 dsh 档位表里的名字）。
-dsh 要的是 `{档位: wire 拼写}`，缺省即「不会思考」，所以**这样添加进来的推理模型不会带思考档位**。
-面板会就地提示这一点。协议没有同名 pi-ai 条目时也按产品约定回退，供应商若使用了例外命名，需在
-pi-ai 目录更新后让插件自动交还原生条目。协议与能力限制见 [模型与代理](../../../docs/dsh/models.md)。
+models.dev 的 `reasoning_options` 是候选名单而非可靠的端点 wire 映射，且有 `effort`、`toggle`、
+`budget_tokens` 等不同形态。只有 models.dev 声明推理且给出 effort 值、同一路由同系列原生模型
+也明确给出 `thinkingLevelMap` 时，插件才复制两者交集中的非关闭档位，使用原生目录的实际 wire 值；
+不照搬直连 OpenAI、Anthropic 或 xAI 的参数。找不到可靠近邻时不开放推理档位，面板如实提示。
+已添加的模型在「重新检查」后可由用户明确点击「更新所选模型」批量更新协议/档位；检查本身不写入。
+手工修改的推理配置不覆盖，官方目录收录后仍按原有溯源自动交还。协议与能力限制见
+[模型与代理](../../../docs/dsh/models.md)。
 
 混合协议路由的新增模型会写入本插件的溯源，并在 dsh 启动时恢复到同一份 pi-ai 运行时目录；
+launcher 会让 profile 插件介质中的 pi-ai 链接到 dsh 实际使用的那份包，而非复制同版本的第二份目录。
 因此修改插件代码或构建产物后仍需重启 dsh，单纯刷新浏览器不会重新加载 Host 半。
 
 

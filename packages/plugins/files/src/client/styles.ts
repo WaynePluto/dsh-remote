@@ -15,6 +15,8 @@ const CSS = `
 .dsh-files-tab-menu-item{display:block;width:100%;padding:5px 8px;color:var(--dsw-alias-label-primary);font:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:1.4;text-align:left;background:transparent;border:0;border-radius:4px;cursor:pointer}
 .dsh-files-tab-menu-item:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
 .dsh-files-tab-menu-item:disabled{color:var(--dsw-alias-label-tertiary);cursor:default}
+[data-document-zoom-scrollport][data-files-image-pan=ready]{cursor:grab}
+[data-document-zoom-scrollport][data-files-image-pan=dragging],[data-document-zoom-scrollport][data-files-image-pan=dragging] *{cursor:grabbing;user-select:none}
 .dsh-files-image-toolbar{display:flex;flex:none;align-items:center;justify-content:flex-end;gap:4px;min-height:32px;padding:4px 8px;color:var(--dsw-alias-label-primary);border:.5px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-1);box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:10000;pointer-events:auto}
 .dsh-files-image-tool{display:flex;align-items:center;justify-content:center;min-width:28px;height:24px;padding:0 6px;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;line-height:1;border:0;border-radius:4px;background:transparent;cursor:pointer}
 .dsh-files-image-tool:hover{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}

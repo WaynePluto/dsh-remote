@@ -11,7 +11,7 @@
 - 文件树保持在左侧 pane；首次点文件时，插件通过原生 Sidebar `split` 建立右侧 pane；
 - 文件在原生文档预览 tab 中打开，支持 dsh 已有的 Markdown、代码、纯文本、图片、PDF 和 HTML 预览；
 - 单击文件使用 VS Code 式临时预览：标题为斜体，后续单击会复用同一页签；双击文件或页签标题后转为保留页签；
-- 图片预览提供缩小、放大、100%、适应窗口和 Ctrl/⌘+滚轮缩放，原生滚动用于查看放大内容；
+- 图片预览提供缩小、放大、100%、适应窗口和 Ctrl/⌘+滚轮缩放，原生滚动用于查看放大内容；按住 Space 后在图片滚动区域按鼠标左键拖动可平移溢出的图片（输入框、选中文字、其他页签和触摸操作不受影响）；
 - 页签标题右键菜单的「关闭其他」「关闭全部」只作用于右键目标所在分栏，不影响另一个分栏；
 - 空间不足、用户已有布局无法协调或目标 pane 已被移动时，退回原生文件树自己的打开行为，不阻断浏览。
 
@@ -73,7 +73,7 @@ pnpm --filter @dsh-remote/dsh-plugin-files build
 node scripts/files-check.mjs
 ```
 
-源码依赖当前 dsh `0.1.5-rc.2` 的公开 Sidebar/slot 契约。插件通过 `dsh.client.inject`
+源码依赖当前 dsh `0.1.7-rc.1` 的 Sidebar/slot 契约及原生图片滚动容器 `data-document-zoom-scrollport`。插件通过 `dsh.client.inject`
 声明对 `@deepseek-ai/dsh-client-ui-sidebar-files` 的模块图依赖，但不深层 import 上游源码。
 如果上游登记项、行 data 属性或 Sidebar 导航契约变化，检查必须响亮失败并重新适配。
 

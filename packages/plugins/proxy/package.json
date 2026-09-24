@@ -32,8 +32,8 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "3.18.4",
-    "@dsh-remote/plugin-ui": "workspace:0.0.2-20260922",
-    "undici": "8.11.0"
+    "@deepseek-ai/dsh-http-proxy": "0.1.7-rc.1",
+    "@dsh-remote/plugin-ui": "workspace:0.0.2-20260922"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",

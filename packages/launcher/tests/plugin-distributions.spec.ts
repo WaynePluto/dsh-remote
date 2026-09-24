@@ -21,7 +21,7 @@ describe('plugin installation media', () => {
     const output = join(base, 'with space', 'plugins')
     const result = materializePluginDistributions({ root, output })
 
-    expect(result.plugins).toHaveLength(11)
+    expect(result.plugins).toHaveLength(10)
     expect(existsSync(join(output, 'catalog.json'))).toBe(true)
     const group = join(output, 'conversation-enhancements')
     expect(lstatSync(group).isDirectory()).toBe(true)

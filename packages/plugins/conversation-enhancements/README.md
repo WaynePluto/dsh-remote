@@ -3,10 +3,9 @@
 `@dsh-remote/dsh-plugin-conversation-enhancements` 是会话增强的整体安装、卸载和升级单位，按固定顺序组合：
 
 1. 失败重试（turn-retry）
-2. 执行过程（exec-process）
-3. 聊天滚动（chat-scroll）
-4. 用户消息分叉（user-message-fork）
-5. 通知（notify）
+2. 聊天滚动（chat-scroll）
+3. 用户消息分叉（user-message-fork）
+4. 通知（notify）
 
 本包不包含运行时代码；`cordis.patch.yml` 通过 Bundle 内嵌依赖的相对路径加载固定版本组件，并用 Bundle 选择状态保护 HMR 卸载阶段的瞬时残留行。每个组件都可在 Bundle 详情中单独停用或重新启用，卸载 Bundle 会一起移除全部组件的装载入口。
 

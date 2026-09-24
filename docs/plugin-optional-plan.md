@@ -9,20 +9,19 @@
 ## 当前分发形态
 
 根目录 `plugin-catalog.json` 是分发包、组件、稳定行 ID、源码目录与默认层序的唯一权威清单。
-22 个功能组件分为 4 个组合包与 7 个独立包：
+20 个功能组件分为 4 个组合包与 6 个独立包：
 
 | 分发 Bundle | 类型 | 组件 |
 |---|---|---|
 | `remote-experience` | 组合 | remote-settings、browser-compat |
 | `model-enhancements` | 组合 | copilot-auth、models-catalog、model-capabilities、favorite-models |
-| `conversation-enhancements` | 组合 | turn-retry、exec-process、chat-scroll、user-message-fork、notify |
+| `conversation-enhancements` | 组合 | turn-retry、chat-scroll、user-message-fork、notify |
 | `development-tools` | 组合 | services、terminal、tools-inspector、skills-inspector |
 | `directory-picker-browse` | 独立 | 网页目录选择 |
 | `proxy` | 独立 | 出网代理 |
 | `concise-mode` | 独立 | 简洁模式 |
 | `agents-md` | 独立 | 全局提示词 |
 | `files` | 独立 | 文件浏览 |
-| `subagent-depth` | 独立 | 子代理深度 |
 | `yolo-mode` | 独立 | 固定 YOLO |
 
 完整包名为 `@dsh-remote/dsh-plugin-<名称>`。组合包的 `cordis.patch.yml` 通过固定版本依赖
@@ -48,15 +47,16 @@ directory-picker-browse 必须在 Bundle 层静态停用 dsh 原生目录选择�
    - 源码开发：`<仓库>/.dev/plugins/<包目录>`
 
 重新安装得到当前 dsh-remote 随附版本，而不是从旧 profile 或网络猜测版本。介质目录中的
-`catalog.json` 记录 11 个包及组件；删除 profile 依赖不会删除介质文件。
+`catalog.json` 记录 10 个包及组件；删除 profile 依赖不会删除介质文件。
 
 ## 旧 profile 迁移
 
-旧版 profile 中 22 个受管 Bundle 在首次运行新生命周期时迁移为 11 个第三方分发包：
+既有 profile 中属于当前清单的受管组件在首次运行新生命周期时迁入第三方分发包：
 
 - 仍安装或启用的组件归入对应组合/独立包；旧组件 dependency 在组合包安装后移除。
 - 旧 Bundle 已停用的组件会在 profile patch 中写为同 ID 的 disabled 行，保持用户选择。
 - 旧版已经明确卸载的 files 保持卸载，不因迁移重新出现。
+- 当前清单之外的旧插件不会由 launcher 自动卸载，需要清理时应通过 dsh 官方插件管理器手动操作；不触碰项目外 DSH_HOME。
 - 迁移后 `dsh-remote-bundles-state.json` 使用新版状态记录已提供包及介质版本；它只辅助区分
   “首次提供”和“用户已卸载”，不代替 profile dependency 这一安装事实。
 
@@ -86,24 +86,17 @@ directory-picker-browse 必须在 Bundle 层静态停用 dsh 原生目录选择�
 完成真实初始化后把屏障挂在 root fiber。这样运行中停用或重新启用模型 Bundle 不会热重启
 `llm-pi-ai`。remote-settings 已属于 remote-experience 组合包，可在其中单独停用。
 
-## 子代理深度配置
-
-subagent-depth 的设置入口已从官方卡片槽 `plugins.item` 迁到按包名 keyed 的
-`plugins.bundle.config`。表单只在该 Bundle 详情页的 `view: 'page'` 渲染，直接使用页面已有的
-标题、说明和配置区域，不再绘制第二张嵌套卡片或重复折叠标题；写入仍遵循 mutate 后回读、失败
-保留草稿的规则。
-
 ## 尚待验证
 
 以下项目未完成前，不得把 roadmap 的实机验收勾为完成：
 
 - 跑完受影响包测试、launcher/pack 测试以及仓库级 `check:dependencies`、lint、typecheck、build、test。
-- 在真实 dsh 插件页验证 4 个组合包与 7 个独立包首次安装、Bundle 停用、允许的组件停用、卸载、
+- 在真实 dsh 插件页验证 4 个组合包与 6 个独立包首次安装、Bundle 停用、允许的组件停用、卸载、
   launcher 重启不补回，以及从 `plugins/` 绝对路径重装当前版本。
 - 验证升级一个已启用 Bundle、一个已停用 Bundle 和一个含停用组件的组合包，三者版本更新而状态不变。
 - 验证 model-enhancements 整体停用可用；当前界面仍会显示两个启动屏障组件的行开关，实机验收不得单独关闭它们。
 - 验证 user-message-fork 与 files 的 priority shadow 在新层序下生效。
-- 在深浅主题和中英文界面检查组合包组件行、subagent-depth 无嵌套卡配置页及全部浏览器入口。
+- 在深浅主题和中英文界面检查组合包组件行及全部浏览器入口。
 - 在绿色包与 `pnpm run dev` 各走一次卸载后重装，覆盖离线、空格和中文路径。
 
 ## 后续发布边界

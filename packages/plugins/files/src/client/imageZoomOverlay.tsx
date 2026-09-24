@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import { parseFileAddress } from '@deepseek-ai/dsh-util-workspace-path'
 import type { Translate } from './locales.js'
+import { installImagePan } from './imagePan.js'
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'svg'])
 const MIN_SCALE = 0.1
@@ -26,6 +27,7 @@ interface ImageView {
   readonly body: HTMLElement
   readonly frame: HTMLElement
   readonly image: HTMLImageElement
+  readonly scrollport: HTMLElement
 }
 
 function clamp(scale: number): number {
@@ -60,8 +62,9 @@ function findImageView(address: string, paneId: string): ImageView | undefined {
   const frame = preview?.querySelector<HTMLElement>('[data-image-preview]')
   const image = frame?.querySelector<HTMLImageElement>('img')
   const body = preview?.querySelector<HTMLElement>('[data-textpreview-body]')
-  if (preview === undefined || frame === null || frame === undefined || image === null || image === undefined || body === null || body === undefined) return undefined
-  return { pane, body, frame, image }
+  const scrollport = frame?.closest<HTMLElement>('[data-document-zoom-scrollport]')
+  if (preview === undefined || frame === null || frame === undefined || image === null || image === undefined || body === null || body === undefined || scrollport === null || scrollport === undefined) return undefined
+  return { pane, body, frame, image, scrollport }
 }
 
 function positionFor(view: ImageView): CSSProperties {
@@ -103,12 +106,12 @@ export function ImageZoomOverlay({ tabId, paneId, address, signal, states, t }: 
   }, [signal, states, tabId])
 
   useLayoutEffect(() => {
-    if (!image || !selectedTab(tabId)) {
+    if (!image) {
       setView(undefined)
       return undefined
     }
     const scan = (): void => {
-      const next = findImageView(address, paneId)
+      const next = selectedTab(tabId) ? findImageView(address, paneId) : undefined
       setView(current => current?.frame === next?.frame ? current : next)
       if (next !== undefined) setPosition(positionFor(next))
     }
@@ -156,6 +159,14 @@ export function ImageZoomOverlay({ tabId, paneId, address, signal, states, t }: 
   }, [scale, view])
 
   useEffect(() => {
+    if (view === undefined || signal.aborted) return undefined
+    return installImagePan(view.scrollport, view.frame, {
+      signal,
+      active: () => selectedTab(tabId) && findImageView(address, paneId)?.frame === view.frame,
+    })
+  }, [address, paneId, signal, tabId, view])
+
+  useEffect(() => {
     if (view === undefined) return undefined
     const body = view.body
     const onWheel = (event: WheelEvent): void => {
@@ -175,8 +186,7 @@ export function ImageZoomOverlay({ tabId, paneId, address, signal, states, t }: 
       aria-label={t('imageZoomToolbar')}
       style={{ position: 'fixed', ...position }}
       data-files-image-zoom
-      // The portal is still inside the native tab's React event tree. A tab press
-      // starts drag/rebuild logic, which would retarget the toolbar click to the tab.
+      // portal 仍在原生页签的 React 事件树中；阻止按下触发拖动及重建。
       onPointerDown={event => { event.stopPropagation() }}
       onClick={event => { event.stopPropagation() }}
     >

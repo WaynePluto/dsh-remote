@@ -1,6 +1,9 @@
 /** 测试契约：此处说明本测试锁定的行为和回归边界。 */
 
 import { describe, expect, it } from 'vitest'
+import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
+import { installedRoute } from '../src/installed.js'
+import { ensureRuntimeModel, modelMap } from '../src/runtime-catalog.js'
 import { canAddModels, planRevert, planRoute } from '../src/planning.js'
 import type { ModelEntry, RouteFacts } from '../src/planning.js'
 import type { SourceProvider } from '../src/models-dev.js'
@@ -92,6 +95,98 @@ describe('adding models', () => {
       ['claude-new', 'anthropic-messages'],
       ['gemini-new', 'openai-completions'],
     ])
+  })
+
+  it('makes gpt-6-sol visible to the mixed Copilot catalog before writing its settings list', () => {
+    const installed = installedRoute('github-copilot')
+    expect(installed.apis.length).toBeGreaterThan(1)
+    expect(installed.ids).not.toContain('gpt-6-sol')
+    const route = facts({
+      route: 'github-copilot',
+      installedModels: installed.models,
+      installedIds: installed.ids,
+      installedApis: installed.apis,
+    })
+    const plan = planRoute(route, { id: 'github-copilot', models: [{ id: 'gpt-6-sol', name: 'GPT-6 Sol',
+      reasoningUnavailable: true, effortValues: ['none', 'low', 'medium', 'high', 'xhigh', 'max'] }] })
+    const spec = plan.nextOwnedModels[0]
+    expect(spec).toMatchObject({ route: 'github-copilot', id: 'gpt-6-sol', api: 'openai-responses' })
+    expect(plan.next?.at(-1)).toMatchObject({ id: 'gpt-6-sol', reasoningEfforts: {
+      minimal: 'low', low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max',
+    } })
+    expect(plan.preview.additions[0]?.reasoningUnavailable).toBe(false)
+    if (spec === undefined) throw new Error('missing runtime model spec')
+    try {
+      expect(ensureRuntimeModel(spec)).toBe(true)
+      expect(getBuiltinModels('github-copilot').find(model => model.id === spec.id)?.api).toBe(spec.api)
+      expect(installedRoute('github-copilot').ids).not.toContain(spec.id)
+    } finally {
+      delete modelMap('github-copilot')?.[spec.id]
+    }
+  })
+
+  it('uses the nearest Copilot family for new Grok, Claude and Luna models', () => {
+    const installed = installedRoute('github-copilot')
+    const route = facts({ route: 'github-copilot', installedModels: installed.models,
+      installedIds: installed.ids, installedApis: installed.apis })
+    const plan = planRoute(route, { id: 'github-copilot', models: [
+      { id: 'grok-4.7', name: 'Grok 4.7', reasoningUnavailable: true, effortValues: ['low', 'medium', 'high', 'xhigh'] },
+      { id: 'claude-opus-5.5', name: 'Claude Opus 5.5', reasoningUnavailable: true, effortValues: ['low', 'medium', 'high', 'xhigh', 'max'] },
+      { id: 'gpt-6-luna', name: 'GPT-6 Luna', reasoningUnavailable: true, effortValues: ['none', 'low', 'medium', 'high', 'xhigh', 'max'] },
+    ] })
+    expect(plan.nextOwnedModels.map(spec => [spec.id, spec.api])).toEqual([
+      ['grok-4.7', 'openai-responses'], ['claude-opus-5.5', 'anthropic-messages'], ['gpt-6-luna', 'openai-responses'],
+    ])
+    expect(plan.next?.find(entry => entry.id === 'grok-4.7')?.['reasoningEfforts']).toEqual({
+      low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh',
+    })
+    expect(plan.next?.find(entry => entry.id === 'claude-opus-5.5')?.['reasoningEfforts']).toEqual({
+      minimal: 'low', xhigh: 'xhigh', max: 'max',
+    })
+  })
+
+  it('never borrows another provider’s thinking map or invents levels without source effort evidence', () => {
+    const route = facts({ route: 'github-copilot', installedModels: installedRoute('github-copilot').models,
+      installedIds: installedRoute('github-copilot').ids, installedApis: installedRoute('github-copilot').apis })
+    const plan = planRoute(route, { id: 'github-copilot', models: [
+      { id: 'gpt-6-unknown', name: 'GPT Unknown', reasoningUnavailable: true, effortValues: ['low'] },
+      { id: 'gpt-6-sol', name: 'GPT Sol', reasoningUnavailable: true },
+    ] })
+    expect(plan.preview.additions.every(model => model.reasoningUnavailable)).toBe(true)
+    expect(plan.next?.filter(entry => entry.id.startsWith('gpt-6-')).every(entry => entry['reasoningEfforts'] === undefined)).toBe(true)
+  })
+
+  it('explicitly upgrades a prior owned entry without discarding user fields or overrides', () => {
+    const installed = installedRoute('github-copilot')
+    const route = facts({ route: 'github-copilot', installedModels: installed.models, installedIds: installed.ids,
+      installedApis: installed.apis, hasModelsList: true, managed: true, ownedIds: ['grok-4.7', 'gpt-6-sol'],
+      ownedModels: [
+        { id: 'grok-4.7', name: 'Grok 4.7', api: 'openai-completions', route: 'github-copilot' },
+        { id: 'gpt-6-sol', name: 'GPT-6 Sol', api: 'openai-responses', route: 'github-copilot' },
+      ],
+      configuredEntries: [
+        { id: 'grok-4.7', custom: 'mine' },
+        { id: 'user-only', custom: 'must stay between owned entries' },
+        { id: 'gpt-6-sol', reasoningEfforts: { high: 'custom-wire' }, custom: true },
+      ],
+    })
+    const sourceModels: SourceProvider = { id: 'github-copilot', models: [
+      { id: 'grok-4.7', name: 'Grok 4.7', reasoningUnavailable: true, effortValues: ['low', 'medium', 'high', 'xhigh'] },
+      { id: 'gpt-6-sol', name: 'GPT-6 Sol', reasoningUnavailable: true, effortValues: ['low', 'medium', 'high'] },
+    ] }
+    expect(planRoute(route, undefined).next).toBeUndefined()
+    const plan = planRoute(route, sourceModels)
+    expect(plan.preview.upgradableIds).toEqual(['grok-4.7'])
+    expect(plan.nextOwnedModels.map(model => [model.id, model.api])).toEqual([
+      ['grok-4.7', 'openai-responses'], ['gpt-6-sol', 'openai-responses'],
+    ])
+    expect(plan.next?.map(entry => entry.id)).toEqual(['grok-4.7', 'user-only', 'gpt-6-sol'])
+    expect(plan.next?.find(entry => entry.id === 'grok-4.7')).toEqual({
+      id: 'grok-4.7', custom: 'mine', reasoningEfforts: { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh' },
+    })
+    expect(plan.next?.find(entry => entry.id === 'gpt-6-sol')).toEqual({
+      id: 'gpt-6-sol', reasoningEfforts: { high: 'custom-wire' }, custom: true,
+    })
   })
 
   it('allows a multi-protocol route that names its own api', () => {

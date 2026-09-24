@@ -101,7 +101,7 @@ function when(value: number | undefined): string {
 
 /** route 有 additions/reclaimed 时可勾选并执行操作。 */
 function actionable(route: RoutePreview): boolean {
-  return route.additions.length > 0 || route.reclaimed.length > 0
+  return route.additions.length > 0 || route.reclaimed.length > 0 || (route.upgradableIds?.length ?? 0) > 0
 }
 
 /** 只展示有变化、owned ids 或 no-template 的 route。 */
@@ -143,6 +143,9 @@ function RouteLine(props: {
           : null}
         {route.ownedIds.length > 0
           ? <span style={mutedStyle}>{fill(t('owned'), { count: route.ownedIds.length })}</span>
+          : null}
+        {(route.upgradableIds?.length ?? 0) > 0
+          ? <span style={mutedStyle}>{fill(t('upgradable'), { count: route.upgradableIds?.length ?? 0 })}</span>
           : null}
       </div>
       {names.length > 0
@@ -271,7 +274,9 @@ export function CatalogPanel(props: CatalogPanelProps): ReactNode {
                     disabled={busy !== 'idle'}
                     onClick={() => { void act('apply', selected) }}
                   >
-                    {busy === 'writing' ? t('applying') : t('applySelected')}
+                    {busy === 'writing' ? t('applying') : selected.some(route =>
+                      (status.routes.find(item => item.route === route)?.additions.length ?? 0) > 0)
+                      ? t('applySelected') : t('updateSelected')}
                   </Button>
                 )
                 : null}

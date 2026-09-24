@@ -58,7 +58,6 @@
               modelSelectionSettings: false
               enableRunInBackground: false
               backgroundMode: one-shot
-              maxDepth: 3
 
           - id: tool-ask-user
             name: '@deepseek-ai/dsh-tool-ask-user'
@@ -142,7 +141,6 @@
               modelSelectionSettings: false
               enableRunInBackground: false
               backgroundMode: one-shot
-              maxDepth: 3
 
           - id: tool-ask-user
             name: '@deepseek-ai/dsh-tool-ask-user'

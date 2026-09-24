@@ -51,6 +51,17 @@ function modalities(model: Record<string, unknown>): readonly Modality[] | undef
   return kept.length === 0 ? undefined : kept
 }
 
+/** 仅保留源明确标成 effort 的档位候选；toggle/budget 不当作 wire 拼写。 */
+function effortValues(model: Record<string, unknown>): readonly string[] | undefined {
+  const options = model['reasoning_options']
+  if (!Array.isArray(options)) return undefined
+  const efforts = options.filter((raw): raw is Record<string, unknown> => record(raw)?.['type'] === 'effort')
+  if (efforts.length !== 1 || !Array.isArray(efforts[0]?.['values'])) return undefined
+  const values = efforts[0]['values'] as unknown[]
+  return values.length > 0 && values.every(value => typeof value === 'string' && value.length > 0)
+    ? [...new Set(values as string[])] : undefined
+}
+
 /** 从一个 models.dev raw model 读取 ModelAddition。 */
 export function readModel(id: string, raw: unknown): ModelAddition | undefined {
   const model = record(raw)
@@ -59,6 +70,7 @@ export function readModel(id: string, raw: unknown): ModelAddition | undefined {
   const input = modalities(model)
   const contextWindow = capacity(limit, 'context')
   const maxTokens = capacity(limit, 'output')
+  const efforts = model['reasoning'] === true ? effortValues(model) : undefined
   return {
     id,
     name: text(model, 'name') ?? id,
@@ -66,6 +78,7 @@ export function readModel(id: string, raw: unknown): ModelAddition | undefined {
     ...maxTokens === undefined ? {} : { maxTokens },
     ...input === undefined ? {} : { input },
     ...model['reasoning'] === true ? { reasoningUnavailable: true } : {},
+    ...efforts === undefined ? {} : { effortValues: efforts },
   }
 }
 

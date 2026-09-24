@@ -32,9 +32,15 @@ describe('reading one model', () => {
     expect(readModel('m', { modalities: { input: ['audio'] } })).not.toHaveProperty('input')
   })
 
-  it('flags a reasoning model, because we cannot carry its thinking levels', () => {
-    expect(readModel('m', { reasoning: true })?.reasoningUnavailable).toBe(true)
-    expect(readModel('m', { reasoning: false })).not.toHaveProperty('reasoningUnavailable')
+  it('keeps effort candidates but never treats toggle or budget options as wire levels', () => {
+    expect(readModel('m', { reasoning: true, reasoning_options: [
+      { type: 'effort', values: ['none', 'low', 'high'] },
+      { type: 'budget_tokens', values: [1000] },
+    ] })).toMatchObject({ reasoningUnavailable: true, effortValues: ['none', 'low', 'high'] })
+    expect(readModel('m', { reasoning: true, reasoning_options: [{ type: 'toggle', values: ['on'] }] }))
+      .not.toHaveProperty('effortValues')
+    expect(readModel('m', { reasoning: false, reasoning_options: [{ type: 'effort', values: ['low'] }] }))
+      .not.toHaveProperty('effortValues')
   })
 
   it('refuses a record that is not one, and an empty id', () => {

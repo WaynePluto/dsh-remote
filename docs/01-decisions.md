@@ -26,10 +26,10 @@
 | D14 | 共用标准 DSH_HOME，仅隔离 dsh-remote-web profile | 共享 settings、credentials、sessions 与用户全局 patch |
 | D15 | 非 loopback 浏览器请求统一登录 | 仅 loopback socket 与 loopback Host 同时成立才免登录 |
 | D16 | 每台机器运行 dsh、relay、connector | 任意机器可作为远程入口，关系单向且每机最多一个入口 |
-| D17 | 扩展放在 `packages/plugins`，各包自行说明 | 功能组件通过 4 个组合 Bundle 与 7 个独立 Bundle 第三方分发；connection 注入和模型 HMR 启动屏障保留在同一个壳级 overlay |
+| D17 | 扩展放在 `packages/plugins`，各包自行说明 | 功能组件通过 4 个组合 Bundle 与 6 个独立 Bundle 第三方分发；connection 注入和模型 HMR 启动屏障保留在同一个壳级 overlay |
 | D18 | Linux systemd 以个人普通用户运行整套 dsh-remote | 默认 `~/.dsh-remote` 保存 relay 运行数据，`~/.dsh` 保存官方 dsh 数据；普通操作使用用户权限，管理员操作由用户在交互终端输入 sudo，保留系统缓存；不主动建立 root shell |
 | D19 | 公网使用泛子域名，本机保留 loopback，裸域名只进管理入口 | `https://<机器名>.<域名>` 保持每台机器独立 origin；`http://127.0.0.1:<端口>` 始终是本机入口；域名模式默认关闭成员端口，新增机器不改 DNS、证书或 TLS 反代；域名模式的公网 Cookie 与本机 HTTP 的 host-only 辅助 Cookie 分开 |
-| D20 | 功能插件作为随发行版提供、首次默认安装的第三方插件分发 | 22 个功能组件组合为 4 个组合包与 7 个独立包；launcher 配套升级所有仍安装的包并保留 Bundle/组件停用状态，用户卸载后不自动补回，可从发行版 `plugins/` 或开发目录 `.dev/plugins/` 重装。网页目录选择独立分发；模型组两个启动屏障组件不可单独停用；connection 注入与稳定的模型启动屏障仍是壳级常驻 overlay。详见 [插件分发计划](plugin-optional-plan.md) |
+| D20 | 功能插件作为随发行版提供、首次默认安装的第三方插件分发 | 20 个功能组件组合为 4 个组合包与 6 个独立包；launcher 配套升级所有仍安装的包并保留 Bundle/组件停用状态，用户卸载后不自动补回，可从发行版 `plugins/` 或开发目录 `.dev/plugins/` 重装。网页目录选择独立分发；模型组两个启动屏障组件不可单独停用；connection 注入与稳定的模型启动屏障仍是壳级常驻 overlay。详见 [插件分发计划](plugin-optional-plan.md) |
 
 ## 2.05 术语
 
@@ -94,8 +94,8 @@ dsh-restart-status.json 供「远程入口」页展示；不需要操作员重�
 官方插件管理器安装为第三方 Bundle；`plugin-catalog.json` 是分发包名、组件、顺序和源码位置的
 唯一清单。发行版从根目录 `plugins/` 安装，开发栈从 `.dev/plugins/` 安装，安装逻辑相同。
 
-22 个功能组件对外分发为 11 个包：远程体验、模型增强、会话增强、开发工具 4 个组合包，
-以及网页目录选择、出网代理、简洁模式、全局提示词、文件浏览、子代理深度、固定 YOLO 7 个
+20 个功能组件对外分发为 10 个包：远程体验、模型增强、会话增强、开发工具 4 个组合包，
+以及网页目录选择、出网代理、简洁模式、全局提示词、文件浏览、固定 YOLO 6 个
 独立包。组合包是安装、卸载与配套升级单位；组件仍保留独立行，除模型增强中的
 models-catalog 与 model-capabilities 共同参与 `llm-pi-ai` 启动屏障、不可单独停用外，
 其他无硬启动耦合的组件可在插件详情中单独停用。网页目录选择必须静态覆盖原生服务，故独立分发。
@@ -106,10 +106,12 @@ profile dependencies 中的随附包，包括停用的 Bundle；Bundle 是否选
 在 dsh「添加插件」中选择当前发行版 `plugins/<目录>` 或源码开发环境 `.dev/plugins/<目录>` 的
 绝对路径，再启用该 Bundle。Windows 上若介质与 profile 跨盘，launcher 提供的 pnpm 代理会把这次
 本地安装映射到 profile 内的同盘介质镜像；页面输入和安装日志仍使用用户选择的 `.dev/plugins` 路径。
-旧版 22 个受管 Bundle 首次迁移为 11 个分发包时保留已有 Bundle 与组件停用选择，已明确卸载的
-files 不会被重新安装。
+既有 profile 中属于当前清单的组件迁移时保留 Bundle 与组件停用选择，已明确卸载的
+files 不会被重新安装。清单外的既有插件不会由 launcher 自动卸载；需要清理时应由用户在
+dsh 官方插件管理器手动操作，不触碰项目外的 DSH_HOME。
 
-concise-mode 不插入 locator entry；Bundle patch 从 profile `baseUrl` 创建 `require`，解析已安装包的 `package.json` 后计算 preset root，不能依赖当前工作目录。
+concise-mode Bundle patch 内联声明两个 `@deepseek-ai/dsh-agent-preset` 行，不插入 locator entry，
+也不使用 preset root；子代理深度交给 dsh 原生设置（默认 1，可由用户调整）。
 宿主或浏览器构建产物缺失时，介质生成或启动必须响亮失败。
 
 壳内唯一保留的 `--patch` overlay 是 remote-privileged 包。它随 launcher 常驻传入、不可停用，
@@ -118,12 +120,14 @@ concise-mode 不插入 locator entry；Bundle patch 从 profile `baseUrl` 创建
 进程启动时由壳提供占位屏障。屏障挂在 root fiber 上，使运行中停用模型增强无需热重启
 `llm-pi-ai`；功能组件和界面仍随 Bundle 正常卸载。该 overlay 不进入第三方插件安装、停用或卸载生命周期。
 
+出网代理默认跟随 dsh 环境策略，也可选择插件代理地址或强制直连；覆盖原生 fetch 和官方
+网页抓取，不承诺统一接管子进程或独立网络库。
+
 远程浏览器设置由 remote-settings（ownsHost）注入开放；它不替代 relay 认证，
-不修改请求头。Agent 预设「打开目录」不区分本机/远程访问，统一沿用 dsh 在目标机器上打开
-文件管理器的动作（包括复制预设后的自动动作），不增加同机判定或路径复制 UI。Windows 因当前 dsh
-原生 `windowsHide:true` 会产生隐藏 Explorer，插件在 dsh 认证后直接启动可见 Explorer：预设路径由宿主 resolve；
-顶部「在本地打开」沿用原生 Open In… 已有的浏览器 cwd 能力，并在宿主复核绝对现存目录。不改 relay。
-Explorer 打开后异步 best-effort 尝试置前；用户明确接受远程点击可能抢占目标机器当前焦点。
+不修改请求头。Agent 预设的打开目录动作保持 dsh 原生行为，不增加同机判定或路径复制 UI。
+顶部「在本地打开」沿用原生 Open In… 的浏览器 cwd 能力；Windows Explorer 项经 dsh 认证后
+由插件宿主复核绝对现存目录，启动成功即返回，并异步 best-effort 尝试置前，其余应用继续走原生路由。
+不改 relay。用户明确接受远程点击可能抢占目标机器当前焦点。
 目标必须有可用图形桌面；无 opener 的回显路径、非 Windows 行为仍由原生 dsh 处理。
 
 ## 3. 持续关注

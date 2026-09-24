@@ -70,10 +70,9 @@ Download the zip for **your platform** from [Releases](../../releases) and unpac
 ### Bundled functional plugins
 
 On the first start of the `dsh-remote-web` profile, dsh-remote uses dsh's official plugin manager to install
-and enable 11 bundled third-party Bundles containing 22 functional components: four grouped packages
-(remote experience, model enhancements, conversation enhancements, and development tools) plus seven
-standalone packages (directory picker, proxy, concise mode, global instructions, files, subagent depth,
-and fixed YOLO).
+and enable 10 bundled third-party Bundles containing 20 functional components: four grouped packages
+(remote experience, model enhancements, conversation enhancements, and development tools) plus six
+standalone packages (directory picker, proxy, concise mode, global instructions, files, and fixed YOLO).
 
 - A grouped package can be disabled or uninstalled as a whole, and its component rows can normally be
   disabled independently. The model catalog and model capabilities components share the `llm-pi-ai`
@@ -84,6 +83,9 @@ and fixed YOLO).
 - Uninstalling is remembered: neither the launcher nor the tray restores the package. To reinstall the
   version shipped with the current release, use dsh's “Add plugin” action with the absolute path
   `<unpacked-directory>/plugins/<package-directory>`, then enable that Bundle.
+- If an older profile still has third-party packages no longer shipped, remove them manually through dsh's official plugin manager; the launcher does not clean up those entries or change other profiles.
+- Under Settings → Proxy, choose Follow environment (default), Use plugin proxy URL, or Force direct. The policy covers native fetch and official web fetching, not necessarily subprocesses or independent network libraries.
+- To pan a zoomed image preview, hold Space and drag with the left mouse button over the image scroll area; real-browser verification is still pending.
 - The connection webServer injection remains a mandatory shell-level overlay. It underpins browser RPC
   and is not a user-disableable plugin.
 
@@ -248,7 +250,7 @@ so the installed link remains valid. Development conventions and the usual check
 
 ## Status
 
-The tunnel, authentication, portable packages, and 22 functional plugin components are implemented. Outstanding plugin distribution and device checks are tracked in [docs/05-roadmap.md](docs/05-roadmap.md) (Chinese).
+The tunnel, authentication, portable packages, and 20 functional plugin components are implemented. Outstanding plugin distribution and device checks are tracked in [docs/05-roadmap.md](docs/05-roadmap.md) (Chinese).
 
 | Item | Value |
 |---|---|

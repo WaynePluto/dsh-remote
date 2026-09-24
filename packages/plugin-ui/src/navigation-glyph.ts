@@ -36,19 +36,24 @@ function escapeXml(value: string, attribute: boolean): string {
   return attribute ? escaped.replace(/"/gu, '&quot;') : escaped
 }
 
-/** 将 dsh primitive 返回的简单 SVG React element 转成 CSS mask 可用的 markup。 */
-function serializeSvgNode(node: unknown): string {
+/** 将 dsh primitive 的 SVG 图标及其纯函数 artwork 包装转成 CSS mask。 */
+function serializeSvgNode(node: unknown, wrapperDepth = 0): string {
   if (node === null || node === undefined || typeof node === 'boolean') return ''
   if (typeof node === 'string') return escapeXml(node, false)
   if (typeof node === 'number') return String(node)
-  if (Array.isArray(node)) return node.map(serializeSvgNode).join('')
+  if (Array.isArray(node)) return node.map(item => serializeSvgNode(item, wrapperDepth)).join('')
   if (typeof node !== 'object') throw new TypeError('Navigation glyph must return an SVG element')
 
   const element = node as { type?: unknown, props?: unknown }
-  if (typeof element.type !== 'string' || element.props === null || typeof element.props !== 'object') {
+  if (element.props === null || typeof element.props !== 'object') {
     throw new TypeError('Navigation glyph must return an SVG element')
   }
   const props = element.props as Record<string, unknown>
+  if (typeof element.type === 'function') {
+    if (wrapperDepth >= 8) throw new TypeError('Navigation glyph has too many component wrappers')
+    return serializeSvgNode((element.type as (props: Record<string, unknown>) => unknown)(props), wrapperDepth + 1)
+  }
+  if (typeof element.type !== 'string') throw new TypeError('Navigation glyph must return an SVG element')
   const attributes: string[] = []
   for (const [key, rawValue] of Object.entries(props)) {
     if (key === 'children' || key === 'key' || key === 'ref' || key === 'dangerouslySetInnerHTML') continue
@@ -59,7 +64,7 @@ function serializeSvgNode(node: unknown): string {
     const value = rawValue === 'currentColor' ? '#000' : String(rawValue)
     attributes.push(`${name}="${escapeXml(value, true)}"`)
   }
-  return `<${element.type}${attributes.length === 0 ? '' : ` ${attributes.join(' ')}`}>${serializeSvgNode(props.children)}</${element.type}>`
+  return `<${element.type}${attributes.length === 0 ? '' : ` ${attributes.join(' ')}`}>${serializeSvgNode(props.children, wrapperDepth)}</${element.type}>`
 }
 
 /**

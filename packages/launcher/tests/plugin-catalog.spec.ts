@@ -23,8 +23,8 @@ describe('plugin distribution catalog', () => {
   it('covers every functional component exactly once', () => {
     const components = PLUGIN_DISTRIBUTIONS.flatMap(item => item.components.map(component => component.name))
     expect(PLUGIN_CATALOG.schemaVersion).toBe(1)
-    expect(PLUGIN_DISTRIBUTIONS).toHaveLength(11)
-    expect(components).toHaveLength(22)
+    expect(PLUGIN_DISTRIBUTIONS).toHaveLength(10)
+    expect(components).toHaveLength(20)
     expect(new Set(components).size).toBe(components.length)
     expect(PLUGIN_CATALOG.shell.map(item => item.name)).toEqual([
       '@dsh-remote/dsh-plugin-remote-privileged',

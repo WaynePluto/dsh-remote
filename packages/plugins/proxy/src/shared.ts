@@ -27,9 +27,13 @@ export function isProxyEndpoint(endpoint: string): endpoint is ProxyEndpoint {
 }
 
 /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
+export type ProxyMode = 'environment' | 'plugin' | 'direct'
+
 export interface ProxySettings {
   /** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
-  enabled: boolean
+  /** 缺省沿用旧版 enabled/url 状态，不写入新模式。 */
+  mode?: ProxyMode | undefined
+  enabled?: boolean
   /** 代理地址，例如 `http://proxy.example.com:8080`；http 和 https 共用。 */
   url: string
   /** 以逗号或换行分隔的绕过代理主机。 */
@@ -99,16 +103,18 @@ export function normalizeBypass(raw: string): string {
     .join(',')
 }
 
-/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
-export function proxyFault(settings: ProxySettings): 'badUrl' | 'needUrl' | undefined {
-  // 代理关闭时也会检查非空地址：及早发现
-  // 输入错误，比每次后续请求才发现更好。
-  if (settings.url.trim().length > 0 && parseProxyUrl(settings.url) === undefined) return 'badUrl'
-  if (settings.enabled && settings.url.trim().length === 0) return 'needUrl'
-  return undefined
+/** 显式模式优先；老版关开关但保留地址表示强制直连。 */
+export function resolveMode(settings: ProxySettings): ProxyMode {
+  if (settings.mode !== undefined) return settings.mode
+  if (settings.enabled) return 'plugin'
+  return settings.url.trim().length > 0 ? 'direct' : 'environment'
 }
 
-
+export function proxyFault(settings: ProxySettings): 'badUrl' | 'needUrl' | undefined {
+  if (settings.url.trim().length > 0 && parseProxyUrl(settings.url) === undefined) return 'badUrl'
+  if (resolveMode(settings) === 'plugin' && settings.url.trim().length === 0) return 'needUrl'
+  return undefined
+}
 /** 测试契约：此处说明本测试锁定的行为和回归边界。（涉及：`url`） */
 export function isTestRequest(payload: unknown): payload is ProxyTestRequest {
   if (typeof payload !== 'object' || payload === null) return false

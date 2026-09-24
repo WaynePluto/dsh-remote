@@ -160,6 +160,49 @@ export function createModelCatalogRuntime(): ModelCatalogRuntime {
   return { applyProtocolOverrides, modelIds, modelProtocol }
 }
 
+/** 从 model id 提取带版本号的系列；未知命名不猜测。 */
+function modelFamily(value: string): { family: string; version: number[] } | undefined {
+  const parts = value.toLowerCase().split('-')
+  const versionIndex = parts.findIndex(part => /^\d+(?:\.\d+)*$/u.test(part))
+  if (versionIndex < 0) return undefined
+  return {
+    family: parts.filter((_, index) => index !== versionIndex).join('-'),
+    version: (parts[versionIndex] as string).split('.').map(Number),
+  }
+}
+
+/** 比较主次版本；缺席的小版本视为零。 */
+function compareVersions(left: readonly number[], right: readonly number[]): number {
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    const difference = (left[i] ?? 0) - (right[i] ?? 0)
+    if (difference !== 0) return difference
+  }
+  return 0
+}
+
+/** 只在同一路由、同一模型系列中选择版本最接近且不晚于目标的原生模型。 */
+export function nearestNativeModel(route: string, id: string): Model<Api> | undefined {
+  const target = modelFamily(id)
+  if (target === undefined) return undefined
+  const candidates = Object.values(modelMap(route) ?? {}).flatMap((model) => {
+    if (isRuntimeModel(route, model.id) || model.id === id) return []
+    const candidate = modelFamily(model.id)
+    return candidate?.family === target.family ? [{ model, version: candidate.version }] : []
+  })
+  const earlier = candidates.filter(entry => compareVersions(entry.version, target.version) <= 0)
+  const ordered = (earlier.length > 0 ? earlier : candidates).toSorted((a, b) =>
+    (earlier.length > 0 ? -1 : 1) * compareVersions(a.version, b.version) || a.model.id.localeCompare(b.model.id))
+  const nearest = ordered[0]
+  // 跨越多个主版本可能变更 wire 契约；无可信近邻时保留保守回退。
+  return nearest !== undefined && Math.abs((target.version[0] ?? 0) - (nearest.version[0] ?? 0)) <= 1
+    ? nearest.model : undefined
+}
+
+/** 返回原生模型尚未被用户协议覆盖的 API。 */
+export function nativeModelApi(route: string, id: string): string | undefined {
+  return baselineApis.get(route)?.get(id)
+}
+
 /** 按 route 优先、全局 fallback 查找 model id 的 API。 */
 export function catalogApiForId(route: string, id: string): string | undefined {
   const local = modelMap(route)?.[id]
@@ -183,10 +226,12 @@ export function inferredApi(modelId: string): string {
 export function ensureRuntimeModel(spec: RuntimeModelSpec): boolean {
   const map = modelMap(spec.route)
   if (map === undefined) return false
-  if (map[spec.id] !== undefined) return true
+  if (map[spec.id] !== undefined && !isRuntimeModel(spec.route, spec.id)) return true
 
-  const models = Object.values(map)
-  const template = models.find(model => model.api === spec.api) ?? models[0]
+  const models = Object.values(map).filter(model => !isRuntimeModel(spec.route, model.id))
+  const nearest = nearestNativeModel(spec.route, spec.id)
+  const sameFamily = nearest !== undefined && nativeModelApi(spec.route, nearest.id) === spec.api
+  const template = (sameFamily ? nearest : undefined) ?? models.find(model => model.api === spec.api) ?? models[0]
   if (template === undefined) return false
 
   const model = {
@@ -197,10 +242,12 @@ export function ensureRuntimeModel(spec: RuntimeModelSpec): boolean {
     provider: spec.route,
     contextWindow: spec.contextWindow ?? template.contextWindow,
     maxTokens: spec.maxTokens ?? template.maxTokens,
-    // runtime model 继承 template 的输入 schema，只覆盖 spec 给出的字段；删除 thinkingLevelMap 以避免错误的 reasoning levels。
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     input: spec.input === undefined || spec.input.length === 0 ? [...template.input] : [...spec.input],
     reasoning: false,
-  } as Model<Api> & { thinkingLevelMap?: unknown }
+  } as Model<Api> & { thinkingLevelMap?: unknown; compat?: unknown }
+  // 只有同路由同系列才继承兼容开关；推理档位由源数据与近邻交叉后写入 dsh 配置。
+  if (!sameFamily) delete model.compat
   delete model.thinkingLevelMap
   const override = activeProtocolOverrides.get(spec.route)?.get(spec.id)
   if (override !== undefined) model.api = override as Api

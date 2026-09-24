@@ -2,6 +2,16 @@ import { describe, expect, it, vi } from 'vitest'
 import { navigationGlyphStylesheet } from '@dsh-remote/plugin-ui'
 import { apply, inject, iteratorInjection, name } from '../src/index.js'
 
+const artwork = ({ size, strokeWidth }: { size: number, strokeWidth: number }) => ({
+  type: 'svg',
+  props: {
+    width: size,
+    height: size,
+    children: { type: 'path', props: { strokeWidth, d: 'M1 2' } },
+  },
+})
+const recursiveArtwork = (props: object): unknown => ({ type: recursiveArtwork, props })
+
 describe('dsh-remote-browser-compat', () => {
   it('contributes one inline head script containing the compatibility bridge', () => {
     const row = iteratorInjection()
@@ -56,6 +66,32 @@ describe('dsh-remote-browser-compat', () => {
     expect(css).toContain('[data-test-nav] > svg > * { display: none; }')
     expect(css).toContain('%23000')
     expect(css).not.toContain('::before')
+  })
+
+  it('unwraps the function component used by dsh 0.1.7 icon artwork', () => {
+    const css = navigationGlyphStylesheet({
+      marker: 'data-test-nav',
+      cellSelector: 'button',
+      labelSelector: 'span',
+      labels: new Set(['test']),
+      interesting: ['nav'],
+      icon: ({ size }) => ({ type: artwork, props: { size, strokeWidth: 1.3 } }),
+      maskSize: '16px',
+    })
+    expect(css).toContain('data:image/svg+xml,')
+    expect(css).toContain('stroke-width%3D%221.3%22')
+  })
+
+  it('rejects recursive icon components instead of looping forever', () => {
+    expect(() => navigationGlyphStylesheet({
+      marker: 'data-test-nav',
+      cellSelector: 'button',
+      labelSelector: 'span',
+      labels: new Set(['test']),
+      interesting: ['nav'],
+      icon: () => ({ type: recursiveArtwork, props: {} }),
+      maskSize: '16px',
+    })).toThrow('Navigation glyph has too many component wrappers')
   })
 
   it('waits for the web server before listening', () => {

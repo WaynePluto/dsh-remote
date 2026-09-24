@@ -54,38 +54,30 @@ apply 对无关事件必须返回同一个引用，框架以 Object.is 判断是
 
 外部插件不能 append 自定义会话事件，原因见 [工具与进程](runtime.md)。
 
-## 执行过程
+## 原生工作步骤展示
 
-出处：`packages/client/ui-chat/src/client/conversation-nodes/turn-process.ts`、
-`chat/ChatNodeSeat.tsx`、`chat/ChatView.tsx`、`packages/api/session-controller/src/history.ts`。
+出处：`packages/client/ui-chat/src/client/conversation-nodes/{turn-process,process-groups,process-activity}.ts`、
+`chat/{ChatNodeSeat,ChatGroupSeat}.tsx`、`presentation-policy.ts`。
+本节原生行为核对于已安装的 `@deepseek-ai/dsh-client-ui-chat@0.1.7-rc.1/lib/client.js`；
+源码路径对应产物中的模块，不以版本不同的本地源码 checkout 推断当前行为。
 
-dsh 发布 turn-process 的窗口、边界和计数，但渲染的 processWindowReady 要求 !historyIncomplete。
-页面按 50 条 surface 消息分页，长会话 hasMore:true 时原生折叠会全局关闭。
-Turn Location 投影本身不受该门影响，exec-process 复用它并提供自己的分段标题与隐藏规则。
+- `processWindowReady` 根据本轮的 start/closed 证据与展示策略判断，不依赖 `historyIncomplete`；
+  未加载的内容不呈现。
+- `process-groups` 按助手回复、用户输入/steering、重试和错误等边界切段；
+  助手推理与正文通过 `groupPart:reasoning/response` 分开渲染，正文不进局部过程组。
+- 设置 → 通用设置 → 工作步骤展示：简洁/标准将运行中的过程组也默认折叠；标准是默认值，
+  显示实时活动及详情。详细模式展开运行轮次的组，完全展开模式同时取消整轮折叠。
+- 过程组展开后使用 `max-height:min(400px,50vh)` 的内部滚动区及独立跟随。
+- 外层整轮折叠会让符合条件的已完成轮次只保留最终答案，先前中间回复可能一起收起。
+  运行中、停止/错误及含中途输入的轮次保持外层展开，不妨碍局部过程组折叠。
+- 结束组摘要显示活动类别。
 
-### 分段与统计
+## 会话滚动导航
 
-- 首段、每条正式消息后的段、过程中的用户消息后的段分别有 Definition。
-- 用户消息和正式回答始终在折叠外，段尾回答的 inline reasoning 跟该段折叠。
-- 原生 turn-process renderer 以 priority:-1 影子覆盖，其 disclosure 强制 open，避免双重隐藏。
-- locations.getTurn 的数组引用反映成员数据变化；可据此按 turn 更新统计。
-- 思考来自 assistant-step reasoning blocks，工具完成/失败来自 tool-call 结果，模型重试来自 model-retry。
-- 摘要为“思考N次·工具M次·失败K”，无失败省略最后项；结束后隐藏最近动作。
-- 结束判断同时看 answerAnchorSeq、Turn closed、后续段头，覆盖无正式回答和 turn 内分段。
+出处：`packages/client/ui-chat/src/client/chat/{ChatNodeSeat.tsx,ChatView.tsx,ChatView.module.css}`。
 
-### DOM 与滚动
+每行有 data-chat-flow-key、anchor-key、kind、turn。
 
-出处：`ChatNodeSeat.tsx`、`ChatView.module.css`、`AssistantMarkdown.tsx`、`ReasoningRow.tsx`。
-
-每行有 data-chat-flow-key、anchor-key、kind、turn。隐藏通过按 flow key 命中的注入样式表，
-不写 dsh 自己管理的 hidden 属性，避免与 useSearchableHidden 冲突。
-
-- 整行隐藏用零高度、overflow:hidden、content-visibility:hidden，并 margin:0!important。
-  不能 display:none，否则全零 rect 破坏阅读位置二分查找的有序性。
-- 行内 data-variant=think 的父 wrapper 则使用 display:none，连正文 flex gap 一并去掉。
-- sticky 写在 dsh .flowItem wrapper，不写在插件按钮上；wrapper 的 containing block 是整条消息列。
-- 每帧 push=clamp(滚动容器顶+行高-本段最后一行底,0,行高)，top=-push，随段尾等速推出。
-- 不能读取标题自身位置反馈偏移；每个标题用独立自定义属性，避免两段同屏互相影响。
 - 从祖先实际 overflow 查找滚动容器；不能写死 .scroll，因为布局可把滚动交给祖先。
 - `scrollTop` 会被浏览器钳制到 `scrollHeight - clientHeight`；最后一条回复较短时，它的开头在自然底部仍可能低于阅读线。需要严格顶对齐的插件必须临时补足尾部滚动空间，不能只重复调用 `scrollTo`。
 - ChatView 的 `onScrollRef` 以当前 scrollTop 与 observedTop 判断读者移动；历史会话首次定位时，原生 smooth scroll 尚未移动的 scroll 事件可能触发 `toBottom`，写回底部并取消动画。ResizeObserver 的跟随也可能覆盖定位；目标 DOM 已存在不代表滚动成功。
@@ -93,24 +85,14 @@ Turn Location 投影本身不受该门影响，exec-process 复用它并提供�
 - chat-scroll 对原生返回底部按钮只做局部 capture：动画先停在 dsh 24px 底部跟随阈值之外，再重放仍连接的原生 click，让 ChatView 自己清理 pending jump/分页锚点并恢复跟随；按钮识别、会话/滚动容器变化或交接失败时不伪造 React 状态。
 - 原生返回底部按钮直接内联在 `ChatView.tsx` 的 `!atBottom` 分支，无独立 slot 或滚动 action；`chatScroll.save/read` 只保存阅读位置。`toBottom` 还清理 pending jump/分页锚点、更新 observedTop 并恢复跟随，不能只替换几何写入。接近底部（当前 24px 阈值 + 1px 容差）会使按钮卸载，不能假定 scrollend 后仍能点击它。双向导航增强的待实施方案见 [chat-scroll 开发方案](../chat-scroll-plan.md)。
 - 不搬动 React 拥有的 sibling rows 来套内部滚动容器。
-- 展开外框用 0.5px border-l2；每个成员和 inline reasoning wrapper 使用不透明 specific-tip 背景。
-  sticky 终点测量同一父 wrapper 的真实边界。
 
-### 运行中与节点排序
+## 原生分叉节点约束
 
-出处：`packages/client/ui-conversation/src/client/conversation/assembler.ts`、
-`packages/client/ui-chat/src/client/chat/TurnTailNodeView.tsx`、`conversation-nodes/common.ts`。
+出处：`packages/client/ui-chat/src/client/chat/TurnTailNodeView.tsx`、`conversation-nodes/common.ts`。
 
-Definition 必须匹配 assistant/chunk 等事件才会在流式期间重建；publication:animation-frame 将更新合并到帧。
-审批与用户提问在 composer，turn-tail 为独立行，都不会被过程折叠隐藏。
-
+审批与用户提问位于 composer，turn-tail 是独立行。
 原生分叉要求 turn-tail 是该 turn 最后一个 Chat Node，组件返回 null 不会从 Location 索引删除节点。
-项目段头排序 +0.04，保持 formal < exec-process-step < max-tokens(+0.05) < turn-tail(+0.1)。
 真实后续工具或 steering 仍应阻止原生分叉。
-
-用户消息 payload 无 turn/step，Definition 从 context.start.location 读取坐标。
-首条 turn-opening user 不额外显示段头；过程中 source.kind:user 的 append 消息才开启新段。
-空标题 wrapper 同样零高度、零 margin，保留 rect 顺序。
 
 ## 用户消息分叉
 

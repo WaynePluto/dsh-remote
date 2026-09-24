@@ -64,8 +64,10 @@ export interface ModelAddition {
   maxTokens?: number
   /** Request modalities，收窄到 dsh 接受的两种。 */
   input?: readonly Modality[]
-  /** models.dev 是否将其称为 reasoning model；只供 panel 警告，不写入 dsh，因为缺少 per-level wire spellings，新增模型不会带 thinking levels。 */
+  /** models.dev 是否声明了推理；为 true 且有可信近邻时才尝试交集。 */
   reasoningUnavailable?: boolean
+  /** models.dev 声明的 effort 候选值；它们不是实际端点的 wire 映射。 */
+  effortValues?: readonly string[]
 }
 
 /**
@@ -108,6 +110,8 @@ export interface RoutePreview {
   source?: string
   /** 本插件当前在该 route 列表中的 model ids。 */
   ownedIds: readonly string[]
+  /** 可由用户显式更新协议或推理档位的旧条目；不在检查时自动写入。 */
+  upgradableIds?: readonly string[]
   /** models.dev 描述、但 dsh 和 overlay 都尚未提供的 models。 */
   additions: readonly ModelAddition[]
   /** overlay 携带、但 dsh 已原生提供的 ids；apply 会移除它们。 */

@@ -1,324 +1,186 @@
-/** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。 */
-
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { getGlobalDispatcher, fetch as undiciFetch } from 'undici'
+import { installProxyFromEnvironment, proxyRouteFor } from '@deepseek-ai/dsh-http-proxy'
+import { assertServiceable, Config, readConfig, resolveMode } from '../src/settings.js'
+import { ProxyDispatcher } from '../src/dispatcher.js'
 import type { Context } from '@deepseek-ai/cordis'
+import { apply, dispatch, runTest } from '../src/index.js'
 
-/** 测试契约：此处说明本测试锁定的行为和回归边界。 */
-const agents: { opts: Record<string, unknown>; closed: boolean }[] = []
+const TARGET = new URL('http://proxy-target.invalid/resource')
+const LOOPBACK = new URL('http://127.0.0.1:1/')
+let server: Server
+let proxyUrl: string
+let seen: string[]
+let launcherDispose: (() => Promise<void>) | undefined
+let plugin: ProxyDispatcher
+let base: ReturnType<typeof getGlobalDispatcher>
 
-/** 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`original`） */
-const original = { name: 'original' }
-let installed: unknown = original
-
-vi.mock('undici', () => ({
-  Agent: class {
-    readonly kind = 'fresh-plain-agent'
-  },
-  EnvHttpProxyAgent: class {
-    readonly opts: Record<string, unknown>
-    constructor(opts: Record<string, unknown>) {
-      this.opts = opts
-      agents.push({ opts, closed: false })
-    }
-
-    async close(): Promise<void> {
-      const record = agents.find(agent => agent.opts === this.opts)
-      if (record !== undefined) record.closed = true
-    }
-  },
-  // 实现说明：此处记录相关接口、边界和生命周期约束。
-  // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
-  getGlobalDispatcher: () => installed,
-  setGlobalDispatcher: (next: unknown) => { installed = next },
-}))
-
-const {
-  assertServiceable,
-  BAD_PAYLOAD_CODE,
-  dispatch,
-  normalizeBypass,
-  parseProxyUrl,
-  proxyFault,
-  ProxyDispatcher,
-  runTest,
-  UNKNOWN_ENDPOINT_CODE,
-  apply,
-} = await import('../src/index.js')
-
-/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
-function settings(overrides: Partial<{ enabled: boolean; url: string; bypass: string }> = {}) {
-  return { enabled: false, url: '', bypass: 'localhost,127.0.0.1', ...overrides }
+function lookup(values: Record<string, string>) {
+  return { get: (name: string) => values[name] === undefined ? undefined : { value: values[name] } }
 }
 
-beforeEach(() => {
-  agents.length = 0
-  installed = original
-})
+function settings(mode?: 'environment' | 'plugin' | 'direct', url = '') {
+  return { mode, url, bypass: 'localhost, 127.0.0.1, ::1' }
+}
 
-describe('validating the section', () => {
-  it('accepts an http or https proxy address', () => {
-    expect(parseProxyUrl('http://proxy.test:8080')?.hostname).toBe('proxy.test')
-    expect(parseProxyUrl('https://proxy.test:8080')?.hostname).toBe('proxy.test')
-  })
-
-  it('supplies the scheme for the bare host:port people actually paste', () => {
-    // 测试契约：此处说明本测试锁定的行为和回归边界。（涉及：`127.0.0.1:7890`）
-    // 实现说明：此处记录相关接口、边界和生命周期约束。
-    expect(parseProxyUrl('127.0.0.1:7890')?.toString()).toBe('http://127.0.0.1:7890/')
-    expect(parseProxyUrl('proxy.test:8080')?.toString()).toBe('http://proxy.test:8080/')
-    expect(parseProxyUrl(' proxy.test:8080 ')?.hostname).toBe('proxy.test')
-    expect(parseProxyUrl('192.168.1.10:3128')?.hostname).toBe('192.168.1.10')
-  })
-
-  it('still refuses an address that could not be a proxy', () => {
-    expect(parseProxyUrl('')).toBeUndefined()
-    // 实现说明：此处记录相关接口、边界和生命周期约束。
-    expect(parseProxyUrl('socks5://proxy.test:1080')).toBeUndefined()
-    expect(parseProxyUrl('ftp://proxy.test')).toBeUndefined()
-    expect(parseProxyUrl('http://')).toBeUndefined()
-    expect(parseProxyUrl('   ')).toBeUndefined()
-  })
-
-  it('refuses credentials in the address, which the settings surface would echo back', () => {
-    expect(parseProxyUrl('http://user:secret@proxy.test:8080')).toBeUndefined()
-    expect(parseProxyUrl('http://user@proxy.test:8080')).toBeUndefined()
-    expect(parseProxyUrl('user:secret@proxy.test:8080')).toBeUndefined()
-  })
-
-  it('refuses a bad address even while the proxy is switched off', () => {
-    expect(() => { assertServiceable(settings({ url: 'socks5://nope:1' })) }).toThrow('is not a proxy address')
-  })
-
-  it('refuses being switched on with no address', () => {
-    expect(() => { assertServiceable(settings({ enabled: true })) }).toThrow('no address')
-  })
-
-  it('accepts a switched-off section with no address', () => {
-    expect(() => { assertServiceable(settings()) }).not.toThrow()
-  })
-
-  it('answers the page with the same verdict it throws at every other writer', () => {
-    // 实现说明：此处记录相关接口、边界和生命周期约束。
-    // 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。（涉及：`SettingsScope.mutate`）
-    // 实现说明：此处记录相关接口、边界和生命周期约束。
-    expect(proxyFault(settings({ url: 'socks5://nope:1' }))).toBe('badUrl')
-    expect(proxyFault(settings({ enabled: true }))).toBe('needUrl')
-    expect(proxyFault(settings({ enabled: true, url: '127.0.0.1:7890' }))).toBeUndefined()
-    expect(proxyFault(settings())).toBeUndefined()
-  })
-
-  it('normalizes a bypass list people actually type', () => {
-    expect(normalizeBypass(' localhost, 127.0.0.1 \n ::1 ,, ')).toBe('localhost,127.0.0.1,::1')
-    expect(normalizeBypass('   ')).toBe('')
-  })
-})
-
-describe('owning the global dispatcher', () => {
-  it('makes "off" mean direct, rather than handing control back to an ambient proxy', () => {
-    // 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。
-    // 实现说明：此处记录相关接口、边界和生命周期约束。
-    // 测试契约：此处说明本测试锁定的行为和回归边界。
-    const ambientProxy = { name: 'ambient env proxy' }
-    installed = ambientProxy
-    const dispatcher = new ProxyDispatcher()
-    expect(dispatcher.apply(settings({ enabled: true, url: 'http://proxy.test:8080' })).via)
-      .toBe('http://proxy.test:8080/')
-    dispatcher.apply(settings({ enabled: false, url: 'http://proxy.test:8080' }))
-    expect(dispatcher.current().via).toBeNull()
-    expect(installed).not.toBe(ambientProxy)
-    expect((installed as { kind?: string }).kind).toBe('fresh-plain-agent')
-  })
-
-  it('asserts a direct connection while off, so an ambient proxy cannot make the page lie', () => {
-    // 实现说明：此处记录相关接口、边界和生命周期约束。
-    // 实现说明：此处记录相关接口、边界和生命周期约束。
-    // 实现说明：此处记录相关接口、边界和生命周期约束。
-    // 实现说明：此处记录相关接口、边界和生命周期约束。
-    const dispatcher = new ProxyDispatcher()
-    expect(dispatcher.apply(settings())).toEqual({ via: null, bypass: 'localhost,127.0.0.1' })
-    expect(agents).toEqual([])
-    expect((installed as { kind?: string }).kind).toBe('fresh-plain-agent')
-  })
-
-  it('installs an agent whose every option is explicit, so the environment cannot leak in', () => {
-    const dispatcher = new ProxyDispatcher()
-    dispatcher.apply(settings({ enabled: true, url: 'http://proxy.test:8080', bypass: 'localhost, ::1' }))
-    expect(agents).toHaveLength(1)
-    expect(agents[0]?.opts).toEqual({
-      httpProxy: 'http://proxy.test:8080/',
-      httpsProxy: 'http://proxy.test:8080/',
-      noProxy: 'localhost,::1',
-    })
-    expect(installed).not.toBe(original)
-  })
-
-  it('does not rebuild the agent when a write changes nothing it reads', () => {
-    const dispatcher = new ProxyDispatcher()
-    const on = settings({ enabled: true, url: 'http://proxy.test:8080' })
-    dispatcher.apply(on)
-    dispatcher.apply({ ...on })
-    expect(agents).toHaveLength(1)
-  })
-
-  it('swaps the agent when the address changes, and closes the old one', () => {
-    const dispatcher = new ProxyDispatcher()
-    dispatcher.apply(settings({ enabled: true, url: 'http://one.test:8080' }))
-    dispatcher.apply(settings({ enabled: true, url: 'http://two.test:8080' }))
-    expect(agents).toHaveLength(2)
-    expect(agents[0]?.closed).toBe(true)
-  })
-
-  it('installs a fresh direct agent when switched off, and stops reporting a proxy', () => {
-    const dispatcher = new ProxyDispatcher()
-    dispatcher.apply(settings({ enabled: true, url: 'http://proxy.test:8080' }))
-    dispatcher.apply(settings({ enabled: false, url: 'http://proxy.test:8080' }))
-    // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`original`）
-    // 实现说明：此处记录相关接口、边界和生命周期约束。
-    expect((installed as { kind?: string }).kind).toBe('fresh-plain-agent')
-    expect(dispatcher.current().via).toBeNull()
-  })
-
-  it('restores the dispatcher it found on disposal, so unloading leaves no trace', async () => {
-    const dispatcher = new ProxyDispatcher()
-    dispatcher.apply(settings({ enabled: true, url: 'http://proxy.test:8080' }))
-    await dispatcher.dispose()
-    expect(installed).toBe(original)
-    expect(agents[0]?.closed).toBe(true)
-  })
-})
-
-describe('surviving a reload while the proxy is on', () => {
-  // 实现说明：此处记录相关接口、边界和生命周期约束。
-  // 实现说明：此处记录相关接口、边界和生命周期约束。
-  // 实现说明：此处记录相关接口、边界和生命周期约束。
-  // 实现说明：此处记录相关接口、边界和生命周期约束。
-  // 实现说明：此处记录相关接口、边界和生命周期约束。
-  it('never adopts one of its own agents as the restore target', () => {
-    const first = new ProxyDispatcher()
-    first.apply(settings({ enabled: true, url: 'http://proxy.test:8080' }))
-
-    // 实现说明：此处记录相关接口、边界和生命周期约束。
-    const second = new ProxyDispatcher()
-    second.apply(settings({ enabled: false, url: 'http://proxy.test:8080' }))
-
-    expect(second.current().via).toBeNull()
-    // 实现说明：此处记录相关接口、边界和生命周期约束。
-    expect(agents.some(agent => agent.opts === (installed as { opts?: unknown }).opts)).toBe(false)
-  })
-
-  it('reports what the process actually does, not what it last asked for', () => {
-    const first = new ProxyDispatcher()
-    first.apply(settings({ enabled: true, url: 'http://proxy.test:8080' }))
-
-    // 实现说明：此处记录相关接口、边界和生命周期约束。
-    // 实现说明：此处记录相关接口、边界和生命周期约束。
-    expect(new ProxyDispatcher().current().via).toBe('http://proxy.test:8080/')
-  })
-
-  it('re-installs the proxy when the live dispatcher drifted away from the settings', () => {
-    const dispatcher = new ProxyDispatcher()
-    const on = settings({ enabled: true, url: 'http://proxy.test:8080' })
-    dispatcher.apply(on)
-    // 实现说明：此处记录相关接口、边界和生命周期约束。
-    installed = original
-    dispatcher.apply(on)
-    expect(agents).toHaveLength(2)
-    expect(dispatcher.current().via).toBe('http://proxy.test:8080/')
-  })
-})
-
-describe('the test endpoint', () => {
-  /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
-  function proxied(): InstanceType<typeof ProxyDispatcher> {
-    const dispatcher = new ProxyDispatcher()
-    dispatcher.apply(settings({ enabled: true, url: 'http://proxy.test:8080' }))
-    return dispatcher
+async function hasRoute(expected: string | null): Promise<void> {
+  const route = proxyRouteFor(TARGET)
+  expect(route.proxied ? route.proxy : null).toBe(expected)
+  expect(plugin.route(TARGET)).toBe(expected)
+  if (expected !== null) {
+    if (!route.proxied) throw new Error('expected a proxied route')
+    expect(getGlobalDispatcher()).toBe(route.dispatcher)
+    // 官方 web-fetch 的代理分支把同一个 route.dispatcher 显式交给 undici.fetch。
+    expect((await undiciFetch(TARGET, { dispatcher: route.dispatcher })).status).toBe(200)
+    // 原生 fetch 则从同一个全局 dispatcher 取路由。
+    expect((await fetch(TARGET)).status).toBe(200)
+    expect(seen.splice(0)).toEqual([TARGET.href, TARGET.href])
   }
+}
 
-  it('reports the status, the elapsed time, and which proxy carried it', async () => {
-    const cancel = vi.fn()
-    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 204, body: { cancel } })))
-    const result = await runTest(proxied(), 'https://example.test/probe')
-    expect(result).toMatchObject({ ok: true, status: 204, via: 'http://proxy.test:8080/' })
-    // 实现说明：此处记录相关接口、边界和生命周期约束。
-    expect(cancel).toHaveBeenCalled()
+beforeEach(async () => {
+  base = getGlobalDispatcher()
+  seen = []
+  server = createServer((req, res) => {
+    seen.push(req.url ?? '')
+    res.writeHead(200, { 'content-type': 'text/plain' })
+    res.end('proxy')
+  })
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  proxyUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`
+  launcherDispose = await installProxyFromEnvironment(lookup({ HTTP_PROXY: proxyUrl, HTTPS_PROXY: proxyUrl }), () => {})
+  plugin = new ProxyDispatcher()
+})
+
+afterEach(async () => {
+  vi.unstubAllGlobals()
+  await plugin.dispose()
+  await launcherDispose?.()
+  expect(getGlobalDispatcher()).toBe(base)
+  await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+})
+
+describe('three outbound modes over the official launcher policy', () => {
+  it('defaults to the launch environment without mounting a second policy', async () => {
+    await plugin.apply(settings())
+    await hasRoute(proxyUrl)
+    expect(proxyRouteFor(LOOPBACK)).toEqual({ proxied: false })
   })
 
-  it('answers with the failure instead of throwing, because a failed test is an answer', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('connect ECONNREFUSED') }))
-    const result = await runTest(new ProxyDispatcher(), 'https://example.test/probe')
-    expect(result).toMatchObject({ ok: false, via: null, error: 'connect ECONNREFUSED' })
+  it('plugin URL wins for both paths, honors bypass, then returns to environment', async () => {
+    const other = createServer((req, res) => { seen.push(`other:${req.url}`); res.end('other') })
+    await new Promise<void>(resolve => other.listen(0, '127.0.0.1', resolve))
+    const url = `http://127.0.0.1:${(other.address() as AddressInfo).port}/`
+    try {
+      await plugin.apply(settings('plugin', url))
+      const route = proxyRouteFor(TARGET)
+      expect(route).toMatchObject({ proxied: true, proxy: url })
+      if (!route.proxied) throw new Error('missing route')
+      expect(getGlobalDispatcher()).toBe(route.dispatcher)
+      expect((await fetch(TARGET)).status).toBe(200)
+      expect((await undiciFetch(TARGET, { dispatcher: route.dispatcher })).status).toBe(200)
+      expect(seen.splice(0)).toEqual([`other:${TARGET.href}`, `other:${TARGET.href}`])
+      expect(proxyRouteFor(LOOPBACK)).toEqual({ proxied: false })
+      await plugin.apply({ ...settings('plugin', url), bypass: 'proxy-target.invalid' })
+      expect(proxyRouteFor(TARGET)).toEqual({ proxied: false })
+      await plugin.apply(settings('environment', url))
+      await hasRoute(proxyUrl)
+    } finally {
+      await new Promise<void>(resolve => other.close(() => resolve()))
+    }
   })
 
-  it('refuses an address that is not http(s) before any request is made', async () => {
-    const fetchSpy = vi.fn()
-    vi.stubGlobal('fetch', fetchSpy)
-    expect((await runTest(new ProxyDispatcher(), 'file:///etc/passwd')).ok).toBe(false)
-    expect(fetchSpy).not.toHaveBeenCalled()
+  it('force direct takes precedence over launcher policy and unload restores it', async () => {
+    await plugin.apply(settings('direct', proxyUrl))
+    expect(proxyRouteFor(TARGET)).toEqual({ proxied: false })
+    expect(plugin.route(TARGET)).toBeNull()
+    expect(getGlobalDispatcher()).not.toBe(proxyRouteFor(LOOPBACK))
+    await plugin.dispose()
+    await hasRoute(proxyUrl)
   })
 
-  it('refuses an unknown endpoint and a payload with no url', async () => {
-    const dispatcher = new ProxyDispatcher()
-    const unknown = await dispatch(dispatcher, 'nope', { url: 'https://example.test' })
-    expect(unknown.ok ? undefined : unknown.error.code).toBe(UNKNOWN_ENDPOINT_CODE)
-    const bad = await dispatch(dispatcher, 'test', {})
-    expect(bad.ok ? undefined : bad.error.code).toBe(BAD_PAYLOAD_CODE)
+  it('serializes rapid writes and unload without restoring a stale dispatcher', async () => {
+    const writes = [plugin.apply(settings('plugin', proxyUrl)), plugin.apply(settings('direct', proxyUrl)),
+      plugin.apply(settings('plugin', proxyUrl))]
+    await Promise.all(writes)
+    await hasRoute(proxyUrl)
+    await plugin.dispose()
+    await hasRoute(proxyUrl)
+    await expect(plugin.apply(settings('direct'))).rejects.toThrow('disposed')
+  })
+
+  it('a rejected write keeps the current policy and allows another update', async () => {
+    // 写入校验先于切换；失败不能改掉原先的直连层。
+    await plugin.apply(settings('direct'))
+    await expect(plugin.apply(settings('plugin', 'socks5://invalid:99'))).rejects.toThrow()
+    expect(proxyRouteFor(TARGET)).toEqual({ proxied: false })
+    await plugin.apply(settings('environment'))
+    await hasRoute(proxyUrl)
   })
 })
 
-describe('mounting', () => {
-  /** 组一个可变的 volatile Config 与记录事件的伪 ctx；dsh 0.1.7 起挂载签名是 apply(ctx, config)。 */
-  function mount() {
-    let value: ReturnType<typeof settings> = settings({ enabled: true, url: 'http://boot.test:8080' })
-    const config = {
-      enabled: { get: () => value.enabled },
-      url: { get: () => value.url },
-      bypass: { get: () => value.bypass },
-    }
-    const listeners = new Map<string, Array<(first: unknown, next: () => unknown) => unknown>>()
+describe('legacy configuration and validation', () => {
+  it('maps old enabled/url combinations without persisting a new mode', () => {
+    expect(resolveMode({ enabled: true, url: proxyUrl, bypass: '' })).toBe('plugin')
+    expect(resolveMode({ enabled: false, url: proxyUrl, bypass: '' })).toBe('direct')
+    expect(resolveMode({ enabled: false, url: '', bypass: '' })).toBe('environment')
+    expect(resolveMode({ enabled: true, mode: 'direct', url: proxyUrl, bypass: '' })).toBe('direct')
+    const parsed = readConfig(Config({ enabled: false, url: proxyUrl, bypass: 'keep.me' }) as never)
+    expect(parsed).toMatchObject({ url: proxyUrl, bypass: 'keep.me', mode: undefined })
+    expect(readConfig(Config({ mode: 'environment', enabled: true, url: proxyUrl }) as never).mode).toBe('environment')
+    expect(() => Config({ mode: 'unknown' } as never)).toThrow()
+  })
+
+  it('rejects invalid writes with the same validation as the client', () => {
+    expect(() => assertServiceable(settings('plugin'))).toThrow('needs a proxy address')
+    expect(() => assertServiceable(settings('direct', 'socks5://bad:99'))).toThrow('not a proxy address')
+    expect(() => assertServiceable(settings('plugin', 'http://user:secret@proxy.test:80'))).toThrow()
+    expect(() => assertServiceable(settings('plugin', '127.0.0.1:7890'))).not.toThrow()
+  })
+
+  it('test endpoint reports the requested URL route, including a bypass and failure', async () => {
+    await plugin.apply(settings())
+    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 204, body: { cancel: vi.fn() } })))
+    expect(await runTest(plugin, TARGET.href)).toMatchObject({ ok: true, via: proxyUrl })
+    expect((await runTest(plugin, LOOPBACK.href)).via).toBeNull()
+    expect((await runTest(plugin, 'file:///etc/passwd')).ok).toBe(false)
+    expect((await dispatch(plugin, 'nope', {})).ok).toBe(false)
+    expect((await dispatch(plugin, 'test', {})).ok).toBe(false)
+  })
+})
+
+
+describe('Cordis volatile lifecycle', () => {
+  it('rejects candidate writes, switches on updates, and unmounts the official layer', async () => {
+    let config = { mode: undefined as 'environment' | 'plugin' | 'direct' | undefined,
+      enabled: true, url: proxyUrl, bypass: '' }
     const fiber = {}
+    const callbacks = new Map<string, (...args: unknown[]) => unknown>()
+    let cleanup: (() => Promise<void>) | undefined
     const ctx = {
-      on: vi.fn((event: string, listener: (first: unknown, next: () => unknown) => unknown) => {
-        const list = listeners.get(event) ?? []
-        list.push(listener)
-        listeners.set(event, list)
-        return () => {}
-      }),
       fiber,
-      connection: { rpc: { handle: vi.fn(() => () => {}) } },
-      effect: vi.fn((factory: () => unknown) => { factory() }),
-      logger: { info: vi.fn() },
+      logger: { info: vi.fn(), error: vi.fn() },
+      on: (name: string, callback: (...args: unknown[]) => unknown) => { callbacks.set(name, callback) },
+      effect: (factory: () => () => Promise<void>) => { cleanup = factory() },
+      connection: { rpc: { handle: () => () => {} } },
     } as unknown as Context
-    return {
-      ctx,
-      config,
-      fiber,
-      emit: (event: string) => { for (const listener of listeners.get(event) ?? []) listener({}, () => ({})) },
-      set value(next: ReturnType<typeof settings>) { value = next },
+    const refs = {
+      mode: { get: () => config.mode }, enabled: { get: () => config.enabled },
+      url: { get: () => config.url }, bypass: { get: () => config.bypass },
     }
-  }
-
-  it('applies the composed config at load and follows every volatile update', () => {
-    const mounted = mount()
-    apply(mounted.ctx, mounted.config as never)
-    expect(agents[0]?.opts).toMatchObject({ httpProxy: 'http://boot.test:8080/' })
-
-    mounted.value = settings({ enabled: true, url: 'http://changed.test:8080' })
-    mounted.emit('loader/volatile-update')
-    expect(agents[1]?.opts).toMatchObject({ httpProxy: 'http://changed.test:8080/' })
-  })
-
-  it('rejects a prospective write whose fields do not pass cross-field validation', () => {
-    const mounted = mount()
-    apply(mounted.ctx, mounted.config as never)
-    const hook = (mounted.ctx as unknown as { on: ReturnType<typeof vi.fn> }).on.mock.calls
-      .find(call => call[0] === 'internal/config')?.[1] as (this: unknown, first: unknown, next: () => unknown) => unknown
+    apply(ctx, refs as never)
+    await vi.waitFor(() => expect(proxyRouteFor(TARGET).proxied).toBe(true))
+    const hook = callbacks.get('internal/config')
     expect(hook).toBeDefined()
-    // fiber 不匹配时放行（别的 fiber 的 config 更新）。
-    expect(hook({}, () => 'pass-through')).toBe('pass-through')
-    // 本 fiber 的候选写入先经 assertServiceable，非法地址即抛错拒绝。
-    expect(() => {
-      hook.call(mounted.fiber, {}, () => ({ enabled: true, url: 'socks5://nope:1', bypass: '' }))
-    }).toThrow('is not a proxy address')
+    expect(() => hook?.call(fiber, {}, () => ({ mode: 'plugin', url: '', bypass: '' })))
+      .toThrow('needs a proxy address')
+    expect(hook?.call({}, {}, () => 'other-fiber')).toBe('other-fiber')
+    config = { mode: 'direct', enabled: true, url: proxyUrl, bypass: '' }
+    callbacks.get('loader/volatile-update')?.()
+    await vi.waitFor(() => expect(proxyRouteFor(TARGET)).toEqual({ proxied: false }))
+    await cleanup?.()
+    await hasRoute(proxyUrl)
   })
 })

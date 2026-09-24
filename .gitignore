@@ -8,6 +8,13 @@ dist/
 release/
 *.tsbuildinfo
 
+# Go 桌面预览的本地构建产物；图标资源由 desktop:prepare 从 packaging 复制
+/packages/desktop/rsrc_windows_amd64.syso
+/packages/desktop/*.exe
+/packages/desktop/*.test
+/packages/desktop/coverage.out
+/packages/desktop/build/bin/
+
 # 本地运行产物
 data/
 *.log

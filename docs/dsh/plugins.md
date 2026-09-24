@@ -19,20 +19,18 @@ profile 的 `dependencies` 是第三方 Bundle 是否安装的事实，`dsh.prof
 卸载后不得仅凭“默认清单”重新加入 dependency 或 bundles。
 
 profile patch 执行时，末尾 overlay 插入的行还不存在，所以覆盖普通项目插件 config 需要更靠后的 patch，
-且目标行必须有稳定 id。用户可编辑的配置通常应使用设置命名空间，不依赖 Cordis config。
+且目标行必须有稳定 id。用户可编辑的插件字段通过带 volatile Config 的插件行和 configForms 写入；
+其他设置仍按其所属服务的契约处理。
 
-0.1.6 的插件管理页区分三类槽位：`plugins.item` 是官方插件卡片 list；第三方 Bundle 自身配置应注册
-keyed 的 `plugins.bundle.config`，key 为 Bundle 完整包名，owner 在详情页以 `view: 'page'` 渲染；
-组件行配置使用 `plugins.row.config`。这些表单编辑设置命名空间的值，不直接编辑 Cordis entry config。
-subagent-depth 已迁到 `plugins.bundle.config`，只渲染 page 视图并直接使用详情页配置区，不再显示
-第二层卡片、重复标题或嵌套折叠。槽位声明出处：
-`packages/client/ui-plugin-manager/src/client/slot-contract.ts`、`PluginManagerPage.tsx`。
+插件管理页有三类槽位：`plugins.item` 是官方插件卡片 list；第三方 Bundle 配置使用 keyed
+`plugins.bundle.config`（key 为 Bundle 完整包名），组件行配置使用 `plugins.row.config`。
+0.1.7 的项目配置表单以插件行 entry id 寻址，写回该行的 volatile Config，而非独立设置命名空间。
+槽位声明出处：`packages/client/ui-plugin-manager/src/client/{slot-contract.ts,PluginManagerPage.tsx}`。
 
 ## 原生「添加插件」与显示
 
 出处：`packages/client/ui-plugin-manager/src/client/{presentation.ts,manager-store.ts,PluginManagerPage.tsx}`、
-`packages/boot/plugin-manager/src/index.ts`。本节核对已安装 `0.1.6-alpha.2` 的产物及随包文档；
-本地 dsh 源码 checkout 若版本不同，不能拿另一版本界面推断当前管理页。
+`packages/boot/plugin-manager/src/index.ts`。管理页行为应以当前安装版本为准。
 
 - 「添加插件」支持包名/版本、Git、压缩包与宿主机器的本地绝对路径；目录应指向有
   `package.json` 且声明 `dsh.bundle.patch` 的包根。已在当前管理列表中的包会被拒为 already-installed。
@@ -49,7 +47,7 @@ subagent-depth 已迁到 `plugins.bundle.config`，只渲染 page 视图并直�
 
 ### dsh-remote 分发约束
 
-- 根 `plugin-catalog.json` 将 22 个功能组件映射为 4 个组合包与 7 个独立包。发行介质位于
+- 根 `plugin-catalog.json` 将 20 个功能组件映射为 4 个组合包与 6 个独立包。发行介质位于
   `plugins/`，开发介质位于 `.dev/plugins/`；两者都用本地绝对目录走上述官方安装流程。
 - 组合包是安装/卸载/升级单位，其 `cordis.patch.yml` 仍为组件保留独立稳定行。组件从 Bundle
   内嵌依赖的相对路径装载，并用 Bundle 选择状态跳过 HMR 卸载阶段的瞬时残留行。普通组件可以
@@ -62,15 +60,25 @@ subagent-depth 已迁到 `plugins.bundle.config`，只渲染 page 视图并直�
 
 ## 简洁模式预设 Bundle
 
-出处：`packages/bundle/web-app/cordis.patch.yml`、`packages/preset/agent-presets/src/{preset,discovery}.ts`、
-`packages/preset/persona/src/index.ts`、`packages/core/agent-tool-presentation/src/index.ts`、
-`packages/core/system-prompt/src/index.ts`。
+出处：`packages/bundle/web-app/cordis.patch.yml`、`packages/preset/agent-preset-registry/src/index.ts`、
+`packages/preset/agent-preset/src/index.ts`、`packages/preset/persona/src/index.ts`、
+`packages/core/agent-tool-presentation/src/index.ts`、`packages/core/system-prompt/src/index.ts`；
+项目定义见 `packages/plugins/concise-mode/cordis.patch.yml`。
 
-dsh-web-app 创建 agent-presets 行，因此 concise-mode Bundle 必须排在其后，向同一 profile 增加 preset root。
-root 经 path.resolve 处理，不能直接用普通相对路径。Bundle patch 在 `!!js` 中从 profile `baseUrl`
-创建 `require`，解析已安装包的 `package.json` 后计算可搬移的绝对 presets 目录；不得再插入 locator
-entry，否则停用 Bundle 的 Profile HMR 会在移除该包的同时重导入 locator，并报 `failed to import`。
-较早 root 的同名 preset 胜出，官方 web profile 不添加这个 root。
+dsh-web-app 提供 `agent-preset-registry` 与原生预设；concise-mode Bundle 排在其后，用 patch 直接
+插入 `preset-concise` 和 `preset-concise-ptc` 两行 `@deepseek-ai/dsh-agent-preset`，
+各行 `config.plugins` 内联声明 persona、工具与压缩插件。这里没有 preset root、locator entry
+或以文件系统目录加载预设的逻辑；只在 dsh-remote-web profile 增加这两个预设。
+
+0.1.7-rc.1 不再支持旧版「复制预设 → 写入用户预设目录」：预设现在是 profile/Bundle 中的
+`@deepseek-ai/dsh-agent-preset` 声明，原生设置页只提供「查看配置」（只读）及「让 Agent 帮我创建预设模式」。
+后者进入创造模式，生成并安装声明预设的 Bundle；开启「新任务可选择模式」后才能点击。
+上游提交 `d1e22a7e24`（`feat(preset): declare Agent compositions in profile YAML`，首次包含于 0.1.7-alpha.1）
+直接删除了旧 UI 的 `beginCopy` / `CopyDialog`、旧注册表的 `@Remote('copy')` 及
+`packages/preset/agent-presets/src/authoring.ts`；旧方案被归档于
+`.agents/notes/archived/simplification/2026-08-08-copy-only-preset-authoring.zh.md`。
+新版依据见 `packages/client/ui-agent-preset/src/client/AgentPresetSection.tsx`、
+`packages/preset/agent-preset-registry/src/index.ts`。remote-settings 不接管预设页，也不恢复旧版写目录接口。
 
 两个预设保留文件、搜索、技能、前台 shell、前台一次性子代理、用户提问、待办和压缩。
 shell 与 subagent 的 enableRunInBackground 为 false，subagent 使用 one-shot。
@@ -164,9 +172,12 @@ composition Config：
 settings.section 没有 icon 字段，导航 shell 按 id 选择图标，未知 id 为齿轮。
 出处：`packages/client/ui-settings-general/src/client/SettingsRoot.tsx`。
 项目的代理、通知、全局提示词和浏览器日志使用局部导航标记和注入样式，不替换 React 节点。
-当前图标映射为 `IconGlobeOutline14`、`IconAlarmClockOutline16`、`IconListPenOutline16` 和
-`IconCodeOutline16`；`settings.section` 没有 icon 字段，因此插件调用这些原生 component 并将
-返回的 SVG element 序列化成导航 mask。
+当前图标映射为 `IconGlobeOutlineMedium`、`IconAlarmClockOutlineMedium`、`IconListPenOutlineMedium` 和
+`IconCodeOutlineMedium`；`settings.section` 没有 icon 字段，因此插件调用这些原生 component 并将
+返回的 SVG element 序列化成导航 mask。已安装的 0.1.7-rc.1
+`@deepseek-ai/dsh-client-ui-primitives/lib/index.js` 中，这些 component 返回的 React element
+先以纯函数 Artwork 为 `type`，Artwork 再返回原生 `<svg>`；项目公共 helper 必须有界展开函数包装，
+不能只接受 `type === 'svg'`，否则四个设置页插件启动即失败。
 公共 helper 使用 dsh shell 已渲染的直接子 SVG 作为 mask 载体，并隐藏其原生子路径，避免伪元素在
 React 重建或旧 WebKit flex 布局中丢失。升级检查包含 `navCell`/`navLabel` 的局部类名；不匹配时退回默认图标。
 
@@ -199,7 +210,9 @@ React 重建或旧 WebKit flex 布局中丢失。升级检查包含 `navCell`/`n
 - Slot 的子槽由唯一登记 owner 声明并持有 render 授权；对现有 cell 加 priority:-1 不会继承原登记项的 children。
   files 不重声明 `sidebar.right.tab.document`，不覆盖 `ui-sidebar-documentpreview` owner；ctx 级 renderSlot 只能渲染 root。
   因此不能把原生预览拆出来任意嵌入另一个 body。图片增强改在原生 text title slot 以 portal 控件定位已渲染 image frame，
-  不复制 ImageBody 或通过 root 重新声明 document child slot。portal 内的交互控件必须同时阻止
+  不复制 ImageBody 或通过 root 重新声明 document child slot。已安装 0.1.7 的 ZoomViewport 以
+  `data-document-zoom-scrollport` 标识自身滚动容器；Space+鼠标平移只滚动当前图片的该容器，
+  不移动原生 DOM。portal 内的交互控件必须同时阻止
   `pointerdown` 和 `click` 冒泡；dockkit 的原生 tab 会在 pointerdown 启动拖动/重建，若不阻止，浏览器可能把
   portal 按钮的后续 click 重定向到 tab。该行为与 `ui-dockkit` 的 TabMenu 处理一致，files 的图片工具栏遵循同一规则。
 
@@ -296,7 +309,7 @@ token 拼写和实际值是两件事，需用真实页面 getComputedStyle 检�
 ### 选项菜单
 
 出处：`packages/client/locale/src/client/LanguageRow.tsx`、`packages/client/ui-primitives/src/Menu.tsx`、
-`Menu.module.css`。项目 subagent-depth 的 DepthSelect 复用与语言下拉相同的 external Menu。
+`Menu.module.css`。选项菜单以 dsh external `Menu` 复用页面运行时。
 
 - 选项 hover 使用 `--dsw-alias-interactive-bg-hover`，不要给原生 option 强套 CSS，或修改触发器背景来代替。
 - 默认 `selection='check'` 以右侧勾号标记 `selectedId`，选中未 hover 时仍透明；`fill` 会常驻高亮，语义不同。

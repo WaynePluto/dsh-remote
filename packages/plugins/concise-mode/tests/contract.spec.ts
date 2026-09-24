@@ -54,6 +54,7 @@ const omittedRows = [
   '@deepseek-ai/dsh-tool-web',
   '@deepseek-ai/dsh-tool-subagent-control',
   'subagent_fork',
+  'maxDepth:',
 ]
 
 /** 从 patch 里取出一个预设行的 config.plugins 段（到下一个 preset 行为止）。 */

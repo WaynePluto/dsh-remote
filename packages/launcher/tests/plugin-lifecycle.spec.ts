@@ -124,6 +124,79 @@ describe('third-party plugin lifecycle', () => {
     expect(fs.existsSync(join(cache, 'runtime-leaf', 'package.json'))).toBe(true)
   })
 
+  it('links the same HTTP proxy module used by dsh web-fetch', async () => {
+    const { root, home, media } = fixture()
+    ensureProfile({ home, profile: 'dsh-remote-web', bundles: BASE_PROFILE_BUNDLES })
+    const entry = PLUGIN_DISTRIBUTIONS.find(item => item.name === '@dsh-remote/dsh-plugin-proxy')
+    expect(entry).toBeDefined()
+    const plugin = join(media, 'proxy')
+    const pluginManifest = JSON.parse(fs.readFileSync(join(plugin, 'package.json'), 'utf8')) as Record<string, unknown>
+    pluginManifest.dependencies = { '@deepseek-ai/dsh-http-proxy': '0.1.7-rc.1' }
+    fs.writeFileSync(join(plugin, 'package.json'), JSON.stringify(pluginManifest))
+
+    const modules = join(root, 'runtime', 'node_modules')
+    const dsh = join(modules, '@deepseek-ai', 'dsh')
+    const source = join(modules, '@deepseek-ai', 'dsh-http-proxy')
+    const shared = join(dsh, 'node_modules', '@deepseek-ai', 'dsh-http-proxy')
+    for (const directory of [dsh, source, shared]) fs.mkdirSync(directory, { recursive: true })
+    fs.writeFileSync(join(dsh, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version: '0.1.7-rc.1' }))
+    for (const directory of [source, shared]) {
+      fs.writeFileSync(join(directory, 'package.json'), JSON.stringify({
+        name: '@deepseek-ai/dsh-http-proxy', version: '0.1.7-rc.1', dependencies: {},
+      }))
+    }
+    fs.writeFileSync(join(source, 'identity'), 'plugin copy')
+    fs.writeFileSync(join(shared, 'identity'), 'dsh module')
+
+    await synchronizePluginDistributions({
+      home, profile: 'dsh-remote-web', mediaDirectory: media,
+      installAnchor: join(dsh, 'package.json'), runtimeModulesDirectory: modules, profileCreated: true,
+    })
+
+    const linked = join(profileDirectory(home, 'dsh-remote-web'), '.dsh-remote-plugin-media',
+      'node_modules', '@deepseek-ai', 'dsh-http-proxy')
+    expect(fs.realpathSync(linked)).toBe(fs.realpathSync(shared))
+    expect(fs.readFileSync(join(linked, 'identity'), 'utf8')).toBe('dsh module')
+  })
+
+  it('shares the exact pi-ai module used by the installed dsh adapter', async () => {
+    const { root, home, media } = fixture()
+    ensureProfile({ home, profile: 'dsh-remote-web', bundles: BASE_PROFILE_BUNDLES })
+    const first = PLUGIN_DISTRIBUTIONS[0] as (typeof PLUGIN_DISTRIBUTIONS)[number]
+    const plugin = join(media, first.name.slice(first.name.lastIndexOf('/') + 1).replace(/^dsh-plugin-/u, ''))
+    const pluginManifest = JSON.parse(fs.readFileSync(join(plugin, 'package.json'), 'utf8')) as Record<string, unknown>
+    pluginManifest.dependencies = { '@earendil-works/pi-ai': '0.85.1' }
+    fs.writeFileSync(join(plugin, 'package.json'), JSON.stringify(pluginManifest))
+
+    const modules = join(root, 'runtime', 'node_modules')
+    const adapter = join(modules, '@deepseek-ai', 'dsh-llm-pi-ai')
+    const catalog = join(adapter, 'node_modules', '@earendil-works', 'pi-ai')
+    const source = join(modules, '@earendil-works', 'pi-ai')
+    const dsh = join(modules, '@deepseek-ai', 'dsh')
+    for (const [directory, name] of [[adapter, '@deepseek-ai/dsh-llm-pi-ai'], [catalog, '@earendil-works/pi-ai'],
+      [source, '@earendil-works/pi-ai'], [dsh, '@deepseek-ai/dsh']] as const) {
+      fs.mkdirSync(directory, { recursive: true })
+      fs.writeFileSync(join(directory, 'package.json'), JSON.stringify({ name, version: '0.85.1', exports: { '.': './index.js', './package.json': './package.json' } }))
+      fs.writeFileSync(join(directory, 'index.js'), '')
+    }
+    fs.writeFileSync(join(catalog, 'identity'), 'dsh module')
+    fs.writeFileSync(join(source, 'identity'), 'plugin copy')
+
+    await synchronizePluginDistributions({
+      home,
+      profile: 'dsh-remote-web',
+      mediaDirectory: media,
+      installAnchor: join(dsh, 'package.json'),
+      runtimeModulesDirectory: modules,
+      profileCreated: true,
+    })
+
+    const linked = join(profileDirectory(home, 'dsh-remote-web'), '.dsh-remote-plugin-media',
+      'node_modules', '@earendil-works', 'pi-ai')
+    expect(fs.realpathSync(linked)).toBe(fs.realpathSync(catalog))
+    expect(fs.readFileSync(join(linked, 'identity'), 'utf8')).toBe('dsh module')
+  })
+
   it('rebuilds links created by another pnpm major version', async () => {
     const { home, media } = fixture()
     ensureProfile({ home, profile: 'dsh-remote-web', bundles: BASE_PROFILE_BUNDLES })
@@ -211,11 +284,28 @@ describe('third-party plugin lifecycle', () => {
     expect(after.dependencies[removed]).toBeUndefined()
   })
 
+  it('does not silently uninstall an existing package removed from the project catalog', async () => {
+    const { home, media } = fixture()
+    ensureProfile({ home, profile: 'dsh-remote-web', bundles: BASE_PROFILE_BUNDLES })
+    await synchronizePluginDistributions({ home, profile: 'dsh-remote-web', mediaDirectory: media,
+      installAnchor: import.meta.filename, profileCreated: true })
+    const directory = profileDirectory(home, 'dsh-remote-web')
+    const manifest = readManifest(home)
+    const old = '@example/retired-optional-plugin'
+    manifest.dependencies[old] = 'link:old-installed-package'
+    manifest.dsh.profile.bundles.push(old)
+    fs.writeFileSync(join(directory, 'package.json'), `${JSON.stringify(manifest, undefined, 2)}\n`)
+
+    await synchronizePluginDistributions({ home, profile: 'dsh-remote-web', mediaDirectory: media,
+      installAnchor: import.meta.filename, profileCreated: false })
+    expect(readManifest(home).dependencies[old]).toBe('link:old-installed-package')
+    expect(readManifest(home).dsh.profile.bundles).toContain(old)
+  })
+
   it('migrates legacy bundles and preserves component and files removal choices', async () => {
     const { home, media } = fixture()
     const allComponents = PLUGIN_DISTRIBUTIONS.flatMap(item => item.components.map(component => component.name))
-    const enabledComponents = allComponents.filter(name => !name.endsWith('notify')
-      && !name.endsWith('files') && !name.endsWith('subagent-depth'))
+    const enabledComponents = allComponents.filter(name => !name.endsWith('notify') && !name.endsWith('files'))
     ensureProfile({ home, profile: 'dsh-remote-web', bundles: [...BASE_PROFILE_BUNDLES, ...enabledComponents] })
     const directory = profileDirectory(home, 'dsh-remote-web')
     fs.writeFileSync(join(directory, 'dsh-remote-bundles-state.json'), JSON.stringify({ ensured: allComponents }))
@@ -234,10 +324,7 @@ describe('third-party plugin lifecycle', () => {
     expect(manifest.dsh.profile.bundles).toContain('@dsh-remote/dsh-plugin-conversation-enhancements')
     expect(manifest.dsh.profile.bundles).not.toContain('@dsh-remote/dsh-plugin-notify')
     expect(manifest.dependencies['@dsh-remote/dsh-plugin-files']).toBeUndefined()
-    expect(manifest.dependencies['@dsh-remote/dsh-plugin-subagent-depth']).toBeDefined()
-    expect(manifest.dsh.profile.bundles).not.toContain('@dsh-remote/dsh-plugin-subagent-depth')
     const patch = fs.readFileSync(join(directory, 'cordis.patch.yml'), 'utf8')
     expect(patch).toMatch(/id: notify,?\s+disabled: true/u)
-    expect(patch).not.toContain('id: subagent-depth')
   })
 })

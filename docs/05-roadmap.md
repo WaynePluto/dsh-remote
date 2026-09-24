@@ -12,16 +12,18 @@
 - [x] dsh 首页 token 交换，远程设置与网页内目录选择。
 - [x] 共用标准 DSH_HOME，专属 dsh-remote-web profile 与插件产物检查。
 - [x] Windows 托盘、浏览器初始化、开机自启动与日志轮转。
+- [x] Windows Wails v2 桌面预览壳：可附着现有 30809 开发栈，HTTP 302 进入真实 relay origin；紧凑窗口菜单、独立托盘和 dsh-remote 图标已实现，Go 自动检查通过。当前明确为未完成网络/权限隔离的开发预览，不进入正式发行。
+- [ ] 桌面预览实机交互验收：窗口内主页/管理切换、外部浏览器回退、关闭隐藏、托盘显示/退出；真实 `/api/remote.mux` 与流式回复仍需单独验证。
 - [x] Windows x64、Linux x64、macOS arm64 分平台绿色包与构建检查。
 - [x] manifest 与应用图标。
-- [x] 22 个功能组件，按 4 个组合包与 7 个独立包随发行版提供，功能入口见插件索引。
+- [x] 20 个功能组件，按 4 个组合包与 6 个独立包随发行版提供，功能入口见插件索引。
 - [x] concise 与 concise-ptc 两个简洁预设，PTC 复用官方工具执行链。
 - [x] 固定 YOLO，用户提问保留人工回答。
-- [x] dsh 0.1.7 能力吸收：27 个插件包补显示元数据（locale/{en,zh}.json 的 meta + exports/files）；launcher 检测 dsh Bundle 静默跳过诊断并响亮警告；peer 准入与打包约定写入 docs/dsh/plugins.md。
+- [x] dsh 0.1.7 能力吸收：25 个插件包补显示元数据（locale/{en,zh}.json 的 meta + exports/files）；launcher 检测 dsh Bundle 静默跳过诊断并响亮警告；peer 准入与打包约定写入 docs/dsh/plugins.md。
 - [ ] dsh 0.1.7-rc.1 适配；代码迁移与各冒烟 check 已完成，仍需真实链路验收（登录 → 发消息 → 流式输出），复核入口见 [源码依据](02-dsh-facts.md)。
 - [ ] 上游已知问题：dsh 0.1.7-rc.1 停用 yolo-mode Bundle 时 session-controller 重挂载竞态（file-upload Agent resolver 二次注册失败，重启可恢复；concise-mode-check 已按签名精确豁免并标注）。等上游修复后移除豁免。
 - [ ] 实机对比验收 dsh 0.1.7 原生 Open In… Explorer（`openWorkspacePath`，等待交接应答、不置前）与 remote-settings 现有通道（spawn 即返回 + 异步置前）：按结果决定收敛或保留置前兼容层（见 [工作区](dsh/workspace.md)）。
-- [x] 插件第三方化与组合分发（D20）代码已完成：22 个功能组件分为 4 个组合包与 7 个独立包，首次默认安装；配套升级所有仍安装项并保留 Bundle/组件停用，卸载后不补回，可从发行版 `plugins/` 或开发 `.dev/plugins/` 重装。directory-picker 独立；模型组两个启动屏障组件不可单独停用；connection 注入与模型 HMR 屏障仍为壳级 overlay。11 个 Bundle 的在线停用/启用自动检查与隔离启动已通过，实机界面验收仍见下一项及 [计划](plugin-optional-plan.md)。
+- [x] 插件第三方化与组合分发（D20）代码已完成：20 个功能组件分为 4 个组合包与 6 个独立包，首次默认安装；配套升级所有仍安装项并保留 Bundle/组件停用，卸载后不补回，可从发行版 `plugins/` 或开发 `.dev/plugins/` 重装。directory-picker 独立；模型组两个启动屏障组件不可单独停用；connection 注入与模型 HMR 屏障仍为壳级 overlay。10 个 Bundle 的在线停用/启用自动检查与隔离启动已通过，实机界面验收仍见下一项及 [计划](plugin-optional-plan.md)。
 - [ ] 插件生命周期实机验收：组合包/组件停用后重启仍保持，卸载后 launcher 不补回，从随附目录重装当前版本；影子型插件（user-message-fork、files）层序生效，并检查深浅主题与中英文界面。
 - [x] 插件使用说明归属各包 README，docs 按主题组织且每篇不超过 600 行。
 
@@ -52,15 +54,14 @@
 |---|---|
 | remote-settings | 远程模型与插件设置可以加载、保存；Agent 预设保持唯一原生菜单、无路径复制 UI；Windows 预设目录兼容已由真实 Chrome 确认可见；顶部「在本地打开」已由真实 Chrome 确认走私有通道并出现可见 `xdip` Explorer；两个 Explorer 动作已改为 spawn 成功即响应，工作区私有 RPC 经本机 relay 单次实测约 12 ms 且窗口可见；异步 best-effort 置前已由本机 relay 实测确认 Explorer 成为前台；远程目标及复制预设后的自动动作仍待复测；组件停用后经 relay 访问设置页回到受限形态，重新启用后恢复 |
 | copilot-auth | 设备码登录成功，凭据持久化，账号模型可使用 |
-| proxy | 保存实际代理地址，测试请求与模型请求正确出网，关闭后直连 |
-| models-catalog | 检查、选择、应用与撤销模型；保留已有条目 |
+| proxy | 跟随环境（默认）、使用插件代理地址、强制直连三态：测试 URL、原生 fetch 模型请求和官方网页抓取按所选策略出网；不以子进程或独立网络库作验收前提 |
+| models-catalog | 检查、选择、应用与重启持久化已实机通过，保留了原有 `gpt-6-astra`；GPT-6 Sol 的 Default/Low 真实请求成功，Grok 4.7 的 Default/Low 均由 Copilot 端点返回 400；撤销与其余新增模型仍待实机确认 |
 | favorite-models | 输入框筛选、全部失效回退、当前模型不跳转，/model 目录完整 |
 | model-capabilities | 协议覆盖生效；图片支持后向实际端点发送图片 |
-| exec-process | 长会话与运行中折叠、正式消息可见、展开与吸顶正常 |
 | turn-retry | 失败重试、停止继续、错误详情；有排队消息时不发送或修改队列；详情弹窗全屏（含深色主题）待实机确认 |
 | services | 启动、就绪、日志、停止；重启 dsh 后服务存活并能认领；dock 单行省略与日志弹窗全屏（含深浅主题）待实机确认 |
 | terminal | 人类直接输入，默认密码遮罩；忙碌时保留草稿，中断有效；Linux sudo 任务复用系统缓存待实机确认 |
-| files | 基本验收通过；「开始」页三入口恢复已修复并有自动回归检查，待重启后实机复测；图片缩放、临时预览/双击保留、当前分栏关闭其他/全部方案待实施确认；手机及边界矩阵待验收 |
+| files | 基本验收通过；「开始」页三入口恢复已修复并有自动回归检查，待重启后实机复测；图片缩放与 Space + 鼠标左键拖动平移、临时预览/双击保留、当前分栏关闭其他/全部方案待实机确认；手机及边界矩阵待验收 |
 | chat-scroll | 每个消息按钮只定位自己的消息，深浅主题、减少动态效果与触控尺寸正常 |
 | user-message-fork | 子会话只继承前置历史，草稿可编辑，原会话不变 |
 | concise-mode | 简洁 PTC 会话多步任务以 run_code 执行，项目工具可用 |

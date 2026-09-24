@@ -19,6 +19,14 @@ dsh 没有 registered/active 两级延迟加载；view(scope) 通过继承、res
 llm-pi-ai 的 deferredToolsMode:withhold 是协议兼容位，不是工具激活 API。
 工具观察页只读，不能调用 register/restrict/guard 改变 Agent 行为。
 
+## 原生子代理深度
+
+出处：`packages/subagent/subagent/src/{index,depth}.ts`、`packages/subagent/tool-subagent/src/index.ts`；
+已安装 `0.1.7-rc.1` 的对应 `lib/index.js` 中，服务 `Config.maxDepth` 默认 `1`（可热更新），
+`resolveMaxDepth` 在工具没有显式 `maxDepth` 时读取该设置。`tool-subagent` 可显式指定数值覆盖，
+或设为 `provider-managed` 将深度约束交给 provider；子代理的持久会话 header 深度不会因恢复而回退。
+这些是 dsh 原生配置，不依赖项目插件。
+
 ## 持久历史与事件限制
 
 出处：`packages/core/session/src/{index,types,known-event-types}.ts`、

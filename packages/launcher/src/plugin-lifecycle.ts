@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
+import { createRequire, findPackageJSON } from 'node:module'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { runPluginCommand } from '@deepseek-ai/dsh-plugin-manager/operations'
 import { isMap, isSeq, parseDocument } from 'yaml'
 import type { PluginDistribution } from './plugin-catalog.js'
@@ -12,6 +14,8 @@ const STATE_FILE = 'dsh-remote-bundles-state.json'
 const PACKAGE_MANAGER_MIGRATION_DIRECTORY = '.dsh-remote-package-manager-migration'
 const PROFILE_MEDIA_DIRECTORY = '.dsh-remote-plugin-media'
 const LEGACY_FILES = '@dsh-remote/dsh-plugin-files'
+const SHARED_MODEL_CATALOG = '@earendil-works/pi-ai'
+const SHARED_HTTP_PROXY = '@deepseek-ai/dsh-http-proxy'
 
 interface JsonObject { [key: string]: unknown }
 
@@ -148,7 +152,27 @@ function runtimeDependencyNames(media: readonly MediaEntry[]): ReadonlySet<strin
   return names
 }
 
-function copyRuntimeDependencyClosure(sourceModules: string, targetModules: string, seeds: ReadonlySet<string>): void {
+/** 找到 llm-pi-ai 实际引用的目录，避免插件修改另一份同版本的模型表。 */
+function dshModelCatalog(installAnchor: string): string {
+  const adapter = createRequire(installAnchor).resolve('@deepseek-ai/dsh-llm-pi-ai/package.json')
+  const catalog = adapter === undefined ? undefined : findPackageJSON(SHARED_MODEL_CATALOG, pathToFileURL(adapter).href)
+  if (catalog === undefined) throw new Error('找不到 dsh llm-pi-ai 使用的 pi-ai 模型目录')
+  return fs.realpathSync(dirname(catalog))
+}
+
+/** 网页抓取通过模块内的 proxyRouteFor 读取策略，插件必须链接 dsh 实际导入的同一份实例。 */
+function dshHttpProxy(installAnchor: string): string {
+  const dsh = createRequire(installAnchor).resolve('@deepseek-ai/dsh/package.json')
+  const proxy = createRequire(dsh).resolve(`${SHARED_HTTP_PROXY}/package.json`)
+  return fs.realpathSync(dirname(proxy))
+}
+
+function copyRuntimeDependencyClosure(
+  sourceModules: string,
+  targetModules: string,
+  seeds: ReadonlySet<string>,
+  installAnchor: string,
+): void {
   const pending = [...seeds]
   const copied = new Set<string>()
   while (pending.length > 0) {
@@ -166,10 +190,27 @@ function copyRuntimeDependencyClosure(sourceModules: string, targetModules: stri
     copied.add(manifest.name)
     const target = join(targetModules, ...manifest.name.split('/'))
     fs.mkdirSync(dirname(target), { recursive: true })
-    fs.cpSync(source, target, {
-      recursive: true,
-      filter: path => path === source || basename(path) !== 'node_modules',
-    })
+    if (manifest.name === SHARED_MODEL_CATALOG) {
+      const shared = dshModelCatalog(installAnchor)
+      const sharedManifest = readJson(join(shared, 'package.json'))
+      if (!isObject(sharedManifest) || sharedManifest.version !== manifest.version) {
+        throw new Error(`dsh 与模型插件使用的 pi-ai 版本不一致：${String(sharedManifest && isObject(sharedManifest) ? sharedManifest.version : '?')} / ${String(manifest.version)}`)
+      }
+      // Node 按真实路径缓存 ESM；复制目录即使版本相同也会产生互不可见的 model map。
+      fs.symlinkSync(shared, target, process.platform === 'win32' ? 'junction' : 'dir')
+    } else if (manifest.name === SHARED_HTTP_PROXY) {
+      const shared = dshHttpProxy(installAnchor)
+      const sharedManifest = readJson(join(shared, 'package.json'))
+      if (!isObject(sharedManifest) || sharedManifest.version !== manifest.version) {
+        throw new Error(`dsh 与代理插件使用的 http-proxy 版本不一致：${String(sharedManifest && isObject(sharedManifest) ? sharedManifest.version : '?')} / ${String(manifest.version)}`)
+      }
+      fs.symlinkSync(shared, target, process.platform === 'win32' ? 'junction' : 'dir')
+    } else {
+      fs.cpSync(source, target, {
+        recursive: true,
+        filter: path => path === source || basename(path) !== 'node_modules',
+      })
+    }
     if (isObject(manifest.dependencies)) pending.push(...Object.keys(manifest.dependencies))
     if (isObject(manifest.optionalDependencies)) {
       for (const name of Object.keys(manifest.optionalDependencies)) {
@@ -183,6 +224,7 @@ function materializeProfileMedia(
   directory: string,
   media: readonly MediaEntry[],
   runtimeModulesDirectory: string | undefined,
+  installAnchor: string,
 ): readonly MediaEntry[] {
   const cache = join(directory, PROFILE_MEDIA_DIRECTORY)
   fs.mkdirSync(cache, { recursive: true })
@@ -199,7 +241,7 @@ function materializeProfileMedia(
     const targetModules = join(cache, 'node_modules')
     fs.rmSync(targetModules, { recursive: true, force: true })
     fs.mkdirSync(targetModules, { recursive: true })
-    copyRuntimeDependencyClosure(runtimeModulesDirectory, targetModules, dependencies)
+    copyRuntimeDependencyClosure(runtimeModulesDirectory, targetModules, dependencies, installAnchor)
   }
   return result
 }
@@ -332,7 +374,7 @@ export async function synchronizePluginDistributions(options: {
     throw new Error('插件安装介质与 launcher 清单不一致')
   }
   // profile 可能与安装介质分处不同 Windows 盘符；先复制到同盘缓存再交给 pnpm 建 link。
-  const media = materializeProfileMedia(directory, sourceMedia, options.runtimeModulesDirectory)
+  const media = materializeProfileMedia(directory, sourceMedia, options.runtimeModulesDirectory, options.installAnchor)
   const before = profileManifest(manifestPath)
   const dependencies = new Set(Object.keys(before.dependencies))
   const selected = new Set(before.dsh.profile.bundles)

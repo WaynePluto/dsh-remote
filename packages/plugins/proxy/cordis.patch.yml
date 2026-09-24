@@ -1,13 +1,6 @@
-# dsh-remote 的受管 Bundle patch 层；package.json 的 dsh.bundle.patch 指向本文件，
-# 由 profile 的 bundles 数组装载（层序：Bundle → profile patch → home patch → --patch）。
-#
-# `id` 让更后面的 `--patch` 能按 id 覆盖这一行的 config（补丁层顺序见 docs/dsh/plugins.md）。
-# 不过这个插件**没有 config**：代理是用户运行时在「设置 → 代理」里配的，
-# 存在设置命名空间 `proxy` 里，不走 composition，也不读环境变量。
-#
-# 双面插件：insert 加载宿主半（dist/index.js），dsh 的客户端模块系统顺着这个路径
-# 找到本包的 package.json，按 `dsh.client` + exports["./client"] 下发 dist/client.js。
-# **dist/client.js 缺失会让 dsh 启动即失败**，不是静默降级。
+# dsh-remote 的独立 Bundle patch；行 id 是 volatile Config 表单的入口。
+# 模式缺省时沿用旧 enabled/url 字段，跟随环境模式沿用 dsh 启动时安装的官方代理。
+# 宿主和浏览器产物都必须随包提供；客户端通过 package.json 的 dsh.client 装载。
 - insert:
     - id: proxy
       name: './dist/index.js'

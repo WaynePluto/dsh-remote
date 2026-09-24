@@ -93,7 +93,6 @@ export const BUILD_ARTIFACTS = [
   'packages/plugins/favorite-models/dist/index.js',
   'packages/plugins/proxy/dist/index.js',
   'packages/plugins/turn-retry/dist/index.js',
-  'packages/plugins/exec-process/dist/index.js',
   'packages/plugins/chat-scroll/dist/index.js',
   'packages/plugins/user-message-fork/dist/index.js',
   'packages/plugins/files/dist/index.js',
@@ -104,7 +103,6 @@ export const BUILD_ARTIFACTS = [
   'packages/plugins/terminal/dist/index.js',
   'packages/plugins/tools-inspector/dist/index.js',
   'packages/plugins/skills-inspector/dist/index.js',
-  'packages/plugins/subagent-depth/dist/index.js',
   'packages/plugins/yolo-mode/dist/index.js',
   // 浏览器侧构建产物缺失会让 dsh 的网页模块扫描整体失败。
   'packages/plugins/browser-compat/dist/client.js',
@@ -114,7 +112,6 @@ export const BUILD_ARTIFACTS = [
   'packages/plugins/favorite-models/dist/client.js',
   'packages/plugins/proxy/dist/client.js',
   'packages/plugins/turn-retry/dist/client.js',
-  'packages/plugins/exec-process/dist/client.js',
   'packages/plugins/chat-scroll/dist/client.js',
   'packages/plugins/user-message-fork/dist/client.js',
   'packages/plugins/files/dist/client.js',
@@ -124,7 +121,6 @@ export const BUILD_ARTIFACTS = [
   'packages/plugins/terminal/dist/client.js',
   'packages/plugins/tools-inspector/dist/client.js',
   'packages/plugins/skills-inspector/dist/client.js',
-  'packages/plugins/subagent-depth/dist/client.js',
 ]
 
 /** 壳级常驻 overlay 及其运行时代码，随 launcher 以 --patch 传入。 */

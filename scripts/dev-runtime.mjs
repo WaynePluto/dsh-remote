@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { parse as parseYaml } from 'yaml'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
+const rootManifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const launcherManifest = JSON.parse(readFileSync(join(root, 'packages', 'launcher', 'package.json'), 'utf8'))
 const runtimeDependencies = Object.fromEntries(Object.entries(launcherManifest.dependencies)
   .filter(([name]) => !name.startsWith('@dsh-remote/') || name === '@dsh-remote/plugin-ui')
@@ -15,7 +16,19 @@ const runtimeDependencies = Object.fromEntries(Object.entries(launcherManifest.d
     name === '@dsh-remote/plugin-ui' ? `file:${join(root, 'packages', 'plugin-ui')}` : version,
   ]))
 const workspace = parseYaml(readFileSync(join(root, 'pnpm-workspace.yaml'), 'utf8'))
-const overrides = workspace.overrides ?? {}
+if (workspace.overrides !== undefined) {
+  throw new Error('pnpm-workspace.yaml 不应另设 overrides；统一维护根 package.json 的 pnpm.overrides。')
+}
+const overrides = rootManifest.pnpm?.overrides
+if (overrides === undefined || Object.keys(overrides).length === 0) {
+  throw new Error('根 package.json 缺少 pnpm.overrides，无法准备一致的 dsh 开发运行时。')
+}
+const lockedOverrides = parseYaml(readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8')).overrides ?? {}
+const drift = [...new Set([...Object.keys(overrides), ...Object.keys(lockedOverrides)])]
+  .filter(name => overrides[name] !== lockedOverrides[name])
+if (drift.length > 0) {
+  throw new Error(`pnpm-lock.yaml 的 overrides 与根 package.json 不一致：${drift.join('、')}；先运行 pnpm install。`)
+}
 const fingerprint = createHash('sha256')
   .update('runtime-schema-4')
   .update(JSON.stringify({ runtimeDependencies, overrides }))

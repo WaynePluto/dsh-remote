@@ -23,9 +23,9 @@
   不写 home 级 patch、不修改官方 web profile，不实现第二套插件管理器。
 - 普通插件位于 packages/plugins/<名字>，包名 @dsh-remote/dsh-plugin-<名字>，
   包根 overlay 用 ./dist/index.js；launcher、dev-stack、pack 都要检查宿主和浏览器产物。
-- 22 个功能组件按 `plugin-catalog.json` 分发为组合包和独立包：首次默认安装，后续配套升级仍安装项并保留 Bundle/组件停用状态，卸载后不自动补回；开发与发行介质分别位于 `.dev/plugins/` 和 `plugins/`。
+- 20 个功能组件按 `plugin-catalog.json` 分发为 4 个组合包和 6 个独立包：首次默认安装，后续配套升级仍安装项并保留 Bundle/组件停用状态，卸载后不自动补回；开发与发行介质分别位于 `.dev/plugins/` 和 `plugins/`。
 - `remote-privileged` 的 connection/webServer 注入与模型 HMR 启动屏障作为不可卸载的壳级基础设施；模型屏障服务挂在 root fiber，避免 Bundle 在线启停重启 `llm-pi-ai`。
-- concise-mode（用户文案「简洁模式」）是独立第三方 Profile Bundle，位于 dsh-web-app 后；patch 从 profile `baseUrl` 创建 `require`，解析已安装包的 package.json 后定位 preset root，不插入 locator entry。
+- concise-mode（用户文案「简洁模式」）是独立第三方 Profile Bundle，位于 dsh-web-app 后；patch 内联声明两个 `@deepseek-ai/dsh-agent-preset` 行，不加载 preset root 或 locator entry；子代理深度沿用 dsh 原生配置（默认 1）。
 - 中文文案使用决策中的词表，页面使用机器真名；hub、membership、slug 等代码标识符不随文案改名。
 - 完成 roadmap 条目立即勾选，未做实机验收不能按自动测试结果勾选。
 
@@ -46,7 +46,7 @@ TypeScript + ESM + pnpm workspace，构建 tsdown，开发 tsx，测试 Vitest�
 | 转发、登录、目录选择 | [传输](docs/dsh/transport.md)、[安全](docs/04-security.md) | 认证 → 原始安全检查 → 隧道；HTTP 用 node:http；upgrade 单独处理 |
 | 插件装载、设置、界面 | [插件机制](docs/dsh/plugins.md) | mutate 返回 boolean（false 即拒绝），失败保留草稿；同 cell 同 priority 冲突；primitives external |
 | 模型与代理 | [模型](docs/dsh/models.md) | 保留用户条目、只清理插件溯源；混合协议先恢复同一 pi-ai map；代理唯一配置源 |
-| 重试、过程、分叉、通知 | [会话](docs/dsh/conversation.md) | 保护 nextTurn 队列；不移动 React DOM；保持 turn-tail 最后；idle 去抖 |
+| 重试、滚动、分叉、通知 | [会话](docs/dsh/conversation.md) | 保护 nextTurn 队列；不移动 React DOM；保持 turn-tail 最后；idle 去抖 |
 | 权限、服务、PTY、工具统计 | [运行时](docs/dsh/runtime.md) | 不 append 自定义事件；统计回放历史；进程身份复核；交互终端仅用于人类输入 |
 | 技能、提示词、文件浏览 | [工作区](docs/dsh/workspace.md) | scope/cwd 来自 live Agent；有界读取；只读视图不改变模型能力 |
 
@@ -81,7 +81,6 @@ TypeScript + ESM + pnpm workspace，构建 tsdown，开发 tsx，测试 Vitest�
 services 与 terminal 共用 IconApiOutlineMedium。
 
 深浅主题都验收；border-l1 的 l 是字母，浅色 bg-layer-1/2/3 都为白，font-mono 要完整 fallback 栈。
-消息整行隐藏保留零高度有序 rect，行内思考块用 display:none；sticky 在 wrapper 上按段尾自行推出。
 
 ## 文档与运行
 

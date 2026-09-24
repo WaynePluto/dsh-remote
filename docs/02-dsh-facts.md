@@ -9,7 +9,7 @@
 | [传输与认证](dsh/transport.md) | HTTP/WS、trustedHosts、dsh cookie、ownsHost、目录选择 |
 | [插件机制与界面](dsh/plugins.md) | Bundle/overlay、客户端产物、设置写入、槽位、主题与 dock |
 | [模型与代理](dsh/models.md) | Copilot、models.dev、能力声明、目录扩展与全局 dispatcher |
-| [会话与消息](dsh/conversation.md) | 重试、投影、执行过程、分叉与通知时序 |
+| [会话与消息](dsh/conversation.md) | 重试、投影、原生过程分组、滚动、分叉与通知时序 |
 | [工具与进程](dsh/runtime.md) | 工具注册表、YOLO、常驻服务、PTY、Windows 进程树 |
 | [技能与文件](dsh/workspace.md) | 技能加载历史、全局提示词、工作区边界与只读预览 |
 
@@ -24,7 +24,7 @@
 | 简洁模式 | node scripts/concise-mode-check.mjs |
 | 模型 | node scripts/copilot-auth-check.mjs；node scripts/favorite-models-check.mjs |
 | 代理 | node scripts/proxy-check.mjs |
-| 重试与消息 | node scripts/turn-retry-check.mjs；node scripts/exec-process-check.mjs；node scripts/user-message-fork-check.mjs；node scripts/chat-scroll-check.mjs |
+| 重试与消息 | node scripts/turn-retry-check.mjs；node scripts/user-message-fork-check.mjs；node scripts/chat-scroll-check.mjs |
 | 通知 | node scripts/notify-check.mjs |
 | 权限与进程 | node scripts/yolo-mode-check.mjs；node scripts/services-check.mjs；node scripts/terminal-check.mjs |
 | 只读视图 | node scripts/tools-inspector-check.mjs；node scripts/skills-inspector-check.mjs；node scripts/files-check.mjs |

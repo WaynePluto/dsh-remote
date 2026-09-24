@@ -7,6 +7,8 @@ import {
   inferredApi,
   isRuntimeModel,
   modelMap,
+  nativeModelApi,
+  nearestNativeModel,
 } from '../src/runtime-catalog.js'
 
 const ROUTE = 'github-copilot'
@@ -61,6 +63,30 @@ describe('runtime pi-ai catalog', () => {
     expect(catalogApiForId(ROUTE, 'gpt-5.4')).toBe('anthropic-messages')
     applyProtocolOverrides({})
     expect(catalogApiForId(ROUTE, 'gpt-5.4')).toBe('openai-responses')
+  })
+
+  it('chooses the same-provider model series rather than a generic brand prefix', () => {
+    expect(nearestNativeModel(ROUTE, 'gpt-6-sol')?.id).toBe('gpt-5.6-sol')
+    expect(nearestNativeModel(ROUTE, 'gpt-6-luna')?.id).toBe('gpt-5.6-luna')
+    expect(nearestNativeModel(ROUTE, 'claude-opus-5.5')?.id).toBe('claude-opus-5')
+    expect(nearestNativeModel(ROUTE, 'grok-4.7')?.id).toBe('grok-4.6')
+    expect(nearestNativeModel(ROUTE, 'gpt-6-unknown')).toBeUndefined()
+    expect(nearestNativeModel(ROUTE, 'gpt-99-sol')).toBeUndefined()
+    expect(nativeModelApi(ROUTE, 'grok-4.6')).toBe('openai-responses')
+  })
+
+  it('refreshes an owned runtime model with its matching protocol and compat', () => {
+    const id = 'grok-4.7'
+    const spec = { route: ROUTE, id, name: id, api: 'openai-completions' }
+    IDS.push(id)
+    expect(ensureRuntimeModel(spec)).toBe(true)
+    expect(ensureRuntimeModel({ ...spec, api: 'openai-responses' })).toBe(true)
+    const model = getBuiltinModels(ROUTE).find(entry => entry.id === id)
+    expect(model?.api).toBe('openai-responses')
+    expect(model?.headers).toEqual(nearestNativeModel(ROUTE, id)?.headers)
+    expect(model?.cost).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 })
+    expect(model?.reasoning).toBe(false)
+    expect(model?.thinkingLevelMap).toBeUndefined()
   })
 
   it('finds existing IDs before applying the naming fallback', () => {

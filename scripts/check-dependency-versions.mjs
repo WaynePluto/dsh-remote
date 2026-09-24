@@ -5,6 +5,7 @@
  * 另外核对钉死版本的 workspace: 引用（"workspace:0.0.1"）必须指向目标 workspace 包的
  * 当前 version：发版改 version 漏改引用时，本地旧链接仍能解析，CI 全新安装才会炸，
  * 这里提前到提交前响亮失败。
+ * 开发隔离运行时只使用根 pnpm.overrides，须与 lockfile 一致且不能被 workspace 重复声明。
  *
  * 最后核对各包 src/version.ts 里的构建身份常量（LAUNCHER_VERSION 等）必须等于
  * 本包 package.json 的 version——同一类「发版漏改」的源码形态，漏改会让包内 banner
@@ -18,6 +19,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parse as parseYaml } from 'yaml';
 
 const ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
 const SECTIONS = ['dependencies', 'devDependencies', 'optionalDependencies'];
@@ -137,4 +139,23 @@ if (staleVersionConstants.length > 0) {
   process.exit(1);
 }
 
+const overrides = manifests.find(({ file }) => file === rootManifest)?.manifest?.pnpm?.overrides;
+if (overrides === undefined || Object.keys(overrides).length === 0) {
+  console.error('[fail] 根 package.json 缺少 pnpm.overrides，开发运行时可能混装 dsh 子包');
+  process.exit(1);
+}
+const workspace = parseYaml(readFileSync(join(ROOT, 'pnpm-workspace.yaml'), 'utf8'));
+if (workspace.overrides !== undefined) {
+  console.error('[fail] pnpm-workspace.yaml 不应另设 overrides；统一维护根 package.json 的 pnpm.overrides');
+  process.exit(1);
+}
+const lockedOverrides = parseYaml(readFileSync(join(ROOT, 'pnpm-lock.yaml'), 'utf8')).overrides ?? {};
+const overrideDrift = [...new Set([...Object.keys(overrides), ...Object.keys(lockedOverrides)])]
+  .filter(name => overrides[name] !== lockedOverrides[name]);
+if (overrideDrift.length > 0) {
+  console.error(`[fail] pnpm-lock.yaml 的 overrides 与根 package.json 不一致：${overrideDrift.join('、')}`);
+  process.exit(1);
+}
+
 console.log(`[ok]   ${files.length} 个 package.json 的直接依赖均为固定版本号`);
+console.log(`[ok]   根 pnpm.overrides 与 lockfile 一致，workspace 无重复覆盖`);

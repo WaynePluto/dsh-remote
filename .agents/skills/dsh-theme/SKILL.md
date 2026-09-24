@@ -46,9 +46,7 @@ description: 编写或调整 dsh 插件的主题样式，处理表单焦点、�
 
 `appearance: none` **不等于**移除 UA 焦点轮廓。
 没有显式焦点规则的控件可能叠一圈粗黑边，而 dsh 插件字段仅变细边框颜色。
-`subagent-depth` 的触发按钮采用字段边框，选项弹层复用官方 `Menu`；二者不能混为同一层样式。
-
-`plugins.bundle.config` 已经位于 Bundle 详情页自己的 `detailSection` 中；配置组件应直接输出字段、状态和操作区，不能再套完整卡片、重复标题或折叠 header。只有 `plugins.item` 的 summary/page 两态由插件自己提供卡片摘要与详情。依据：`packages/client/ui-plugin-manager/src/client/PluginManagerPage.tsx`。
+下拉触发按钮采用字段边框，选项弹层复用官方 `Menu`；二者不能混为同一层样式。
 
 `plugins.bundle.config` 已经渲染在 Bundle 详情页自己的配置 section 中；该槽的组件应直接输出字段、状态和操作区，不要再套一张完整卡片、重复标题或折叠 header。`plugins.item` 才是需要自行提供 summary/page 内容的官方分组入口。依据：`packages/client/ui-plugin-manager/src/client/PluginManagerPage.tsx`。
 
@@ -78,7 +76,7 @@ description: 编写或调整 dsh 插件的主题样式，处理表单焦点、�
   bg-layer-1、14px/22px；`.input:focus` 用 brand-primary，`.selectInput` 右侧 12px SVG chevron。
   插件注入模型设置的 select（如 model-capabilities）先对照这一套，再决定是否使用 Menu。
 - 高度要连同 `box-sizing` 检查。官方此处是 content-box；直接给 border-box 控件写 `height:34px`
-  并不等高。subagent-depth 用 flex 分配宽度、`min-width:0` 和 content-box，避免 padding 撑出父容器。
+  并不等高。自定义字段须用 flex 分配宽度、`min-width:0` 和 content-box，避免 padding 撑出父容器。
   `0.5px` 可能按 DPR/缩放取整，不要拿截图物理像素反推 CSS 宽度。本次 Chromium DPR=1
   的真实 dsh 页面中，两者均测得 36px 外高、1px 渲染边框；深浅主题的字体、底色、默认/焦点颜色一致。
 - 右侧原生 outline 图标留足 padding；图标 `pointer-events:none`，不要截走点击。
@@ -110,10 +108,8 @@ description: 编写或调整 dsh 插件的主题样式，处理表单焦点、�
   不挂全页拦截器，不移动上游 React DOM，也不根据哈希类名查找菜单项。
 - 禁用时关闭弹层，trigger 与 items 都禁用，`onSelect` 再拦一次；选择仍只更新草稿，保存语义不变。
 
-项目实例：`packages/plugins/subagent-depth/src/client/DepthSelect.tsx`（相对本仓库根）。
-真实 dsh 页面已对比语言菜单/插件菜单：深浅主题 hover token、14px/22px 字体、40px 行高、
-10px 行圆角及浮层背景/阴影一致；选中未 hover 时透明。后续仍需复测菜单关闭、键盘焦点返回、
-滚动定位和父设置窗口是否仍在；静态 CSS 检查不能替代这些测试。
+已安装 dsh 的语言菜单与插件菜单共用 `Menu`：选中未 hover 时保持透明。
+后续仍需在实际页面检查键盘焦点返回、滚动定位和父设置窗口是否仍在；静态 CSS 检查不能替代这些测试。
 
 ### 4. 用 token，但也检查真实值
 
@@ -142,6 +138,10 @@ remote-settings 仅保留宿主 ownsHost 注入，没有浏览器菜单扩展。
 flex 计算可能留下空的图标盒。图标应直接调用 dsh primitives 的对应 component，再把返回的
 SVG element 序列化为 mask；项目实例是 `packages/plugin-ui/src/navigation-glyph.ts`，上游依据为
 `packages/client/ui-settings-general/src/client/SettingsRoot.tsx`。
+0.1.7-rc.1 的 Medium 图标先返回以纯函数 Artwork 为 `type` 的 React element，再由 Artwork 返回 `<svg>`：
+序列化时只对受控图标有界展开函数包装，不能直接把第一层当 SVG；递归包装须拒绝，避免页面插件激活失败。
+依据为已安装 `@deepseek-ai/dsh-client-ui-primitives/lib/index.js` 与本仓库 `browser-compat/tests/plugin.spec.ts`；
+Chrome 实测四个相关插件恢复激活，图标深浅主题的视觉效果仍需单独验收。
 
 ### Native Sidebar tab 标题包装层的对齐
 

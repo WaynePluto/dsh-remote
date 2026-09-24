@@ -1,16 +1,16 @@
 /** 设置写入契约：dsh 0.1.7 起 `ConfigForm.mutate` 返回 boolean（false=宿主拒绝），无需再写后回读比对。 */
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Button, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CSSProperties, ReactNode } from 'react'
 import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
-import { DEFAULT_SETTINGS, DEFAULT_TEST_URL, proxyFault } from '../shared.js'
-import type { ProxySettings, ProxyTestResult } from '../shared.js'
+import { DEFAULT_SETTINGS, DEFAULT_TEST_URL, proxyFault, resolveMode } from '../shared.js'
+import type { ProxyMode, ProxySettings, ProxyTestResult } from '../shared.js'
 import { fill } from './locales.js'
 import type { ProxyKey } from './locales.js'
 
 /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
-const FIELDS = ['enabled', 'url', 'bypass'] as const
+const FIELDS = ['mode', 'url', 'bypass'] as const
 
 /** 本插件注册时注入的内容。 */
 export interface ProxySectionInjected {
@@ -93,7 +93,7 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
   )
 
   const settings = snapshot?.value ?? DEFAULT_SETTINGS
-  const [draft, setDraft] = useState<{ url: string; bypass: string } | undefined>(undefined)
+  const [draft, setDraft] = useState<{ mode: ProxyMode; url: string; bypass: string } | undefined>(undefined)
   const [busy, setBusy] = useState<Busy>('idle')
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [saved, setSaved] = useState(false)
@@ -103,6 +103,7 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
   const urlRef = useRef<HTMLInputElement>(null)
   /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
   const committed = useRef<ProxySettings | undefined>(undefined)
+  const rejected = useRef(false)
 
   // 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。
   // 被其他位置修改时丢弃（另一个窗口或手工
@@ -110,26 +111,31 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
   // 外部编辑；没有例外时，证明保存成功的更新会清掉“Saved.”提示
   // 。
   useEffect(() => {
+    if (rejected.current) return
     setDraft(undefined)
     const echo = committed.current
-    if (echo !== undefined && FIELDS.every(key => echo[key] === settings[key])) return
+    if (echo !== undefined && echo.mode === settings.mode && echo.url === settings.url && echo.bypass === settings.bypass) return
     setSaved(false)
-  }, [settings.enabled, settings.url, settings.bypass])
+  }, [settings.mode, settings.enabled, settings.url, settings.bypass])
 
+  const mode = draft?.mode ?? resolveMode(settings)
   const url = draft?.url ?? settings.url
   const bypass = draft?.bypass ?? settings.bypass
-  const dirty = draft !== undefined && (draft.url !== settings.url || draft.bypass !== settings.bypass)
+  const dirty = draft !== undefined && (draft.mode !== resolveMode(settings) || draft.url !== settings.url || draft.bypass !== settings.bypass)
 
-  const edit = useCallback((patch: { url?: string; bypass?: string }) => {
+  const edit = useCallback((patch: { mode?: ProxyMode; url?: string; bypass?: string }) => {
     setSaved(false)
+    setFailure(undefined)
+    setNeedsUrl(false)
     setDraft(current => ({
+      mode: patch.mode ?? current?.mode ?? resolveMode(settings),
       url: patch.url ?? current?.url ?? settings.url,
       bypass: patch.bypass ?? current?.bypass ?? settings.bypass,
     }))
   }, [settings.url, settings.bypass])
 
   /** 设置写入契约：mutate 返回 false 即宿主拒绝（dsh 0.1.7 起显式回答，不再需要回读比对）。 */
-  const commit = useCallback(async (next: ProxySettings): Promise<void> => {
+  const commit = useCallback(async (next: ProxySettings & { mode: ProxyMode }): Promise<void> => {
     if (form === undefined) return
     setFailure(undefined)
     setNeedsUrl(false)
@@ -154,13 +160,16 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
     try {
       const accepted = await form.mutate(ops)
       if (!accepted) {
+        rejected.current = true
         setFailure(t?.('rejected') ?? 'rejected')
         return
       }
+      rejected.current = false
       committed.current = next
       setDraft(undefined)
       setSaved(true)
     } catch (error: unknown) {
+      rejected.current = true
       setFailure(error instanceof Error ? error.message : String(error))
     } finally {
       setBusy('idle')
@@ -181,11 +190,6 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
     }
   }, [test, testUrl])
 
-  /** 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`commit`） */
-  const toggle = useCallback((next: boolean): void => {
-    void commit({ enabled: next, url, bypass })
-  }, [commit, url, bypass])
-
   if (t === undefined || form === undefined) return null
   if (snapshot === undefined || snapshot.status === 'loading') return <p style={note}>{t?.('loading') ?? ''}</p>
   if (snapshot.status === 'unavailable') return <p style={note}>{t('unavailable')}</p>
@@ -203,27 +207,27 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
       </div>
 
       <p style={note}>
-        {settings.enabled && settings.url.length > 0
-          ? fill(t('statusVia'), { url: settings.url })
-          : t('statusDirect')}
+        {resolveMode(settings) === 'environment' ? t('statusEnvironment')
+          : resolveMode(settings) === 'plugin' ? fill(t('statusVia'), { url: settings.url }) : t('statusDirect')}
       </p>
 
       {!writable ? <p style={note}>{t('readOnly')}</p> : null}
 
       <div style={field}>
-        <div style={row}>
-          <Switch
-            checked={settings.enabled}
-            disabled={disabled}
-            label={t('enable')}
-            title={!writable ? t('readOnly') : undefined}
-            onChange={toggle}
-          />
-          <span>{t('enable')}</span>
-        </div>
-        {!settings.enabled ? <span style={muted}>{t('enableHint')}</span> : null}
+        <label style={label} htmlFor="dshx-proxy-mode">{t('mode')}</label>
+        <select
+          id="dshx-proxy-mode"
+          className={CONTROL_CLASS}
+          value={mode}
+          disabled={disabled}
+          onChange={(event) => { edit({ mode: event.target.value as ProxyMode }) }}
+        >
+          <option value="environment">{t('modeEnvironment')}</option>
+          <option value="plugin">{t('modePlugin')}</option>
+          <option value="direct">{t('modeDirect')}</option>
+        </select>
+        <span style={muted}>{t('modeHint')}</span>
       </div>
-
       <div style={field}>
         <span style={label}>{t('url')}</span>
         <input
@@ -261,7 +265,7 @@ export function ProxySection(props: ProxySectionProps): ReactNode {
           variant="primary"
           size="sm"
           disabled={disabled || !dirty}
-          onClick={() => { void commit({ enabled: settings.enabled, url, bypass }) }}
+          onClick={() => { void commit({ mode, url, bypass }) }}
         >
           {busy === 'saving' ? t('saving') : t('save')}
         </Button>

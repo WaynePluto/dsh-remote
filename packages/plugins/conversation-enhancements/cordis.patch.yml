@@ -7,11 +7,6 @@
       disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-conversation-enhancements")'
 
 - insert:
-    - id: exec-process
-      name: './node_modules/@dsh-remote/dsh-plugin-exec-process/dist/index.js'
-      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-conversation-enhancements")'
-
-- insert:
     - id: chat-scroll
       name: './node_modules/@dsh-remote/dsh-plugin-chat-scroll/dist/index.js'
       disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-conversation-enhancements")'

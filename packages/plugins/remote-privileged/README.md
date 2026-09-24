@@ -16,6 +16,6 @@ ownsHost 的远程设置能力已拆为 [远程体验 Bundle](../remote-experien
 
 - `connection` 行的 `webRuntime` / `webServer` 注入契约；
 - `llm-pi-ai` 的 `llm`、`modelsCatalogBootstrap`、`modelCapabilitiesBootstrap` 启动依赖；
-- 11 个随附 Bundle 的在线停用与重新启用冒烟。
+- 10 个随附 Bundle 的在线停用与重新启用冒烟。
 
 launcher、开发栈与绿色包检查清单都以 [dsh-plugins.ts](../../launcher/src/dsh-plugins.ts) 为准；上游契约见 [dsh 核实结论](../../../docs/02-dsh-facts.md)。

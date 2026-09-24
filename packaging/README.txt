@@ -15,7 +15,7 @@
   README.txt                     本文件
   dsh-remote.config.example.json   配置示例（不改也能用）
   dist/                          程序本体
-  plugins/                       随附的 11 个第三方插件安装目录
+  plugins/                       随附的 10 个第三方插件安装目录
   node_modules/                  依赖，含随包携带的 dsh
 
 【注意】包是分平台、分变体的，文件名里写了平台和变体（如

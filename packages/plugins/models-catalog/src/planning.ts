@@ -1,7 +1,7 @@
 /** 纯规划逻辑：根据 installed/configured facts 和可选 source 生成不写入的 route plan。 */
 
 import type { SourceProvider } from './models-dev.js'
-import { catalogApiForId, inferredApi } from './runtime-catalog.js'
+import { catalogApiForId, inferredApi, isRuntimeModel, nativeModelApi, nearestNativeModel } from './runtime-catalog.js'
 import type { ModelAddition, RoutePreview, RuntimeModelSpec } from './shared.js'
 
 /** dsh `models` list 中的一项；index signature 保留用户自有字段。 */
@@ -71,14 +71,30 @@ function canRestore(facts: RouteFacts, nextOwned: readonly string[], nextIds: re
   return nextOwned.length === 0 && facts.installedIds.length > 0 && sameSet(nextIds, facts.installedIds)
 }
 
+/** 只复用同一路由同系列且在源 effort 名单里的实际 wire 值。 */
+function reasoningEffortsFor(facts: RouteFacts, model: ModelAddition): Record<string, string> | undefined {
+  if (model.reasoningUnavailable !== true || model.effortValues === undefined) return undefined
+  const nearest = nearestNativeModel(facts.route, model.id)
+  if (nearest === undefined || !nearest.reasoning || nativeModelApi(facts.route, nearest.id) !== apiForAddition(facts, model)) return undefined
+  const values = new Set(model.effortValues)
+  const levels = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
+  const efforts = Object.fromEntries(levels.flatMap((level) => {
+    const wire = nearest.thinkingLevelMap?.[level]
+    return typeof wire === 'string' && values.has(wire) ? [[level, wire]] : []
+  }))
+  return Object.keys(efforts).length > 0 ? efforts : undefined
+}
+
 /** 将 models.dev addition 转为 dsh `models` entry，只复制允许字段。 */
-function entryOf(model: ModelAddition): ModelEntry {
+function entryOf(facts: RouteFacts, model: ModelAddition): ModelEntry {
+  const reasoningEfforts = reasoningEffortsFor(facts, model)
   return {
     id: model.id,
     name: model.name,
     ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
     ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
     ...model.input === undefined ? {} : { input: [...model.input] },
+    ...reasoningEfforts === undefined ? {} : { reasoningEfforts },
   }
 }
 
@@ -92,11 +108,15 @@ function baseEntries(facts: RouteFacts, owned: ReadonlySet<string>): readonly Mo
 function apiForAddition(facts: RouteFacts, model: ModelAddition): string {
   const installed = facts.installedModels.find(entry => entry.id === model.id)
   if (installed !== undefined) return installed.api
-  const catalog = catalogApiForId(facts.route, model.id)
-  if (catalog !== undefined) return catalog
+  if (facts.configuredApi !== undefined) return facts.configuredApi
+  const local = nearestNativeModel(facts.route, model.id)
+  if (local !== undefined) return nativeModelApi(facts.route, local.id) ?? local.api
+  if (!isRuntimeModel(facts.route, model.id)) {
+    const catalog = catalogApiForId(facts.route, model.id)
+    if (catalog !== undefined) return catalog
+  }
   const owned = facts.ownedModels.find(entry => entry.id === model.id)
   if (owned !== undefined) return owned.api
-  if (facts.configuredApi !== undefined) return facts.configuredApi
   if (facts.installedApis.length === 1) return facts.installedApis[0] as string
   return inferredApi(model.id)
 }
@@ -123,9 +143,21 @@ export function planRoute(facts: RouteFacts, source: SourceProvider | undefined)
   // 已安装 id 被视为 reclaimed，其他仍由本插件保留。
   const reclaimed = owned.filter(id => installed.has(id))
   const kept = owned.filter(id => !installed.has(id))
-  const keptModels = kept.flatMap(id => {
-    const model = facts.ownedModels.find(entry => entry.id === id)
-    return model === undefined ? [] : [model]
+  const sourceModels = new Map(source?.models.map(model => [model.id, model]) ?? [])
+  const upgradableIds = kept.filter((id) => {
+    const model = sourceModels.get(id)
+    if (model === undefined) return false
+    const previous = facts.ownedModels.find(entry => entry.id === id)
+    const entry = configured.get(id)
+    return (previous !== undefined && previous.api !== apiForAddition(facts, model))
+      || (entry?.['reasoningEfforts'] === undefined && reasoningEffortsFor(facts, model) !== undefined)
+  })
+  const keptModels = kept.flatMap((id) => {
+    const previous = facts.ownedModels.find(entry => entry.id === id)
+    if (previous === undefined) return []
+    const sourceModel = sourceModels.get(id)
+    return [{ ...previous, ...sourceModel !== undefined && upgradableIds.includes(id)
+      ? { api: apiForAddition(facts, sourceModel) } : {} }]
   })
 
   const blockedReason = !canAddModels(facts)
@@ -146,25 +178,31 @@ export function planRoute(facts: RouteFacts, source: SourceProvider | undefined)
     displayName: facts.displayName,
     ...source === undefined ? {} : { source: source.id },
     ownedIds: kept,
-    additions,
+    ...upgradableIds.length === 0 ? {} : { upgradableIds },
+    additions: additions.map(model => ({ ...model, ...reasoningEffortsFor(facts, model) === undefined
+      ? {} : { reasoningUnavailable: false } })),
     reclaimed,
     ...blockedReason === undefined ? {} : { blocked: blockedReason },
   }
 
-  if (additions.length === 0 && reclaimed.length === 0) {
+  if (additions.length === 0 && reclaimed.length === 0 && upgradableIds.length === 0) {
     return { preview, nextOwnedIds: kept, nextOwnedModels: keptModels }
   }
 
   const base = baseEntries(facts, new Set(owned))
   const nextOwned = [...kept, ...additions.map(model => model.id)]
   const nextOwnedModels = [...keptModels, ...runtimeAdditions]
-  const next: ModelEntry[] = [
-    ...base,
-    // 新 additions 只写目录能提供的容量和 modality；其余 wire/compat 设置继续由 route 接管。
-    ...reclaimed.map(id => ({ id })),
-    ...kept.map(id => configured.get(id) ?? { id }),
-    ...additions.map(entryOf),
-  ]
+  // 只向未被手动编辑的插件条目写入有依据的推理档位。
+  const updatedOwned = new Map(kept.map((id) => {
+    const entry = configured.get(id) ?? { id }
+    const sourceModel = sourceModels.get(id)
+    const efforts = sourceModel === undefined || entry['reasoningEfforts'] !== undefined
+      ? undefined : reasoningEffortsFor(facts, sourceModel)
+    return [id, efforts === undefined ? entry : { ...entry, reasoningEfforts: efforts }] as const
+  }))
+  const next: ModelEntry[] = additions.length === 0 && reclaimed.length === 0
+    ? facts.configuredEntries.map(entry => updatedOwned.get(entry.id) ?? entry)
+    : [...base, ...reclaimed.map(id => ({ id })), ...updatedOwned.values(), ...additions.map(model => entryOf(facts, model))]
   // 若结果已经等于 installed 原生列表，清理 settings list 而不是保留空的插件痕迹。
   if (canRestore(facts, nextOwned, next.map(entry => entry.id))) {
     return { preview, next: null, nextOwnedIds: [], nextOwnedModels: [] }

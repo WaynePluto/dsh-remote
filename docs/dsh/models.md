@@ -17,7 +17,7 @@ dsh-llm-pi-ai 基于 @earendil-works/pi-ai，内置 github-copilot 的设备码 
 - 若配置 apiKeyEnv，adapter.ts 的请求级 apiKey 会优先于 OAuth grant。
 	copilot-auth 在登录成功或 configure 时移除该引用，回读确认后删除不再被其他路由引用的旧密钥；
 	没有引用时清理遗留 GITHUB_COPILOT_API_KEY。未登录不清理，失败显示警告并保留 OAuth grant。
-- dsh 有 authorization 服务，但其标准 Bundle 未挂载且没有现成的登录 UI 调用链。
+- `dsh-base` 的 `authorization` 行已装载服务，但 Web 没有现成的 Copilot 登录 UI；copilot-auth 提供设备码入口。出处：`packages/bundle/base/cordis.patch.yml`。
 - copilot-auth 只写“账号可用模型 ∩ 已描述目录”；models-catalog 恢复的运行时目录条目也参与交集。
 
 settings.models.provider-card 按 ProviderDirectoryEntry.settingsNs 分派，包含草稿卡。
@@ -49,13 +49,17 @@ PiAiModelProfile 没有 api 字段，解析顺序是路由 api → 同 id 内置
 
 1. 按模型 id 查同一份外部 pi-ai 目录，目标路由优先。
 2. 无匹配则按 gpt-* → openai-responses、claude-* → anthropic-messages、其他 → openai-completions。
-3. 先扩展同一份 pi-ai 运行时 map，再写 dsh models；不是给单个模型增加 api 字段。
+3. 先扩展同一份 pi-ai 运行时 map，再写 dsh models；不是给单个模型增加 api 字段。profile 安装介质中的 pi-ai 必须链接到 dsh-llm-pi-ai 实际解析的包目录（Node ESM 按真实路径缓存）；复制一份同版本包也会让 dsh 校验看不到新增模型。launcher 在安装时检查版本并共享模块身份。
 4. 将推断与新增条目归属存入 dsh-plugin-models-catalog，启动时在 llm-pi-ai 校验前恢复。
 5. dsh 自带该模型后只清理本插件拥有的条目，用户及其他插件配置原样保留。
 
 models.dev 提供 reasoning_options，但 effort/toggle/budget_tokens 形态不同，且档位名单不等于 wire 拼写。
-不能直接把其 values 写成 reasoningEfforts；新增模型可能没有推理档位，界面必须如实提示。
-协议回退属于项目约定，供应商例外命名仍需人工判断。
+不能直接把其 values 写成 reasoningEfforts。pi-ai 同一路由同系列的近邻可提供协议、thinkingLevelMap 与兼容性依据；
+仅在 models.dev 声明 reasoning 且 effort 名单与近邻的 wire 值交集非空时才能按近邻的实际 wire 拼写开放交集档位。
+Copilot 中 gpt-6-astra 是 openai-completions、gpt-5.6-sol 是 openai-responses；直连 OpenAI 与 Copilot 的同名模型也可能有不同的 off/minimal 映射。
+因此不能按 GPT/Claude/Grok 前缀直接复用直连供应商的推理档位。用户覆盖优先；无可信近邻时保留无档位并提示。
+已有插件条目在源检查后仅展示可更新项，须用户显式应用才更新；官方目录收录时仍只回收插件溯源，不自动补回被用户卸载的包。
+模型同系列的事实取 pi-ai `providers/data/<route>.json`，新模型推理候选取 models.dev `reasoning_options`；dsh 解析依据为 `packages/llm/llm-pi-ai/src/{catalog,config}.ts`。
 
 models 是持久的整份替换，卸载插件不会自动撤销配置。切回未加载该插件的官方 profile 前，
 应使用“删除本插件添加的模型”，避免未知混合协议模型无法恢复。
@@ -93,19 +97,29 @@ favorite-models 在 settings.models.footer 保存 provider+model 收藏，只影
 
 ## 出网代理
 
-dsh 与 pi-ai 使用全局 fetch，默认没有为它传 dispatcher。
-项目不读取 HTTP_PROXY、HTTPS_PROXY、ALL_PROXY 或 NO_PROXY 作为代理配置来源。
-设置 → 代理是唯一配置入口，持久化命名空间 dsh-plugin-proxy。
+出处：`apps/cli/src/profile-boot.ts`、`packages/util/http-proxy/src/{policy,install}.ts`、
+`packages/web/web-fetch-http/src/index.ts`；项目实现见 `packages/plugins/proxy/src/{dispatcher,settings,shared}.ts`。
+已安装 `0.1.7-rc.1` 产物对应 `@deepseek-ai/dsh/lib/profile-boot-*.js`、
+`@deepseek-ai/dsh-http-proxy/lib/index.js` 和 `@deepseek-ai/dsh-web-fetch-http/lib/index.js`。
 
-proxy 插件替换 undici 全局 dispatcher，覆盖使用该出口的模型、OAuth、网页请求和插件 fetch。
-不保证覆盖子进程、独立 WebSocket、自建 Node Agent 或自带网络实现。
-EnvHttpProxyAgent 的所有字段显式传值，包括空串，避免回退读取环境变量。
+dsh 在 profile 插件装载前通过 `installProxyFromEnvironment` 解析启动环境中的
+HTTP_PROXY、HTTPS_PROXY、ALL_PROXY、NO_PROXY（大小写均支持），安装进程级策略与 undici 全局 dispatcher。
+原生 `web-fetch-http` 按目标 URL 调用 `proxyRouteFor`，代理路由与直连时的安全检查分别处理；
+不能把网页抓取描述成只依赖普通 `fetch` 的 dispatcher。loopback 始终绕过代理。
 
-- 默认关闭且无预置地址；支持范围以 proxy 的共享校验器与 README 为准。
-- 关闭使用新的直连 Agent；切换先安装新 dispatcher，再等待旧请求排空。
-- 卸载恢复保存的 ambient dispatcher，并关闭本实例创建的代理 Agent。
-- loopback 默认绕过代理；地址禁止 userinfo，不提供忽略 TLS 错误开关。
-- models-catalog 与 copilot-auth 共用该出口，不设置独立代理。
-- 保存使用 [设置写入契约](plugins.md)，先校验，mutate 返回 false 即拒绝，失败保留草稿。
+项目的「设置 → 代理」在官方策略之上叠加可热更新的策略，配置保存在 profile 的 `proxy` 插件行
+volatile Config（`dsh-plugin-proxy` 是文案命名空间）：
 
-代理实现依据位于项目 packages/plugins/proxy/src；配置或测试不要通过关闭 TLS 校验来绕过证书问题。
+| 模式 | 行为 |
+|---|---|
+| 跟随环境（默认） | 不叠加策略；沿用 dsh 启动时安装的环境策略，环境未配置代理则直连 |
+| 使用插件代理 | 以指定 HTTP/HTTPS 地址覆盖两种请求协议的代理出口，并应用绕过列表 |
+| 强制直连 | 在该层安装直连策略，同时影响原生 `fetch` 与 `proxyRouteFor` 路由 |
+
+显式 `mode` 优先；未设置 `mode` 的配置按 `enabled=true` → 插件代理、
+`enabled=false` 且地址非空 → 强制直连、关闭且地址为空 → 跟随环境解释，不自动改写配置。
+模式切换先释放当前叠加层，再安装新层；停用/卸载时释放叠加层，恢复下层官方环境策略。
+测试按钮按测试 URL 报告实际代理路由，不能推断其它目标都走相同出口。
+地址禁止 userinfo、不提供跳过 TLS 验证的选项；不承诺控制独立 WebSocket、自建 Agent、
+独立网络库或所有子进程。models-catalog 与 copilot-auth 不另设代理。
+保存遵守 [设置写入契约](plugins.md)：共享校验器先校验，mutate 返回 false 即拒绝并保留草稿。

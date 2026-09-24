@@ -39,7 +39,6 @@ export const DEFAULT_PROFILE_BUNDLES = [
   '@dsh-remote/dsh-plugin-favorite-models',
   '@dsh-remote/dsh-plugin-concise-mode',
   '@dsh-remote/dsh-plugin-turn-retry',
-  '@dsh-remote/dsh-plugin-exec-process',
   '@dsh-remote/dsh-plugin-chat-scroll',
   '@dsh-remote/dsh-plugin-user-message-fork',
   '@dsh-remote/dsh-plugin-agents-md',
@@ -49,7 +48,6 @@ export const DEFAULT_PROFILE_BUNDLES = [
   '@dsh-remote/dsh-plugin-tools-inspector',
   '@dsh-remote/dsh-plugin-skills-inspector',
   '@dsh-remote/dsh-plugin-files',
-  '@dsh-remote/dsh-plugin-subagent-depth',
   '@dsh-remote/dsh-plugin-yolo-mode',
 ]
 
