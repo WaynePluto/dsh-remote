@@ -19,11 +19,11 @@ export class StoreMigrationError extends Error {
 }
 
 /**
- * 项目改名 dsh-station 时合并了历史迁移：version 1 一次性创建最终 schema
- * （旧 v2 的 browser_port、旧 v3 的 enroll_tokens.used_at 移除、旧 v4 的
- * wakeup_requested_at 全部并入 CREATE）。v2–v4 保留为空迁移，只为让
- * 旧版本数据库（user_version 已是 4）继续通过连续性校验；全新数据库
- * 从 v1 直接得到与旧库逐列一致的最终形态。
+ * version 1 一次性创建最终 schema：改名 dsh-station 时把历史 v2–v4 的
+ * 增量（browser_port、enroll_tokens.used_at 移除、wakeup_requested_at）
+ * 全部并入 CREATE，版本号随之归一为 1。不保留空迁移占位：携带旧
+ * user_version（2–4）的数据库会被「比支持版本更新」检查拒绝，其
+ * schema 与 v1 逐列一致，一次性手工执行 PRAGMA user_version = 1 即可。
  */
 export const STORE_MIGRATIONS: readonly StoreMigration[] = Object.freeze([
   {
@@ -113,9 +113,6 @@ export const STORE_MIGRATIONS: readonly StoreMigration[] = Object.freeze([
       CREATE UNIQUE INDEX devices_browser_port_idx ON devices(browser_port);
     `,
   },
-  { version: 2, name: 'historic no-op: browser_port consolidated into version 1', sql: '' },
-  { version: 3, name: 'historic no-op: enroll_tokens.used_at removal consolidated into version 1', sql: '' },
-  { version: 4, name: 'historic no-op: wakeup_requested_at consolidated into version 1', sql: '' },
 ])
 
 export const CURRENT_STORE_VERSION = STORE_MIGRATIONS.at(-1)?.version ?? 0

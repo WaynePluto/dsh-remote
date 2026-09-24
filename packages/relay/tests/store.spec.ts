@@ -98,109 +98,17 @@ describe('relay store migrations', () => {
     }
   })
 
-  it('accepts a database that went through the historical pre-consolidation migrations', () => {
+  it('refuses a database carrying a historic pre-consolidation user_version', () => {
     const database = new DatabaseSync(':memory:')
     try {
-      // 逐字重建改名前 v1→v4 的迁移路径，模拟用户从旧版本复制过来的 relay.db。
-      database.exec(`CREATE TABLE devices_v1_probe (
-        machine_id TEXT PRIMARY KEY
-      ) STRICT;`)
-      database.exec('DROP TABLE devices_v1_probe')
-      database.exec(`
-        CREATE TABLE users (
-          id TEXT PRIMARY KEY,
-          username TEXT NOT NULL COLLATE NOCASE UNIQUE,
-          password_hash TEXT NOT NULL,
-          totp_secret TEXT,
-          totp_enabled INTEGER NOT NULL DEFAULT 0 CHECK (totp_enabled IN (0, 1)),
-          totp_last_time_step INTEGER,
-          disabled_at INTEGER,
-          created_at INTEGER NOT NULL,
-          updated_at INTEGER NOT NULL,
-          CHECK (totp_enabled = 0 OR totp_secret IS NOT NULL)
-        ) STRICT;
-
-        CREATE TABLE devices (
-          machine_id TEXT PRIMARY KEY,
-          slug TEXT NOT NULL COLLATE NOCASE UNIQUE,
-          display_name TEXT,
-          public_key TEXT NOT NULL,
-          revoked_at INTEGER,
-          created_at INTEGER NOT NULL,
-          updated_at INTEGER NOT NULL
-        ) STRICT;
-
-        CREATE TABLE user_machines (
-          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          machine_id TEXT NOT NULL REFERENCES devices(machine_id) ON DELETE CASCADE,
-          created_at INTEGER NOT NULL,
-          PRIMARY KEY (user_id, machine_id)
-        ) STRICT;
-
-        CREATE TABLE sessions (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          refresh_token_hash TEXT NOT NULL UNIQUE,
-          source_ip TEXT,
-          user_agent TEXT,
-          created_at INTEGER NOT NULL,
-          expires_at INTEGER NOT NULL,
-          last_used_at INTEGER NOT NULL,
-          revoked_at INTEGER,
-          CHECK (expires_at > created_at)
-        ) STRICT;
-
-        CREATE TABLE enroll_tokens (
-          id TEXT PRIMARY KEY,
-          token_hash TEXT NOT NULL UNIQUE,
-          requested_slug TEXT NOT NULL COLLATE NOCASE,
-          device_name TEXT,
-          created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-          created_at INTEGER NOT NULL,
-          expires_at INTEGER NOT NULL,
-          used_at INTEGER,
-          CHECK (expires_at > created_at)
-        ) STRICT;
-
-        CREATE TABLE audit_log (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          occurred_at INTEGER NOT NULL,
-          event TEXT NOT NULL,
-          success INTEGER NOT NULL CHECK (success IN (0, 1)),
-          actor_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-          machine_id TEXT REFERENCES devices(machine_id) ON DELETE SET NULL,
-          session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
-          source_ip TEXT,
-          metadata_json TEXT CHECK (metadata_json IS NULL OR json_valid(metadata_json))
-        ) STRICT;
-
-        CREATE INDEX sessions_user_id_idx ON sessions(user_id);
-        CREATE INDEX sessions_expires_at_idx ON sessions(expires_at);
-        CREATE INDEX enroll_tokens_expires_at_idx ON enroll_tokens(expires_at);
-        CREATE INDEX audit_log_occurred_at_idx ON audit_log(occurred_at DESC);
-        CREATE INDEX audit_log_actor_user_id_idx ON audit_log(actor_user_id, occurred_at DESC);
-        CREATE INDEX audit_log_machine_id_idx ON audit_log(machine_id, occurred_at DESC);
-      `)
-      // 旧 v2 加的 browser_port 列在旧库里位于 updated_at 之后。
-      database.exec('ALTER TABLE devices ADD COLUMN browser_port INTEGER; ALTER TABLE devices ADD COLUMN wakeup_requested_at INTEGER;')
-      database.exec('CREATE UNIQUE INDEX devices_browser_port_idx ON devices(browser_port);')
-      database.exec('ALTER TABLE enroll_tokens DROP COLUMN used_at;')
-      database.exec(`PRAGMA user_version = 4;`)
-
-      database.prepare(`
-        INSERT INTO users (id, username, password_hash, created_at, updated_at)
-        VALUES ('u1', 'admin', 'hash', 1000, 1000)
-      `).run()
-      database.prepare(`
-        INSERT INTO devices (machine_id, slug, public_key, created_at, updated_at)
-        VALUES ('m1', 'pc1', 'key', 1000, 1000)
-      `).run()
-
-      // 合并后的迁移列表对这样的旧库必须是干净的无操作：数据原样保留。
-      expect(applyStoreMigrations(database)).toBe(CURRENT_STORE_VERSION)
-      expect(database.prepare('SELECT id FROM users').all()).toEqual([{ id: 'u1' }])
-      expect(database.prepare('SELECT slug FROM devices').all()).toEqual([{ slug: 'pc1' }])
-      expect(database.prepare('SELECT id FROM enroll_tokens').all()).toEqual([])
+      // 改名合并把版本号归一为 1；改名前旧库的 user_version 是 2–4。
+      // 历史版本不保留空迁移占位（一次性事件）：这类库会被
+      // 「比支持版本更新」检查拒绝，其 schema 与 v1 逐列一致，
+      // 手工执行 PRAGMA user_version = 1 即可继续使用。
+      for (const historicVersion of [2, 3, 4]) {
+        database.exec(`PRAGMA user_version = ${String(historicVersion)}`)
+        expect(() => applyStoreMigrations(database)).toThrow(/newer than supported/)
+      }
     } finally {
       database.close()
     }
