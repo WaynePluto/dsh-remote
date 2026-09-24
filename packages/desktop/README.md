@@ -1,27 +1,78 @@
-# 桌面预览壳（开发用途）
+# DSH 工作站桌面应用（packages/desktop）
 
-这是 **Wails v2.16.0 Windows 预览版**，只附着到已有的本机 relay；它不会启动、停止或接管 Node launcher，也不替代现有 Go 托盘启动器或正式绿色包。当前已有独立 Win32 托盘，但没有内置 Node 分发、会话通知或已完成的多机器端口发现。关闭窗口只隐藏到托盘；从窗口或托盘明确退出只结束预览壳，不会停止原有开发栈。
+Wails v2.16.0 + Go 原生层的桌面壳：托管自己的 Node launcher 后台（dsh + relay + connector），
+内置 WebView 直连本机 relay origin，并常驻托盘。两种运行模式：
 
-> **不安全，不得作为正式发行版：** Wails v2.16.0 的 WebView2 默认自动允许网页权限请求；本预览版没有原生网络/导航白名单，外站、iframe、WebSocket 和弹窗未隔离。`--relay-url` 只限定**初始入口**，不防止页面随后访问其它站点。不要把这个参数检查当成安全防护；测试期间避免在内置窗口打开不可信外站。现有 relay/dsh 认证和 Host/Origin 检查不变。安全补丁和实机安全验收留待后续单独完成。
+- **独立模式（默认）**：双击即用。发现随包载荷（`package/`）与随包/系统 Node 后，
+  以 `--desktop` 拉起 launcher，AssetServer 常驻「启动/故障状态页」，后台就绪后对根路径
+  一次 HTTP 302 进入真实 relay origin；业务流量不走 AssetServer。托盘提供
+  **显示 / 打开 → 网页、管理 / 启动后台 / 停止后台 / 重启后台 / 退出**，悬停提示显示阶段。
+  退出（托盘）与崩溃（Windows Job Object KILL_ON_JOB_CLOSE）都会回收自有后台进程树。
+- **attach 开发模式（`--attach`）**：附着到已运行的 30809 开发栈，不管理它的进程；
+  无通知管道令牌，桌面通知点击定位在开发模式不可用（插件回落普通 toast）。
 
-## 开发构建（PowerShell 7）
+> **已知安全边界（S1.3 未完成）：** Wails v2.16.0 的 WebView2 默认自动允许网页权限请求；
+> 本壳没有原生网络/导航白名单，外站、iframe、WebSocket 和弹窗未隔离。`--relay-url` 只限定
+> **初始入口**。现有 relay/dsh 认证和 Host/Origin 检查不变；原生隔离与安全补丁留待 S1.3
+> 单独验收，未通过前不作为通过安全验收的发行版。
 
-已用固定 Go 1.25.2 和固定 Wails v2.16.0 在 Windows 验证；构建使用 `wv2runtime.error`，不会在缺少 WebView2 时下载或自动安装运行库。
+## 命令
 
 ```powershell
-# 先在另一个终端运行 pnpm dev，或保留已经运行的 30809 开发栈
-pnpm dev:desktop
-
-# 只检查桌面入口，不创建窗口
-pnpm dev:desktop -- --selfcheck
+pnpm dev:desktop                 # attach 开发模式（需先 pnpm dev 起 30809 栈）
+pnpm dev:desktop -- --selfcheck  # 只检查参数，不创建窗口
+pnpm release:desktop:win         # 打 Windows 桌面安装包 + 便携 zip（lite/full）
 ```
 
-根脚本先执行 `pnpm desktop:prepare`，把已提交的 `packaging/win-launcher/rsrc_windows_amd64.syso` 复制为被 Git 忽略的桌面构建输入，再执行 `go -C packages/desktop run -tags=production,wv2runtime.error . --attach --relay-url http://127.0.0.1:30809/`。先启动已有开发栈，或使用已经运行中的 `dsh-remote-dev-direct`（30809）；该命令不会再启动、停止或接管一套后台。需要单独构建 exe 时先在仓库根运行 `pnpm desktop:prepare`，再到 `packages/desktop` 执行 `go build -tags 'production,wv2runtime.error'`。本地 exe、Go 测试程序、coverage、Wails `build/bin/` 与复制出的 syso 均不提交。`--attach` 为必需参数，防止误以为预览壳已拥有后台。初始 URL 只接受规范的 `http://127.0.0.1:<端口>/`，例如本机入口的主端口；不要猜成员端口，应从 relay 实际分配结果取得。Wails AssetServer 仅对首个 `/` 返回一次 HTTP 302，让顶层 WebView 进入真实 relay origin；不能使用 JS `location.replace()`，它会把首个 relay 请求标记 `Sec-Fetch-Site: cross-site` 并被 relay 正确拒绝。HTTP/WS 业务均不走 AssetServer。这条首次 302 路径**仅在 Windows WebView2 实测通过**；Wails v2 的 macOS/Linux AssetServer 30x 行为不同，预览模块尚不能在其它平台宣称可用。
+打包脚本 `scripts/pack-desktop.mjs` 只能在目标平台上构建（Wails 依赖系统 WebView/CGO，
+不支持交叉编译）；mac/linux 桌面包由 CI 的原生 runner 产出。独立模式自检：
+
+```powershell
+dsh-station.exe --selfcheck          # 校验载荷发现（package/ + runtime/node 或系统 Node）
+dsh-station.exe --app-dir <目录> --selfcheck   # 开发时校验自定义载荷目录
+```
+
+## 桌面 ↔ launcher 控制契约（S2 冻结的最小集）
+
+launcher 以 `--desktop` 运行时（`packages/launcher/src/desktop-link.ts`）：
+
+- 状态：stdout 每行 `@@DSH_STATION {json}`（protocol 1；phase = config/plugins/dsh/relay/
+  ready/restarting/stopping/failed，urls.local/admin/dsh，adminReady）。Go 侧镜像在
+  `backend.go`，两端由测试锁定（`tests/desktop-link.spec.ts` / `backend_test.go`）。
+- 控制：stdin 逐行 JSON 命令，目前只有 `{"type":"stop"}`；重启由桌面壳停止后重新拉起。
+- 实例锁：home 下 `launcher.lock`（pid 存活检查），先于插件同步与数据库写入获取。
+- 通知管道：桌面壳监听 `127.0.0.1:30810`，首行必须携带共享令牌
+  （桌面壳生成 `DSH_STATION_NOTIFY_TOKEN`，经 launcher → dsh 环境传给 notify 插件）；
+  无令牌的客户端在握手前被拒绝。插件侧见 `packages/plugins/notify/src/desktop.ts`。
 
 ## 自绘标题栏（无边框）
 
-窗口为 Wails `Frameless`，每次顶层导航后经 `OnDomReady` 向页面注入一条 36px 自绘标题栏（`chromebar.go`）：**logo + dsh-remote + 页面/应用 + ─ ❐ ✕** 一行完成，主题取自页面 body 背景色（跟随 dsh 深浅设置）；dsh 外壳是 `html/body/#root` 的 `height:100%` 链，注入脚本用 `body{padding-top:36px; box-sizing:border-box}` 让内容完整缩进条下，无底部裁切。`页面` 菜单含**主页/管理**（页面内 `location.assign` 切换，条随导航自动重建）与分隔线下的**主页（在浏览器中打开）/管理（在浏览器中打开）**（系统浏览器回退）；托盘菜单为**显示、打开 → 网页/管理、退出**。窗口控制是「业务页零 Go bindings」的唯一书面例外：`Chrome` 绑定只含 Minimize/ToggleMaximize/Hide/Quit/OpenExternalHome/OpenExternalAdmin 六个无参方法，`BindingsAllowedOrigins` 仅追加本机 relay origin。Wails v2.16 运行时（`window.go`）只存在于资产服务器主页面（wails.localhost），relay 页面上不可用，因此自绘条经 WebView2 `window.chrome.webview.postMessage('C'+{name,args,callbackID})` 直接发送绑定调用——该消息格式固定于 Wails v2.16.0（铁律固定版本），升级 Wails 必须复核。XSS 风险上限是隐藏/退出窗口或打开既定入口，没有任意 URL、执行或文件能力。任务栏/Alt+Tab 图标经 `WM_SETICON` 使用 exe 资源（无边框窗口没有标题栏图标可显示）。`logo.svg` 是 `packaging/dsh-remote.svg` 的提交镜像（go:embed 不能引用模块外文件），`chromebar_test.go` 防止两者漂移；正式 logo 变更时同步两份。外部浏览器 Cookie 不与内置 WebView 共用。
+窗口为 Wails `Frameless`，每次顶层导航后经 `OnDomReady` 向页面注入一条 36px 自绘标题栏
+（`chromebar.go`）：logo + DSH 工作站 + 页面/应用 + ─ ❐ ✕；主题跟随页面 body 背景色。
+脚本带 `location.origin` 守卫，只在 relay 页面注入（独立模式的状态页不注入）。
+`页面` 菜单含主页/管理（页面内切换）与「在浏览器中打开」回退；窗口控制是「业务页零 Go
+bindings」的唯一书面例外：`Chrome` 绑定只含 Minimize/ToggleMaximize/Hide/Quit/
+OpenExternalHome/OpenExternalAdmin 六个无参方法，`BindingsAllowedOrigins` 仅追加本机
+relay origin。Wails v2.16 运行时（`window.go`）只存在于资产服务器主页面，relay 页面上
+不可用，因此自绘条经 WebView2 `window.chrome.webview.postMessage('C'+{...})` 直接发送
+绑定调用——该消息格式固定于 Wails v2.16.0，升级 Wails 必须复核。独立模式下 relay 端口
+若非默认 30809，自绘条的「在浏览器中打开」会静默失效（托盘入口不受影响）：
+Go 不复制 launcher 的配置解析，BindingsAllowedOrigins 又无法运行时修改。
 
-Windows 构建从 `packaging/win-launcher/rsrc_windows_amd64.syso` 复用项目 ICO/DPI 资源；正式图标重新生成时需同步这份资源，避免窗口与托盘退回系统默认程序图标。
+任务栏/Alt+Tab 图标经 `WM_SETICON` 使用 exe 资源；`logo.svg` 是
+`packaging/dsh-station.svg` 的提交镜像（go:embed 不能引用模块外文件），
+`chromebar_test.go` 防止两者漂移。外部浏览器 Cookie 不与内置 WebView 共用。
 
-后续的后台所有权、托盘、Node 随包分发、通知点击和 macOS/Linux Desktop 验收见根目录 `.agent-plan.md`；这份预览壳尚未通过这些项。根目录正式构建/发行命令目前不包含此 Go module。
+## 后台状态页（独立模式）
+
+`statuspage.go` 在后台未就绪时渲染自刷新（1.5s）的轻量页面：阶段、原因提示、本机入口与
+管理台链接（仅 loopback 地址）。就绪后对 `/` 发一次 302 进入 relay。后台停止/失败时，
+Go 把窗口导航回状态页；用户可从托盘「启动/重启后台」恢复。页面不携带任何凭据。
+
+## 平台
+
+- Windows x64：WebView2 运行库（`wv2runtime.error` 构建标签禁止自动下载安装）；
+  缺失时明确报错，不静默回退。
+- macOS arm64 / Linux x64：编译依赖系统 WKWebView / WebKitGTK；CI 产物未实机验收
+  （S10），不得宣传为已通过。非 Windows 平台暂无常驻托盘（`tray_stub.go`），
+  关闭窗口即退出并停止自有后台。

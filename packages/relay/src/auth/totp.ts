@@ -1,6 +1,6 @@
 import { generate, generateSecret, generateURI, verify } from 'otplib'
 
-export const TOTP_ISSUER = 'dsh-remote'
+export const TOTP_ISSUER = 'dsh-station'
 export const TOTP_PERIOD_SECONDS = 30
 export const TOTP_DIGITS = 6
 /** 允许相邻的一个时间周期，以容忍普通手机/服务器时钟漂移。 */

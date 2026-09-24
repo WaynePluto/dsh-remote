@@ -5,7 +5,7 @@
 
 ## 1. 范围与粒度
 
-- pnpm workspace：4 个基础包、1 个纯浏览器构建期 UI 包、20 个功能组件包、4 个纯组合 Bundle 包，以及 1 个壳级 overlay 包（remote-privileged），合计 25 个插件目录；另有独立 Go module `packages/desktop/`（仅开发预览），根目录负责现有开发、检查和交付。
+- pnpm workspace：4 个基础包、1 个纯浏览器构建期 UI 包、20 个功能组件包、4 个纯组合 Bundle 包，以及 1 个壳级 overlay 包（remote-privileged），合计 25 个插件目录；另有独立 Go module `packages/desktop/`（Wails 桌面应用），根目录负责现有开发、检查和交付。
 - 扫描 `packages/*/src`、插件入口/README/manifest、`scripts` 和 `packaging`。
 - 不将 `node_modules`、`dist`、`release`、`.dev`、锁文件及生成图标当作手写模块。
 - 以包/模块组为粒度，不把全部插件、React 组件和工具逐个塞入同一张图。
@@ -27,9 +27,9 @@
 | 开发与验证脚本 | `scripts/dev-stack.mjs`、`dev-runtime.mjs`、`plugin-distributions.mjs`、`prepare-desktop.mjs`、`local-config.mjs`、`*-check.mjs` | 本地全链路、隔离 dsh 运行时、开发插件介质、插件契约冒烟与依赖检查 | launcher/relay 源码模块、Node；脚本各自声明环境前提 |
 | 发行打包 | `scripts/pack.mjs`、`packaging/`、`.github/workflows/` | 分平台 deploy/归档、产物检查、启动脚本、图标、CI | archiver、pnpm、Go 工具链；不带 Node 二进制 |
 | Windows 托盘 | `packaging/win-launcher/*.go` | 菜单、单实例、自启动、日志轮转、Node launcher 生命周期 | Go 标准库、Win32 API；同一 `package main`，无第三方 Go 包 |
-| 桌面预览壳 | `packages/desktop/{main,config,bootstrap,tray_windows}.go` | Wails v2 单窗口附着到已运行的本机 relay；Windows 用一次 HTTP 302 跳至真实 origin；紧凑窗口菜单支持内置主页/管理与外部回退，独立 Win32 线程提供托盘；不启动或停止后台 | 独立 Go module `github.com/wailsapp/wails/v2@v2.16.0`；目前**未提供原生网络隔离或内置 Node**，托盘仅为 Windows 预览实现，不属于正式发行 |
+| 桌面应用 | `packages/desktop/{main,config,bootstrap,statuspage,backend,discover,notifypipe}.go`、`tray_windows.go` | Wails v2 单窗口：独立模式托管自有 launcher 后台（`--desktop` 状态行契约 + 实例锁 + 随包/系统 Node 发现），attach 模式附着开发栈；AssetServer 持有 webview 初始导航直到后台就绪再 302 进真实 origin；Win32 托盘含后台启停与自重启恢复；通知管道带共享令牌 | 独立 Go module `github.com/wailsapp/wails/v2@v2.16.0`；原生网络/权限隔离（S1.3）仍未实现，mac/Linux 托盘与实机验收待 S10 |
 
-20 个功能组件按 `plugin-catalog.json` 分发为 4 个组合包与 6 个独立第三方 Bundle；首次默认安装，仍安装项随 dsh-remote 配套升级，卸载后不自动补回。唯一随 `--patch` 传入的是 remote-privileged 的壳级 overlay，包含 connection 注入和模型 HMR 启动屏障，不属于第三方插件生命周期。`@dsh-remote/plugin-ui` 是构建期辅助，也不进入分发清单。
+20 个功能组件按 `plugin-catalog.json` 分发为 4 个组合包与 6 个独立第三方 Bundle；首次默认安装，仍安装项随 dsh-station 配套升级，卸载后不自动补回。唯一随 `--patch` 传入的是 remote-privileged 的壳级 overlay，包含 connection 注入和模型 HMR 启动屏障，不属于第三方插件生命周期。`@dsh-station/plugin-ui` 是构建期辅助，也不进入分发清单。
 具体功能及使用限制见 [插件索引](docs/plugins.md) 和各包 README。
 
 ## 3. 源码依赖关系图
@@ -66,12 +66,12 @@ graph TD
 | relay → protocol | `packages/relay/src/server.ts:6–9`、`http/security.ts:3`、`auth/device.ts:5` |
 | connector → protocol | `packages/connector/src/backoff.ts:1`、`config.ts:3`、`control.ts:5–19` |
 | plugins → dsh 族库 | `services/src/index.ts` 的 defineTool；`model-capabilities/src/index.ts:3` 的 schemastery；浏览器入口导入官方 UI/slots |
-| plugins → plugin-ui | services/turn-retry 的 dialog adapter、agents-md/proxy/notify/browser-compat 的 nav-glyph、skills/tools inspector 的 View、services/terminal 的 dock styles 均 import `@dsh-remote/plugin-ui` |
+| plugins → plugin-ui | services/turn-retry 的 dialog adapter、agents-md/proxy/notify/browser-compat 的 nav-glyph、skills/tools inspector 的 View、services/terminal 的 dock styles 均 import `@dsh-station/plugin-ui` |
 | plugin-ui → React | `packages/plugin-ui/src/dialog-pointer.tsx`、`navigation-glyph.ts`、`inspector.tsx`、`dock-styles.ts` |
 | plugins → undici | `packages/plugins/proxy/src/dispatcher.ts:22` |
 | launcher/relay/connector/protocol → zod | 各包的 `src/config.ts`（protocol 为 `src/frames.ts`） |
 | pack → archiver | `scripts/pack.mjs:76` |
-| desktop preview → Wails | `packages/desktop/main.go`：Wails app、menu、runtime；`bootstrap.go` 仅提供顶层跳转，不代理 dsh 业务 |
+| desktop → Wails | `packages/desktop/main.go`：Wails app、托盘回调与模式选择；`bootstrap.go`（attach 引导 302）/`statuspage.go`（独立模式持有初始导航）；`backend.go` 托管 launcher 子进程并解析 `@@DSH_STATION` 状态行 |
 
 这些核心包级生产 import 边未形成环；未发现插件相互 import/re-export。
 补充 TypeScript AST 扫描覆盖 377 个 TS/TSX/MJS 文件，可解析的本地相对路径值导入图也未发现环。
@@ -97,12 +97,12 @@ graph TD
 - `supervisor.ts` 管子进程、输出及停止；`jwt-secret.ts` 和 `membership.ts` 只处理对应本地配置。
 - launcher 不实现账号管理页面；`relay-admin.ts` 只读数据库判断是否已有管理员。
 - dsh、relay、connector 是 launcher **spawn 的独立进程**，不是 launcher import 后在进程内运行。
-- 标准 `DSH_HOME` 保存 dsh 设置/会话；dsh-remote home 保存设备身份、membership、relay 数据，二者独立。
+- 标准 `DSH_HOME` 保存 dsh 设置/会话；dsh-station home 保存设备身份、membership、relay 数据，二者独立。
 
 ### 桌面预览与后台所有权
 
-- `packages/desktop/` 现在是**Windows 开发预览**而非现有绿色包的替代：必须以 `--attach` 连接已经运行的 `http://127.0.0.1:<relay-port>/`；关闭预览窗口不操作 Node launcher。窗口菜单可在内置主页/管理页间切换并打开外部浏览器；Win32 托盘在独立锁定线程维护自己的隐藏窗口和消息泵。正式版接管运行栈、随包 Node 和跨平台交付尚未实施。
-- `bootstrap.go` 的 Wails AssetServer 仅对 `/` 发 HTTP 302；HTTP/WS、认证和插件资源均从真实 relay origin 加载。JS 跨站跳转会被 relay 的 sec-fetch-site 校验拒绝；这条 302 仅 Windows 已实测，macOS/Linux 需另验。不对业务页提供 Go Bindings。参数校验只限定初始地址，**没有原生网络/系统权限隔离**；风险及构建方式见 `packages/desktop/README.md`。
+- `packages/desktop/` 有两种模式：默认独立模式托管自有后台（发现随包载荷与 Node、`--desktop` 拉起 launcher、实例锁防双开、Job Object 崩溃回收），`--attach` 开发模式附着已运行栈。托盘「启动/重启后台」通过壳自重启恢复（webview 初始导航一生一次，页面发起的跳转进不了 relay——见 statuspage.go 注释）。
+- Wails AssetServer 在 attach 模式对 `/` 发一次 302；独立模式持有初始导航直到后台就绪再 302。HTTP/WS、认证和插件资源均从真实 relay origin 加载，不对业务页提供除窗口控制外的 Go Bindings。桌面安装包由 `scripts/pack-desktop.mjs` 在对应平台产出（win NSIS/zip、mac .app zip、linux deb/zip），随包 Node 清单在 `packaging/desktop-node.json`。**没有原生网络/系统权限隔离（S1.3）**；参数校验只限定初始地址，风险及构建方式见 `packages/desktop/README.md`。
 
 ### 插件双端与运行期协作
 
@@ -130,11 +130,11 @@ graph TD
 - 新 profile 首次默认安装全部 10 个分发包；后续升级所有仍安装项并保持 Bundle/组件停用。
   已卸载包不补回，需要由用户从发行版 `plugins/<目录>` 或开发 `.dev/plugins/<目录>` 经官方
   「添加插件」重装。
-- launcher 在安装前把介质和其运行时依赖复制到 profile 内 `.dsh-remote-plugin-media/`，避免 Windows
+- launcher 在安装前把介质和其运行时依赖复制到 profile 内 `.dsh-station-plugin-media/`，避免 Windows
   跨盘 `link:` 不生成目录链接；检测到旧 profile 由其他 pnpm 主版本创建时，会暂存并重建
   `node_modules`，失败则恢复原目录和 manifest/lockfile。
 - `scripts/plugin-distributions.mjs` 从源码包生成可搬移介质：组合包的固定版本组件闭包位于其
-  `node_modules/@dsh-remote/`，独立包携带自身 patch、宿主与浏览器产物，`catalog.json` 描述安装项。
+  `node_modules/@dsh-station/`，独立包携带自身 patch、宿主与浏览器产物，`catalog.json` 描述安装项。
 - `pnpm run dev` 依次构建功能插件、生成 `.dev/plugins/`、由 `scripts/dev-runtime.mjs` 在仓库
   同级准备无工作区同名安装锚的隔离 dsh 运行时，再启动 `dev-stack.mjs`。开发栈仍使用标准
   DSH_HOME 和正式 profile，生命周期与发行版共用；不得与已安装实例并发运行。

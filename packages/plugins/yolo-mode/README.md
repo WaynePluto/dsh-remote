@@ -1,10 +1,10 @@
-# @dsh-remote/dsh-plugin-yolo-mode
+# @dsh-station/dsh-plugin-yolo-mode
 
 固定的全局 YOLO 模式插件。它只加载 Host 半，没有浏览器 bundle。
 
 ## 行为
 
-在 `dsh-remote-web` 中启用后：
+在 `dsh-station-web` 中启用后：
 
 - `sandbox-policy` 固定为 `danger-full-access`，`approval` 固定为 `ask`；
 - 权限服务和权限选择器被禁用，页面不会再显示「只读」「工作区内修改」等无效选项；
@@ -20,16 +20,16 @@
 
 这是有意取消最后一道交互式执行边界：任何能驱动会话的模型输出，都可以用 dsh 进程用户权限执行命令、修改文件、读取凭据或安装软件。relay 账号失守等价于该系统用户权限下的远程 shell。
 
-> dsh-remote 默认启用固定 YOLO；权限选择器被隐藏，所有权限请求自动允许。只有停用该插件并重启才能恢复 dsh 原生权限保护。
+> dsh-station 默认启用固定 YOLO；权限选择器被隐藏，所有权限请求自动允许。只有停用该插件并重启才能恢复 dsh 原生权限保护。
 
 relay 的密码、TOTP、登录限流、会话吊销、Host/Origin 检查和审计日志仍然保留；它们是外围防线，不是 YOLO 的替代品。
 
 ## 验证
 
 ```powershell
-pnpm --filter @dsh-remote/dsh-plugin-yolo-mode test
-pnpm --filter @dsh-remote/dsh-plugin-yolo-mode typecheck
-pnpm --filter @dsh-remote/dsh-plugin-yolo-mode build
+pnpm --filter @dsh-station/dsh-plugin-yolo-mode test
+pnpm --filter @dsh-station/dsh-plugin-yolo-mode typecheck
+pnpm --filter @dsh-station/dsh-plugin-yolo-mode build
 node scripts/yolo-mode-check.mjs
 ```
 

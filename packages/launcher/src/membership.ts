@@ -1,23 +1,23 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { MEMBERSHIP_FILE_NAME, parseMembership, type Membership, type MembershipHub } from '@dsh-remote/protocol'
+import { MEMBERSHIP_FILE_NAME, parseMembership, type Membership, type MembershipHub } from '@dsh-station/protocol'
 import { LauncherError } from './errors.js'
 
 /**
- * 当前 OS 用户的 dsh-remote 状态目录。
+ * 当前 OS 用户的 dsh-station 状态目录。
  *
  * 默认值与 connector 和 relay 完全相同，因为同一机器的三个
  * 进程必须对 `device.key` 和
  * `membership.json` 所在位置达成一致，无需额外告知。
- * @returns 绝对路径 `~/.dsh-remote`。
+ * @returns 绝对路径 `~/.dsh-station`。
  */
-export function defaultDshRemoteHome(): string {
-  return join(homedir(), '.dsh-remote')
+export function defaultDshStationHome(): string {
+  return join(homedir(), '.dsh-station')
 }
 
 /**
- * @param home - dsh-remote home 目录。
+ * @param home - dsh-station home 目录。
  * @returns 这台机器 membership 文件的绝对路径。
  */
 export function membershipFilePath(home: string): string {

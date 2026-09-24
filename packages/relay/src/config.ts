@@ -1,8 +1,8 @@
 import { isIP } from 'node:net'
 import { z } from 'zod'
-import { machineSlugSchema } from '@dsh-remote/protocol'
+import { machineSlugSchema } from '@dsh-station/protocol'
 import { isLoopbackAddress } from './auth/loopback.js'
-import { defaultDshRemoteHome } from './membership/paths.js'
+import { defaultDshStationHome } from './membership/paths.js'
 
 const portSchema = z.number().int().min(0).max(65_535)
 const bindHostSchema = z.string().refine(value => isIP(value) !== 0, 'host must be an IPv4 or IPv6 address')
@@ -41,7 +41,7 @@ const baseRelayConfigSchema = z.strictObject({
    * `membership.json` 会写在这里。允许覆盖，以便开发栈
    * 可以把状态放在 checkout 内，而不是用户真实 home。
    */
-  home: z.string().min(1).default(() => defaultDshRemoteHome()),
+  home: z.string().min(1).default(() => defaultDshStationHome()),
   /** 生产环境/多机器路由：<slug>.<publicDomain>。 */
   publicDomain: z.string().min(1).transform(value => value.toLowerCase()).optional(),
   /** M1 单机器路由：IP/localhost Host 固定指向此 slug。 */

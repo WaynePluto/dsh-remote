@@ -8,7 +8,7 @@ import {
   DIALOG_FULLSCREEN_RIGHT_PX,
   DIALOG_FULLSCREEN_TOP_PX,
   dialogFullscreenButtonRule,
-} from '@dsh-remote/plugin-ui'
+} from '@dsh-station/plugin-ui'
 import type {
   DialogMoveBounds,
   DialogMoveStart,
@@ -16,7 +16,7 @@ import type {
   DialogResizeBounds,
   DialogResizeDirection,
   DialogResizeStart,
-} from '@dsh-remote/plugin-ui'
+} from '@dsh-station/plugin-ui'
 
 export const REASON_DIALOG_CLASS = 'dsh-turn-retry-reason-dialog'
 export const REASON_DIALOG_RATIO = 0.8

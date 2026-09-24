@@ -17,7 +17,7 @@ assert.equal(responseCookie({ headers: { getSetCookie: () => ['dsh=one; Path=/',
 assert.equal(findClientBundleUrl('<script>{"id":"pkg","url":"/client.js"}</script>', 'pkg'), '/client.js')
 assert.equal(findClientBundleUrl('<script>{"id":"other","url":"/client.js"}</script>', 'pkg'), null)
 
-const directory = mkdtempSync(join(tmpdir(), 'dsh-remote-helper-'))
+const directory = mkdtempSync(join(tmpdir(), 'dsh-station-helper-'))
 const sourceHome = join(directory, 'source')
 const contextHome = join(directory, 'context-home')
 mkdirSync(join(sourceHome, 'profiles', 'smoke-profile'), { recursive: true })

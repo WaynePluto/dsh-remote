@@ -8,7 +8,7 @@ import {
   serializeMembership,
   type Membership,
   type MembershipLastHub,
-} from '@dsh-remote/protocol'
+} from '@dsh-station/protocol'
 
 /** membership 文件存在但无法使用；只有操作员可以修复它。 */
 export class MembershipFileError extends Error {

@@ -9,7 +9,7 @@
  * 域分离标签。它防止设备签名被重放为
  * 本项目未来可能使用同一密钥生成的其他签名。
  */
-const DOMAIN = 'dsh-remote/device-challenge/v2'
+const DOMAIN = 'dsh-station/device-challenge/v2'
 
 function lengthPrefixed(value: string): Uint8Array {
   const bytes = new TextEncoder().encode(value)

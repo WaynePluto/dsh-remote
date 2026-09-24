@@ -10,7 +10,7 @@ import { terminalRuntime } from './terminal-runtime.js'
 import { dispatch } from './terminal-rpc.js'
 
 /** Cordis 插件名，出现在 dsh 插件树和诊断信息中。 */
-export const name = 'dsh-remote-terminal'
+export const name = 'dsh-station-terminal'
 
 /** 所需 service；terminals 由本插件按需挂载，不能在 inject 中等待自己。 */
 export const inject = ['connection', 'agents', 'tools', 'systemPrompt']

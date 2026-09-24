@@ -5,7 +5,7 @@ description: 在浏览器 UI 里做「图标 + 文字」一行的竖直居中，
 
 # flex 居中：图标与文字为什么总差 1~2px
 
-本 skill 来自 dsh-remote 三张 input dock 卡片（services / terminal / turn-retry）的一次实战返工：
+本 skill 来自 dsh-station 三张 input dock 卡片（services / terminal / turn-retry）的一次实战返工：
 表面是「图标比标题高一点」，实际踩了三层不同的坑，**顺序不能颠倒**。
 
 ## 铁律
@@ -64,7 +64,7 @@ node .agents/skills/flex-centering/scripts/measure-ink.mjs <截图路径>
 它逐列扫描暗像素、把相邻列聚成簇，再打印每一簇的 y 范围与中心。一行「图标 + 标题 + 副标题 +
 箭头」正好是四簇，直接比 `centre` 即可。⚠️ 截图必须是 1×：已知 14px 的图标应当量出约 14 行。
 
-实测（dsh-remote 的服务卡片，13px 表头）：
+实测（dsh-station 的服务卡片，13px 表头）：
 
 | 元素 | ink y 范围 | 中心 |
 |---|---|---|

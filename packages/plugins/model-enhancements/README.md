@@ -1,6 +1,6 @@
 # 模型增强 Bundle
 
-`@dsh-remote/dsh-plugin-model-enhancements` 是模型增强的整体安装、卸载和升级单位，按固定顺序组合：
+`@dsh-station/dsh-plugin-model-enhancements` 是模型增强的整体安装、卸载和升级单位，按固定顺序组合：
 
 1. Copilot 登录（copilot-auth）
 2. 模型目录（models-catalog）

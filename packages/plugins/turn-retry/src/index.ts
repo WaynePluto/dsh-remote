@@ -40,7 +40,7 @@ export type {
 export { foldTurnRetry, INITIAL_STATE, stoppedCause } from './projection.js'
 
 /** Cordis 插件名，出现在 dsh 诊断信息中。 */
-export const name = 'dsh-remote-turn-retry'
+export const name = 'dsh-station-turn-retry'
 
 /** 所需 service：agents、sessionProjections 和 connection。 */
 export const inject = ['agents', 'sessionProjections', 'connection']

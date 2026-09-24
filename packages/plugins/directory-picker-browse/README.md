@@ -1,6 +1,6 @@
-# `@dsh-remote/dsh-plugin-directory-picker-browse`
+# `@dsh-station/dsh-plugin-directory-picker-browse`
 
-这是 dsh-remote 的 Host-only 组合修复插件。dsh Web profile 默认使用
+这是 dsh-station 的 Host-only 组合修复插件。dsh Web profile 默认使用
 `directory-picker-auto`；在 Windows / macOS 的 loopback 启动环境下它会选择宿主机原生目录对话框，
 远程浏览器无法看到这个对话框，因此新会话无法选择工作区。
 

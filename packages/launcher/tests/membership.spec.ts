@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { MembershipHub } from '@dsh-remote/protocol'
+import type { MembershipHub } from '@dsh-station/protocol'
 import { isSelfHub } from '../src/membership.js'
 
 describe('isSelfHub', () => {

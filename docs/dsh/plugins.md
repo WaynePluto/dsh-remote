@@ -45,7 +45,7 @@ profile patch 执行时，末尾 overlay 插入的行还不存在，所以覆盖
   这会使任意 Bundle 开关被无关插件的 `failed to import` 阻断；磁盘选择已保存但旧 fiber 未卸载，
   随后的卸载又会得到 `bundle-in-use`。进程重启只会掩盖问题，不能以“重启后正常”代替稳定 ID。
 
-### dsh-remote 分发约束
+### dsh-station 分发约束
 
 - 根 `plugin-catalog.json` 将 20 个功能组件映射为 4 个组合包与 6 个独立包。发行介质位于
   `plugins/`，开发介质位于 `.dev/plugins/`；两者都用本地绝对目录走上述官方安装流程。
@@ -68,7 +68,7 @@ profile patch 执行时，末尾 overlay 插入的行还不存在，所以覆盖
 dsh-web-app 提供 `agent-preset-registry` 与原生预设；concise-mode Bundle 排在其后，用 patch 直接
 插入 `preset-concise` 和 `preset-concise-ptc` 两行 `@deepseek-ai/dsh-agent-preset`，
 各行 `config.plugins` 内联声明 persona、工具与压缩插件。这里没有 preset root、locator entry
-或以文件系统目录加载预设的逻辑；只在 dsh-remote-web profile 增加这两个预设。
+或以文件系统目录加载预设的逻辑；只在 dsh-station-web profile 增加这两个预设。
 
 0.1.7-rc.1 不再支持旧版「复制预设 → 写入用户预设目录」：预设现在是 profile/Bundle 中的
 `@deepseek-ai/dsh-agent-preset` 声明，原生设置页只提供「查看配置」（只读）及「让 Agent 帮我创建预设模式」。
@@ -103,7 +103,7 @@ React、Cordis、store、slots、ui-primitives 等共享运行时保持 external
 launcher、开发栈和打包脚本必须同时检查宿主与浏览器产物。
 
 注册时 readFileSync 将 bundle 读成不可变快照，以 IMMUTABLE_CACHE 下发；只有 rebuilt() 会重读，
-该回调由 HMR watch 触发。dsh-remote-web 没有 HMR，任何插件改动都必须构建并重启 dsh。
+该回调由 HMR watch 触发。dsh-station-web 没有 HMR，任何插件改动都必须构建并重启 dsh。
 
 ## index.html 注入
 

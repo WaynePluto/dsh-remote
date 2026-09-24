@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"net/url"
 	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -19,8 +20,9 @@ var chromebarLogoSVG string
 // 没有任意 URL、执行或文件能力。
 type Chrome struct {
 	currentWindow func() context.Context
-	relayURL      string
-	adminURL      string
+	// resolve 在调用时解析主页/管理地址：独立模式下 relay 端口由后台
+	// 上报后才确定；attach 模式返回启动参数里的静态地址。
+	resolve func() (home string, admin string)
 }
 
 func (c *Chrome) Minimize() {
@@ -52,13 +54,15 @@ func (c *Chrome) Quit() {
 // 不接受页面传入的任意 URL，避免把壳变成开放重定向的启动器。
 func (c *Chrome) OpenExternalHome() {
 	if ctx := c.currentWindow(); ctx != nil {
-		runtime.BrowserOpenURL(ctx, c.relayURL)
+		home, _ := c.resolve()
+		runtime.BrowserOpenURL(ctx, home)
 	}
 }
 
 func (c *Chrome) OpenExternalAdmin() {
 	if ctx := c.currentWindow(); ctx != nil {
-		runtime.BrowserOpenURL(ctx, c.adminURL)
+		_, admin := c.resolve()
+		runtime.BrowserOpenURL(ctx, admin)
 	}
 }
 
@@ -68,7 +72,9 @@ func (c *Chrome) OpenExternalAdmin() {
 // 拖拽与边缘缩放按 v2.16 消息协议在本脚本内复刻（Wails 运行时不在 relay 页面）；
 // 主题取自页面 body 背景色。
 const chromebarScript = `(function(){
-  if (document.getElementById('dsh-remote-chromebar')) return;
+  if (document.getElementById('dsh-station-chromebar')) return;
+  // 只在本机 relay 页面注入；独立模式的状态页（wails 资产来源）自带轻量布局。
+  if (location.origin !== '__RELAY_ORIGIN__') return;
   var RELAY='__RELAY_URL__', ADMIN='__ADMIN_URL__';
   var call=function(name){return function(){
     // Wails 运行时只注入资产服务器主页面，relay 页面上没有 window.go；
@@ -79,7 +85,7 @@ const chromebarScript = `(function(){
     if(w&&w.postMessage) w.postMessage('C'+JSON.stringify(payload));
   }};
   var bar=document.createElement('div');
-  bar.id='dsh-remote-chromebar';
+  bar.id='dsh-station-chromebar';
   bar.style.cssText='--wails-draggable:drag;position:fixed;top:0;left:0;right:0;height:36px;z-index:2147483000;display:flex;align-items:center;padding:0 4px;font:12.5px/1 "Segoe UI","Microsoft YaHei",system-ui,sans-serif;user-select:none;background:var(--dshrc-bg);color:var(--dshrc-fg);border-bottom:1px solid var(--dshrc-border)';
   var applyTheme=function(){
     var bg=[27,27,27], dark=true;
@@ -107,7 +113,7 @@ const chromebarScript = `(function(){
   }
   bar.appendChild(logo);
   var title=document.createElement('span');
-  title.textContent='dsh-remote';
+  title.textContent='DSH 工作站';
   title.style.cssText='font-weight:600;margin-right:10px;white-space:nowrap';
   bar.appendChild(title);
   var panels=[];
@@ -234,11 +240,22 @@ func buildChromeBarScript(relayURL, adminURL string) string {
 	if err != nil {
 		logoLiteral = []byte(`''`)
 	}
+	origin := relayOrigin(relayURL)
 	return strings.NewReplacer(
 		"__RELAY_URL__", relayURL,
+		"__RELAY_ORIGIN__", origin,
 		"__ADMIN_URL__", adminURL,
 		"__LOGO_SVG__", string(logoLiteral),
 	).Replace(chromebarScript)
+}
+
+// relayOrigin 取 relay URL 的 scheme://host 部分，用于注入脚本的来源守卫。
+func relayOrigin(relayURL string) string {
+	parsed, err := url.Parse(relayURL)
+	if err != nil {
+		return ""
+	}
+	return parsed.Scheme + "://" + parsed.Host
 }
 
 func injectChromeBar(ctx context.Context, relayURL, adminURL string) {

@@ -1,11 +1,11 @@
 ================================================================================
-  dsh-remote —— 用手机 / 异地电脑通过浏览器远程指挥这台机器上的 dsh
+  dsh-station —— 用手机 / 异地电脑通过浏览器远程指挥这台机器上的 dsh
 ================================================================================
 
 解压后目录里应该有这些东西（启动文件按平台只有对应的那一组）：
 
   【Windows 包】
-  dsh-remote.exe                   Windows 启动程序，双击它就行（常驻通知区域）
+  dsh-station.exe                   Windows 启动程序，双击它就行（常驻通知区域）
   start.ps1                      Windows 的另一条路：PowerShell 7 脚本
 
   【Linux / macOS 包】
@@ -13,15 +13,15 @@
 
   【三个平台都有】
   README.txt                     本文件
-  dsh-remote.config.example.json   配置示例（不改也能用）
+  dsh-station.config.example.json   配置示例（不改也能用）
   dist/                          程序本体
   plugins/                       随附的 10 个第三方插件安装目录
   node_modules/                  依赖，含随包携带的 dsh
 
 【注意】包是分平台、分变体的，文件名里写了平台和变体（如
-        dsh-remote-0.0.1-win-x64-core.zip）。node_modules 里有只对应当前平台的
-        二进制，拿到别的平台上是跑不了的。core 与 full 是同一个程序，core 不带
-        Office 文档预览的转换引擎（打开 Office 预览会提示转换不可用）。
+        dsh-station-0.0.1-win-x64-lite.zip）。node_modules 里有只对应当前平台的
+        二进制，拿到别的平台上是跑不了的。lite（轻量版）与 full（完整版）是同一个
+        程序，lite 不带 Office 文档预览的转换引擎（打开 Office 预览会提示转换不可用）。
 
 
 --------------------------------------------------------------------------------
@@ -41,9 +41,9 @@
 2. 启动（Windows）
 --------------------------------------------------------------------------------
 
-把压缩包整个解压出来，然后双击目录里的 dsh-remote.exe。就这两步。
+把压缩包整个解压出来，然后双击目录里的 dsh-station.exe。就这两步。
 
-双击之后不会出现黑窗口。dsh-remote.exe 会在任务栏右下角的通知区域（托盘）放一个
+双击之后不会出现黑窗口。dsh-station.exe 会在任务栏右下角的通知区域（托盘）放一个
 图标，dsh、控制台、隧道连接器三个进程都跑在它下面。图标一开始可能被折叠在「^」
 里，点开「^」能看到，也可以把它拖出来常驻显示。
 
@@ -70,13 +70,13 @@
 第一次运行还没有管理员账号时，图标会弹一条通知提醒你去设置，点那条通知就会打开
 设置页。除此之外本程序不会自己打开浏览器，地址都要你自己点。
 
-改过 dsh-remote.config.json 里的端口的话，菜单里那两项会按你配的端口走。
+改过 dsh-station.config.json 里的端口的话，菜单里那两项会按你配的端口走。
 
 日志在哪：托盘模式没有控制台，原本打印在窗口里的东西全部写进
 
-    <home>\dsh-remote.log       home 默认是 C:\Users\你的用户名\.dsh-remote
+    <home>\dsh-station.log       home 默认是 C:\Users\你的用户名\.dsh-station
 
-它涨到 2 MB 就会自动改名成 dsh-remote.log.1 再重开一个，最多占 4 MB，不会一直长。
+它涨到 2 MB 就会自动改名成 dsh-station.log.1 再重开一个，最多占 4 MB，不会一直长。
 菜单里的「查看日志」打开的就是这个文件。
 
 没装 Node.js 的话，双击时会弹一个对话框告诉你去 https://nodejs.org 装，不会一
@@ -93,7 +93,7 @@
 PowerShell 7，可以用 start.ps1。它在终端里前台运行，按 Ctrl+C 结束。
 它需要 PowerShell 7；系统自带的是 Windows PowerShell 5.1，不是同一个东西，
 没有的话得到 https://aka.ms/powershell 装一个 —— 这也正是本包额外准备一个
-dsh-remote.exe 的原因。
+dsh-station.exe 的原因。
 
 【注意】start.ps1 不能双击运行。双击 .ps1 是用记事本打开它，不是执行它。
         Windows 对 .ps1 的默认设定就是这样，这不是本包的问题。
@@ -133,7 +133,7 @@ dsh-remote.exe 的原因。
 
 第一次启动时还没有管理员账号，管理界面暂时不能登录。
 
-双击 dsh-remote.exe 启动的话，托盘图标会弹一条「还没有设置完成」的通知，点它就会
+双击 dsh-station.exe 启动的话，托盘图标会弹一条「还没有设置完成」的通知，点它就会
 打开设置页；用 start.ps1 / start.sh 启动的话，终端里会打印同一个地址，形如：
 
     http://127.0.0.1:30809
@@ -177,16 +177,16 @@ Ctrl+C。两种方式都会让 dsh、控制台、隧道连接器三个进程一�
 5. 卸载插件后重新安装
 --------------------------------------------------------------------------------
 
-dsh-remote 的功能插件随包放在 plugins 目录中。第一次启动会默认安装；以后配套升级只
+dsh-station 的功能插件随包放在 plugins 目录中。第一次启动会默认安装；以后配套升级只
 升级仍然安装的插件，并保留 Bundle 和组件的停用状态。你在 dsh 插件页卸载的插件不会
 被 launcher 自动补回。
 
 要恢复已卸载的插件，请在 dsh 的「添加插件」中选择这个发行包内对应插件目录的绝对
 路径，例如：
 
-  Windows:  C:\工具\dsh-remote\plugins\remote-experience
-  Linux:    /opt/dsh-remote/plugins/remote-experience
-  macOS:    /Applications/dsh-remote/plugins/remote-experience
+  Windows:  C:\工具\dsh-station\plugins\remote-experience
+  Linux:    /opt/dsh-station/plugins/remote-experience
+  macOS:    /Applications/dsh-station/plugins/remote-experience
 
 plugins/catalog.json 是发行清单，plugins/README.txt 有同样的简要提示；不要选择这两个
 文件，也不要只选择 plugins 根目录。每个子目录都是一个可独立安装的介质，目录名与
@@ -197,8 +197,8 @@ plugins/catalog.json 是发行清单，plugins/README.txt 有同样的简要提�
 6. 配置文件（可选，不改也能跑）
 --------------------------------------------------------------------------------
 
-把 dsh-remote.config.example.json 复制成 dsh-remote.config.json 再改。
-文件必须和 dsh-remote.exe / start.ps1 / start.sh 放在同一个目录里。JSON 里写不了注释，所以字段说明放在这儿：
+把 dsh-station.config.example.json 复制成 dsh-station.config.json 再改。
+文件必须和 dsh-station.exe / start.ps1 / start.sh 放在同一个目录里。JSON 里写不了注释，所以字段说明放在这儿：
 
   dsh.port        本机 dsh 监听的端口，默认 3080。
                   它永远只监听 127.0.0.1，外面进不来。
@@ -207,12 +207,12 @@ plugins/catalog.json 是发行清单，plugins/README.txt 有同样的简要提�
                   只想自己本机用就改成 127.0.0.1。
   relay.slug      这台机器在控制台上的名字，只能用小写字母、数字和连字符。
                   删掉这一行就用本机的计算机名。
-  home            存放本机身份与数据库的目录，默认 ~/.dsh-remote。
-                  托盘模式的日志文件 dsh-remote.log 也放在这里。
+  home            存放本机身份与数据库的目录，默认 ~/.dsh-station。
+                  托盘模式的日志文件 dsh-station.log 也放在这里。
 
 还有几个一般用不到的字段，需要时再加：
 
-  dsh.profile     dsh 的 profile 名，默认 dsh-remote-web。别改，除非你清楚后果。
+  dsh.profile     dsh 的 profile 名，默认 dsh-station-web。别改，除非你清楚后果。
   dsh.extraArgs   透传给 dsh 的额外命令行参数，字符串数组，默认 []。
   relay.data      SQLite 数据库路径，默认是 home 目录下的 relay.db。
 

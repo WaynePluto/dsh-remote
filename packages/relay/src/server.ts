@@ -174,7 +174,7 @@ export function createRelayServer(
           if (legacy.length !== 0) {
             logger.warn(
               { users: legacy.map((user: { username: string }) => user.username) },
-              'these accounts still hold a pre-scrypt password hash and cannot log in; reset each one with `dsh-remote-relay passwd`',
+              'these accounts still hold a pre-scrypt password hash and cannot log in; reset each one with `dsh-station-relay passwd`',
             )
           }
           logger.info(

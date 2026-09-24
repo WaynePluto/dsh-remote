@@ -1,4 +1,4 @@
-// dsh-remote.exe —— Windows 上的双击入口，常驻通知区域。
+// dsh-station.exe —— Windows 上的双击入口，常驻通知区域。
 //
 // Windows 双击不会执行 .ps1（会打开编辑器，下载文件还受执行策略拦截），PowerShell 7 也非预装；
 // 因此 start.ps1 会给 Node 增加前置条件，本程序把 stack 放到通知区域而非易关闭的控制台。
@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	appName         = "dsh-remote"
+	appName         = "dsh-station"
 	nodeDownloadURL = "https://nodejs.org"
 	// 只用于“没有 Node”消息；真正的检查项是
 	// 版本常量路径：packages/launcher/src/node-version.ts。
@@ -27,7 +27,7 @@ const (
 	// 按会话隔离，因此同一台机器上的不同用户不会互相阻止
 	// 各自运行自己的 stack；同一会话中的两个副本会争用
 	// 相同端口，这就是它要防止的情况。
-	singleInstanceMutexName = `Local\dsh-remote-tray-single-instance`
+	singleInstanceMutexName = `Local\dsh-station-tray-single-instance`
 
 	// scripts/pack.mjs 写入 zip 前会运行此模式。windowsgui 二进制文件
 	// 不能通过观察控制台输出做冒烟测试，因此该模式会
@@ -50,13 +50,13 @@ func runTray() int {
 
 	mutex, alreadyRunning, err := acquireSingleInstance(singleInstanceMutexName)
 	if err != nil {
-		messageBox("无法判断 dsh-remote 是不是已经在运行了："+err.Error(), appName, mbIconError)
+		messageBox("无法判断 dsh-station 是不是已经在运行了："+err.Error(), appName, mbIconError)
 		return 1
 	}
 	defer syscall.CloseHandle(mutex)
 	if alreadyRunning {
 		messageBox(
-			"dsh-remote 已经在运行了。\n\n"+
+			"dsh-station 已经在运行了。\n\n"+
 				"看一眼任务栏右下角的通知区域（可能被折叠在「^」里），\n"+
 				"右键它的图标就能打开控制台、停止或退出。",
 			appName,
@@ -72,7 +72,7 @@ func runTray() int {
 	}
 	executable, err := os.Executable()
 	if err != nil {
-		executable = filepath.Join(root, "dsh-remote.exe")
+		executable = filepath.Join(root, "dsh-station.exe")
 	}
 
 	entry := filepath.Join(root, "dist", "index.js")
@@ -91,7 +91,7 @@ func runTray() int {
 	if err != nil {
 		messageBox(
 			"没有找到 Node.js（命令 node 不存在）。\n\n"+
-				"dsh-remote 使用你本机的 Node.js 运行，请到 "+nodeDownloadURL+"\n"+
+				"dsh-station 使用你本机的 Node.js 运行，请到 "+nodeDownloadURL+"\n"+
 				"下载安装 LTS 版（"+minimumNodeVersion+" 或更高），装好后重新运行本程序。",
 			appName,
 			mbIconError,
@@ -116,7 +116,7 @@ func runTray() int {
 		return 1
 	}
 	defer log.close()
-	log.printf("dsh-remote 托盘启动，程序 %s", executable)
+	log.printf("dsh-station 托盘启动，程序 %s", executable)
 	if resolved.path == "" {
 		log.printf("没有找到配置文件，按默认值推断地址：dsh 界面 %s，管理界面 %s", resolved.dshWebURL(), resolved.adminURL())
 	} else {
@@ -156,7 +156,7 @@ func runTray() int {
 	// 再次停止是空操作，也能覆盖来自其他位置的 WM_QUIT。
 	app.stack.stop()
 	app.removeIcon()
-	log.printf("dsh-remote 托盘已退出")
+	log.printf("dsh-station 托盘已退出")
 	return 0
 }
 
@@ -202,7 +202,7 @@ func runSelfCheck() int {
 }
 
 // packageRoot 返回保存本可执行文件的目录，并解析符号链接，
-// 这样通过符号链接启动的 dsh-remote.exe 仍能找到旁边真实的 dist/。
+// 这样通过符号链接启动的 dsh-station.exe 仍能找到旁边真实的 dist/。
 func packageRoot() (string, error) {
 	self, err := os.Executable()
 	if err != nil {

@@ -1,9 +1,9 @@
 /**
- * dsh-remote services 插件：管理可活过 turn、session 和 dsh 的 dev server、backend、watcher，并在 composer 上方提供可折叠 panel。
+ * dsh-station services 插件：管理可活过 turn、session 和 dsh 的 dev server、backend、watcher，并在 composer 上方提供可折叠 panel。
  * Host 半使用磁盘 registry、OS liveness/identity probe 和显式 sandbox approval；browser 半通过 shared RPC channel 读取和操作。
  * 服务 spawn 位于本模块的安全 gate 之后；所有入口最终复用 `manager` 的实现。
  *
- * @module @dsh-remote/dsh-plugin-services
+ * @module @dsh-station/dsh-plugin-services
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -32,7 +32,7 @@ export {
 export type { ServiceRecord } from './core.js'
 
 /** Cordis 插件名，出现在 dsh 插件树和诊断信息中。 */
-export const name = 'dsh-remote-services'
+export const name = 'dsh-station-services'
 
 /**
  * 所需 service。`tools` 注册五个工具，`connection` 提供 panel channel，`agents` 按 session id 找到带项目 cwd 的 live agent；sandbox/approval 按调用时可选读取，以兼容没有该 gate 的 composition。

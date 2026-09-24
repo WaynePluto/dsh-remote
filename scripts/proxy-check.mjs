@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { DSH_BIN, DSH_PROFILE, DEV_DIRECTORY, ROOT, dshPluginOverlays } from './local-config.mjs'
 import { createCheckContext, runLiveDshCheck } from './lib/check-context.mjs'
 
-const PACKAGE_ID = '@dsh-remote/dsh-plugin-proxy'
+const PACKAGE_ID = '@dsh-station/dsh-plugin-proxy'
 const ENTRY_ID = 'proxy'
 const portArgument = process.argv.indexOf('--port')
 const PORT = portArgument === -1 ? 3097 : Number(process.argv[portArgument + 1])

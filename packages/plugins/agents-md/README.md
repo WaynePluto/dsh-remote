@@ -1,6 +1,6 @@
 # 全局提示词
 
-`@dsh-remote/dsh-plugin-agents-md` 在 **设置 → 全局提示词** 中查看和编辑 `$DSH_HOME/AGENTS.md`。
+`@dsh-station/dsh-plugin-agents-md` 在 **设置 → 全局提示词** 中查看和编辑 `$DSH_HOME/AGENTS.md`。
 dsh 会在项目级提示词之前读取这个文件，本插件提供浏览器编辑入口，方便手机远程维护。
 
 ## 使用
@@ -22,7 +22,7 @@ load/save 位于 /agents-md/<endpoint>，导航图标通过局部样式增强，
 源码契约见 [工作区](../../../docs/dsh/workspace.md)，共用界面规则见 [插件机制](../../../docs/dsh/plugins.md)。
 
 ```powershell
-pnpm --filter @dsh-remote/dsh-plugin-agents-md test
+pnpm --filter @dsh-station/dsh-plugin-agents-md test
 node scripts/agents-md-check.mjs
 ```
 

@@ -1,5 +1,5 @@
 import {
-  DSH_REMOTE_PROFILE_BUNDLES,
+  DSH_STATION_PROFILE_BUNDLES,
   type ensureProfile,
 } from '../packages/launcher/src/profile.js'
 
@@ -7,7 +7,7 @@ import {
 export function developmentProfileOptions(home: string): Parameters<typeof ensureProfile>[0] {
   return {
     home,
-    profile: 'dsh-remote-web',
-    bundles: DSH_REMOTE_PROFILE_BUNDLES,
+    profile: 'dsh-station-web',
+    bundles: DSH_STATION_PROFILE_BUNDLES,
   }
 }

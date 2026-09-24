@@ -28,7 +28,7 @@ head 经典脚本先于页面模块（combo bundle）执行：
 三个形态上跑行为断言。现有 dsh 版本中，`AbortSignal.any` 被工作区导航、远程事件流、PDF
 预览等多条路径使用；因此这不是只针对目录选择器的特例。
 
-同一条 head 脚本还会建立 `__DSH_REMOTE_BROWSER_COMPAT__` 临时桥：
+同一条 head 脚本还会建立 `__DSH_STATION_BROWSER_COMPAT__` 临时桥：
 
 - 捕获 `window.error`、`unhandledrejection`、资源加载失败、`console.error` 和 `console.warn`。
 - 只保存截断后的文本、堆栈、来源、时间和重复次数；最多保留 200 条不同记录。
@@ -41,7 +41,7 @@ RPC、文件或数据库；不上传、不跨设备同步，刷新或关闭页�
 
 ## 边界
 
-- 只在 dsh-remote-web profile 生效，不改官方 web profile，不触碰 relay 转发。
+- 只在 dsh-station-web profile 生效，不改官方 web profile，不触碰 relay 转发。
 - 只垫当前 dsh 前端实际踩到的缺口；不做通用浏览器兼容层，不引入第二个 polyfill 体系。
 - 诊断不是 DevTools 镜像：被 catch 且没有 Console/错误边界报告的错误、浏览器内部网络/CSS
   警告、Worker 独立上下文和页面崩溃可能不可见。
@@ -51,7 +51,7 @@ RPC、文件或数据库；不上传、不跨设备同步，刷新或关闭页�
 
 ## 分发与管理
 
-本包不作为独立安装项分发，而是 `@dsh-remote/dsh-plugin-remote-experience`（远程体验 Bundle）的组件。停用后，现代浏览器通常无感；旧 WebKit 可能白屏，设置里的「浏览器日志」页也会消失。
+本包不作为独立安装项分发，而是 `@dsh-station/dsh-plugin-remote-experience`（远程体验 Bundle）的组件。停用后，现代浏览器通常无感；旧 WebKit 可能白屏，设置里的「浏览器日志」页也会消失。
 可在该 Bundle 详情中单独停用或重新启用本组件；安装、卸载和升级以整个远程体验 Bundle 为单位。
 launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，并保留 Bundle 与组件的停用状态；卸载后不会自动补回。
 需要重装时，在 dsh「添加插件」中填写发行包 `plugins/remote-experience` 或开发环境 `.dev/plugins/remote-experience` 的绝对目录。

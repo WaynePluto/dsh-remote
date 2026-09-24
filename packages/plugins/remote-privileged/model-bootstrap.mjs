@@ -1,7 +1,7 @@
-const MODEL_BUNDLE = '@dsh-remote/dsh-plugin-model-enhancements'
+const MODEL_BUNDLE = '@dsh-station/dsh-plugin-model-enhancements'
 const BOOTSTRAP_SERVICES = ['modelsCatalogBootstrap', 'modelCapabilitiesBootstrap']
 
-export const name = 'dsh-remote-model-bootstrap-fallback'
+export const name = 'dsh-station-model-bootstrap-fallback'
 export const inject = ['profileContext']
 
 /**

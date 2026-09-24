@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	logFileName = "dsh-remote.log"
+	logFileName = "dsh-station.log"
 
 	// 只保留一代备份，在 2 MiB 时轮换，因此两个文件最多占用
 	// 4 MiB。它优于“无限追加”（stack 连续运行数

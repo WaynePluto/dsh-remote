@@ -48,7 +48,7 @@ export function isSupportedNodeVersion(version: string, minimum: string = MINIMU
 export function assertSupportedNodeVersion(version: string = process.versions.node): void {
   if (isSupportedNodeVersion(version)) return
   throw new LauncherError(
-    `dsh-remote 需要 Node.js ${MINIMUM_NODE_VERSION} 或更高版本，当前这台机器上的是 v${version}。`,
+    `dsh-station 需要 Node.js ${MINIMUM_NODE_VERSION} 或更高版本，当前这台机器上的是 v${version}。`,
     { hint: `请到 ${NODE_DOWNLOAD_URL} 下载安装新版 Node.js，然后重新运行本程序。` },
   )
 }

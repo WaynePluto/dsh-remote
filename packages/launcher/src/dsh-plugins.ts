@@ -8,7 +8,7 @@ import { LauncherError } from './errors.js'
  * 它为所有浏览器 RPC 提供统一的 webServer context。
  */
 export const SHELL_PLUGIN_PACKAGES = [
-  '@dsh-remote/dsh-plugin-remote-privileged',
+  '@dsh-station/dsh-plugin-remote-privileged',
 ] as const satisfies readonly string[]
 
 export const SHELL_PLUGIN_PACKAGE_NAMES: readonly string[] = SHELL_PLUGIN_PACKAGES

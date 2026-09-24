@@ -3,7 +3,7 @@ import { createPluginBuildConfig } from '../../plugin-build/index.mjs'
 
 export default defineConfig(
   createPluginBuildConfig({
-    id: '@dsh-remote/dsh-plugin-chat-scroll',
+    id: '@dsh-station/dsh-plugin-chat-scroll',
     entry: ['src/index.ts'],
     hostDeps: { neverBundle: [/^@deepseek-ai\//] },
     client: true,

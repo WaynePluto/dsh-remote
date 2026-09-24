@@ -1,4 +1,4 @@
-import type { MembershipHub } from '@dsh-remote/protocol'
+import type { MembershipHub } from '@dsh-station/protocol'
 import { DEFAULT_RELAY_HOST, isLoopbackBindHost } from './config.js'
 import { DSH_BIND_HOST } from './dsh.js'
 import { LAUNCHER_VERSION } from './version.js'
@@ -152,7 +152,7 @@ export function renderBanner(options: BannerOptions): string {
     { mark: '✓', label: 'dsh 已就绪', detail: `${DSH_BIND_HOST}:${String(options.dshPort)}` },
     { mark: '✓', label: `${machine} 的控制台已启动`, detail: `${relayHost}:${relayPort}` },
   ]
-  const head = ['', `  dsh-remote ${options.version ?? LAUNCHER_VERSION}`, '']
+  const head = ['', `  dsh-station ${options.version ?? LAUNCHER_VERSION}`, '']
   const tail = ['', '  按 Ctrl+C 退出', '']
 
   if (options.adminReady === false) {

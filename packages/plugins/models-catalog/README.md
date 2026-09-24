@@ -1,4 +1,4 @@
-# @dsh-remote/dsh-plugin-models-catalog
+# @dsh-station/dsh-plugin-models-catalog
 
 在 dsh 的**设置 → 模型**页底部加一块面板：读 [models.dev](https://models.dev/api.json)，
 把 dsh 内置目录里还没有的模型列出来，用户确认后写进 dsh 自己的设置；等 dsh 升级带上了
@@ -53,7 +53,7 @@ launcher 会让 profile 插件介质中的 pi-ai 链接到 dsh 实际使用的�
 | `sourceUrl` | `https://models.dev/api.json` | 数据源。指向内网镜像是绕开出网限制的一种办法。 |
 
 **代理不在这里配。** 本插件用普通的全局 `fetch`，出网代理由
-[`@dsh-remote/dsh-plugin-proxy`](../proxy/README.md)（设置 → 代理）统一提供：那里配了就自动走，
+[`@dsh-station/dsh-plugin-proxy`](../proxy/README.md)（设置 → 代理）统一提供：那里配了就自动走，
 没配就直连。一个进程级出口比每个插件各配一份干净，也保证本插件不会出现「dsh 连不上网但它能连上」这种怪事。
 
 配置 `sourceUrl` 的三种途径，按推荐顺序：
@@ -95,14 +95,14 @@ launcher 会让 profile 插件介质中的 pi-ai 链接到 dsh 实际使用的�
 ## 开发
 
 ```powershell
-pnpm --filter @dsh-remote/dsh-plugin-models-catalog build
+pnpm --filter @dsh-station/dsh-plugin-models-catalog build
 # 沙箱/受限环境里 vitest 的 forks 池会 spawn EPERM，用 threads 池：
-pnpm --filter @dsh-remote/dsh-plugin-models-catalog exec vitest run --pool=threads
+pnpm --filter @dsh-station/dsh-plugin-models-catalog exec vitest run --pool=threads
 ```
 
 ## 分发与管理
 
-本包不作为独立安装项分发，而是 `@dsh-remote/dsh-plugin-model-enhancements`（模型增强 Bundle）的组件。
+本包不作为独立安装项分发，而是 `@dsh-station/dsh-plugin-model-enhancements`（模型增强 Bundle）的组件。
 模型目录与模型能力共同参与 `llm-pi-ai` 启动屏障，当前不支持在 Bundle 详情中单独关闭这两行；需要停用时应停用整个模型增强 Bundle。停用后，模型目录更新入口消失；已应用的模型条目保留。
 安装、卸载和升级也以整个模型增强 Bundle 为单位。launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，并保留停用状态；卸载后不会自动补回。
 需要重装时，在 dsh「添加插件」中填写发行包 `plugins/model-enhancements` 或开发环境 `.dev/plugins/model-enhancements` 的绝对目录。

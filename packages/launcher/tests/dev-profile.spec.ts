@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { developmentProfileOptions } from '../../../scripts/dev-profile.js'
-import { DSH_REMOTE_PROFILE_BUNDLES, ensureProfile, profileDirectory } from '../src/profile.js'
+import { DSH_STATION_PROFILE_BUNDLES, ensureProfile, profileDirectory } from '../src/profile.js'
 
 const homes: string[] = []
 
@@ -23,8 +23,8 @@ describe('development profile bootstrap', () => {
     const options = developmentProfileOptions(home)
     expect(options).toEqual({
       home,
-      profile: 'dsh-remote-web',
-      bundles: DSH_REMOTE_PROFILE_BUNDLES,
+      profile: 'dsh-station-web',
+      bundles: DSH_STATION_PROFILE_BUNDLES,
     })
   })
 

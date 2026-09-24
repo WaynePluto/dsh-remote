@@ -5,7 +5,7 @@ import type { Logger } from 'pino'
 import {
   TUNNEL_CONTROL_PATH,
   TUNNEL_STREAM_PATH,
-} from '@dsh-remote/protocol'
+} from '@dsh-station/protocol'
 import { AUTH_PATH_PREFIX } from '../admin/auth-app.js'
 import {
   ADMIN_PATH_PREFIX,
@@ -194,8 +194,15 @@ export function createBrowserServer(
       returnTo: req.url ?? '/',
     }
 
-    // 账号存在前只允许通过 loopback socket 和 loopback Host 打开设置向导。
+    // 账号存在前：设置向导只接管管理页、登录页和 /_setup 自身（且仅 loopback）；
+    // 本机业务请求按「loopback socket + loopback Host 免登录」的既有语义直接放行，
+    // 首次打开不需要先创建管理员——只有使用远程能力（管理页）时才被引导完成设置。
     const setupPending = browserAuth !== undefined && !relayInitialized()
+    const setupOwned = setupPending
+      ? isSetupPath(path.pathname)
+        || isAdminPath(path.pathname)
+        || path.pathname.startsWith(`${AUTH_PATH_PREFIX}/`)
+      : isSetupPath(path.pathname)
     if (setupPending || isSetupPath(path.pathname)) {
       if (browserAuth === undefined) {
         sendHttp(res, 404, 'not found')
@@ -214,8 +221,12 @@ export function createBrowserServer(
         res.end()
         return
       }
-      await setupWizard(req, res)
-      return
+      if (setupOwned) {
+        await setupWizard(req, res)
+        return
+      }
+      // setupPending 的本机业务请求继续走下方流程：
+      // authorize 对 loopback 请求直接豁免，不需要账号。
     }
 
     // 成员端口保留认证页面，使登录后仍能回到原本要访问的机器。
@@ -296,12 +307,15 @@ export function createBrowserServer(
     head: Buffer,
   ): Promise<void> {
     let setCookieHeaders: readonly string[] = []
-    // 没有管理员的 relay 无法授权浏览器 socket。
-    if (browserAuth !== undefined && !relayInitialized()) {
-      rejectSocket(socket, 503, 'relay setup is not complete')
-      return
-    }
-    if (browserAuth === undefined) {
+    // 没有管理员的 relay 无法授权浏览器 socket：远程 socket 依旧拒绝，
+    // 本机 loopback 的 WebSocket（内置窗口的 /api/remote.mux）按免登录语义放行。
+    const setupPending = browserAuth !== undefined && !relayInitialized()
+    if (setupPending) {
+      if (!isLoopbackBrowserRequest(req)) {
+        rejectSocket(socket, 503, 'relay setup is not complete')
+        return
+      }
+    } else if (browserAuth === undefined) {
       if (!isLoopbackBrowserRequest(req)) {
         rejectSocket(socket, 503, 'browser authentication is not configured')
         return

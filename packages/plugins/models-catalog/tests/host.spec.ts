@@ -90,7 +90,7 @@ beforeEach(() => {
 
 describe('reaching the source', () => {
   it('reads through the process-wide dispatcher, carrying no proxy option of its own', async () => {
-    // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`@dsh-remote/dsh-plugin-proxy`）
+    // 实现说明：此处记录相关接口、边界和生命周期约束。（涉及：`@dsh-station/dsh-plugin-proxy`）
     // 实现说明：此处记录相关接口、边界和生命周期约束。
     // 与 dsh 的行为一致。
     const service = mount({ 'llm-pi-ai': { providers: { anthropic: {} } }, 'models-catalog': { overlays: {} } })

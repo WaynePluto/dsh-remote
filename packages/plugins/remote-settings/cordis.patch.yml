@@ -1,4 +1,4 @@
-# dsh-remote 的受管 Bundle patch 层；package.json 的 dsh.bundle.patch 指向本文件，
+# dsh-station 的受管 Bundle patch 层；package.json 的 dsh.bundle.patch 指向本文件，
 # 由 profile 的 bundles 数组装载（层序：Bundle → profile patch → home patch → --patch）。
 #
 # 自 remote-privileged 拆出的 ownsHost 部分；connection 的 webServer 注入留在

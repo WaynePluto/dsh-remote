@@ -1,4 +1,4 @@
-# Caddyfile —— 给 dsh-remote 集线器（hub）前置 TLS 的示例
+# Caddyfile —— 给 dsh-station 集线器（hub）前置 TLS 的示例
 #
 # 需要替换的占位符：
 #   dsh.example.com      换成你自己的域名
@@ -11,7 +11,7 @@
 # ---------------------------------------------------------------------------
 # 前提：relay 必须以「域名模式」运行
 # ---------------------------------------------------------------------------
-# 域名模式 = 配置文件 /etc/dsh-remote/dsh-remote.config.json 的
+# 域名模式 = 配置文件 /etc/dsh-station/dsh-station.config.json 的
 # relay.host 写 127.0.0.1，并加上 "domain": "dsh.example.com"
 # （对应 relay 启动参数 --domain <域名> --scheme https，
 #   packages/launcher/src/relay.ts）。只有这时 relay 才会：
@@ -57,7 +57,7 @@
 	# Caddy 的 reverse_proxy 默认就是保留原始 Host，所以这里什么都不用写。
 	# 千万不要加 `header_up Host {upstream_hostport}` —— 那会让所有请求变成 404。
 	#
-	# WebSocket 升级（dsh 的 /api/remote.mux，以及 dsh-remote 的
+	# WebSocket 升级（dsh 的 /api/remote.mux，以及 dsh-station 的
 	# /_tunnel/control、/_tunnel/stream）Caddy 默认就能正确转发，不需要额外配置。
 	#
 	# dsh 的前端插件走 combo 路由 /plugins/??a/client.js,b/client.js&rev=…，

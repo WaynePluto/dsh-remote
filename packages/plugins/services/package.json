@@ -1,5 +1,5 @@
 {
-  "name": "@dsh-remote/dsh-plugin-services",
+  "name": "@dsh-station/dsh-plugin-services",
   "version": "0.0.2-20260922",
   "description": "为模型和用户提供可跨会话认领的常驻服务管理。",
   "license": "MIT",
@@ -52,6 +52,6 @@
     "@types/react": "18.3.31",
     "react": "18.3.1",
     "vitest": "4.1.11",
-    "@dsh-remote/plugin-ui": "workspace:0.0.2-20260922"
+    "@dsh-station/plugin-ui": "workspace:0.0.2-20260922"
   }
 }

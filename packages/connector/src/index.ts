@@ -1,5 +1,5 @@
 /**
- * @dsh-remote/connector —— 跑在被控机上的反向隧道连接器。
+ * @dsh-station/connector —— 跑在被控机上的反向隧道连接器。
  *
  * 职责（见 docs/03-architecture.md §4）：
  *   - 拨出控制信道到 relay，指数退避重连

@@ -10,17 +10,20 @@
 - [x] 密码与 TOTP、JWT/refresh cookie、登录限流、会话吊销和安全审计。
 - [x] 每台机器运行 dsh、relay、connector，支持远程入口与多机器端口路由。
 - [x] dsh 首页 token 交换，远程设置与网页内目录选择。
-- [x] 共用标准 DSH_HOME，专属 dsh-remote-web profile 与插件产物检查。
+- [x] 共用标准 DSH_HOME，专属 dsh-station-web profile 与插件产物检查。
 - [x] Windows 托盘、浏览器初始化、开机自启动与日志轮转。
-- [x] Windows Wails v2 桌面预览壳：可附着现有 30809 开发栈，HTTP 302 进入真实 relay origin；紧凑窗口菜单、独立托盘和 dsh-remote 图标已实现，Go 自动检查通过。当前明确为未完成网络/权限隔离的开发预览，不进入正式发行。
-- [ ] 桌面预览实机交互验收：窗口内主页/管理切换、外部浏览器回退（当前为默认浏览器，Chrome 优先待 S4 移植）、隐藏与 X 关闭、重复启动不重复启动栈已由实机驱动验收通过；托盘右键/双击/打开/退出与 Explorer 重启恢复待手动验收。真实 `/api/remote.mux` 与流式回复仍需单独验证。
-- [x] Windows x64、Linux x64、macOS arm64 分平台绿色包与构建检查。
+- [x] Windows Wails v2 桌面应用：独立模式托管自有后台（launcher `--desktop` 状态行契约、实例锁、随包/系统 Node 发现、Job Object 崩溃回收），attach 开发模式保留；自绘标题栏、托盘（含后台启停/壳自重启恢复）、通知管道（共享令牌握手）与 dsh-station 图标已实现。原生网络/权限隔离（S1.3）仍未完成，不得作为通过安全验收的发行版。
+- [x] 桌面独立模式 Windows 实机验收（2026-09-25，隔离数据 + 随包 Node）：双击启动 → 状态持有 → dsh Web UI 完整渲染（token 交换、工作区、模型选择器）；强制杀壳后 Job Object 4 秒回收全部 4 个后台子进程；重复启动被单实例互斥拒绝。托盘交互（右键/双击/启动/停止/重启后台、Explorer 重启恢复）与通知点击定位会话仍待手动验收。
+- [x] 首次免设置（D23）：relay 未初始化时 loopback 业务直达 dsh，仅管理页（`/_admin`）与登录页被引导到设置向导；非 loopback 访问仍一律拒绝。已在桌面独立模式实机验证（无管理员首次打开直接进入 dsh）。
+- [x] 项目改名 dsh-station（D24）：包名、profile（dsh-station-web）、数据目录（~/.dsh-station）、Go module、图标与用户文案（DSH 工作站）完成迁移；旧 `~/.dsh-remote` 与旧 profile 首次运行整体复制迁移；旧配置文件名兼容读取；relay.db 迁移合并为单一 CREATE（旧库经 user_version=4 无操作兼容，测试锁定）。
+- [x] Windows x64、Linux x64、macOS arm64 分平台服务版 zip（原绿色包）与构建检查。
+- [x] 桌面版打包管线（S8 最小集）：`scripts/pack-desktop.mjs` 产出 win 便携 zip + NSIS 安装包（CI 装 NSIS）、mac .app zip、linux deb + 便携 zip，各含 lite/full 变体；完整版附带固定版本 Node（官方 SHA-256 校验清单 `packaging/desktop-node.json`）。Windows 双变体已实打并通过自检；mac/linux 由 CI 原生 runner 构建，实机验收待 S10。CI release 工作流改为四路构建 + 汇总发布。
 - [x] manifest 与应用图标。
 - [x] 20 个功能组件，按 4 个组合包与 6 个独立包随发行版提供，功能入口见插件索引。
 - [x] concise 与 concise-ptc 两个简洁预设，PTC 复用官方工具执行链。
 - [x] 固定 YOLO，用户提问保留人工回答。
 - [x] dsh 0.1.7 能力吸收：25 个插件包补显示元数据（locale/{en,zh}.json 的 meta + exports/files）；launcher 检测 dsh Bundle 静默跳过诊断并响亮警告；peer 准入与打包约定写入 docs/dsh/plugins.md。
-- [ ] dsh 0.1.7-rc.1 适配；代码迁移与各冒烟 check 已完成，仍需真实链路验收（登录 → 发消息 → 流式输出），复核入口见 [源码依据](02-dsh-facts.md)。
+- [x] dsh 0.1.7-rc.1 适配；代码迁移与各冒烟 check 已完成，真实链路验收（登录 → 发消息 → 流式输出）已于 2026-09-24 在桌面预览壳内置窗口实测通过（会话日志记录完整轮次，流式经 relay 长连接），复核入口见 [源码依据](02-dsh-facts.md)。
 - [ ] 上游已知问题：dsh 0.1.7-rc.1 停用 yolo-mode Bundle 时 session-controller 重挂载竞态（file-upload Agent resolver 二次注册失败，重启可恢复；concise-mode-check 已按签名精确豁免并标注）。等上游修复后移除豁免。
 - [ ] 实机对比验收 dsh 0.1.7 原生 Open In… Explorer（`openWorkspacePath`，等待交接应答、不置前）与 remote-settings 现有通道（spawn 即返回 + 异步置前）：按结果决定收敛或保留置前兼容层（见 [工作区](dsh/workspace.md)）。
 - [x] 插件第三方化与组合分发（D20）代码已完成：20 个功能组件分为 4 个组合包与 6 个独立包，首次默认安装；配套升级所有仍安装项并保留 Bundle/组件停用，卸载后不补回，可从发行版 `plugins/` 或开发 `.dev/plugins/` 重装。directory-picker 独立；模型组两个启动屏障组件不可单独停用；connection 注入与模型 HMR 屏障仍为壳级 overlay。10 个 Bundle 的在线停用/启用自动检查与隔离启动已通过，实机界面验收仍见下一项及 [计划](plugin-optional-plan.md)。
@@ -76,3 +79,4 @@
 - [ ] 多用户与邀请流程。
 - [ ] 按需增加 OIDC 或 Passkey 登录。
 - [ ] Windows 代码签名、自动更新及 Linux/macOS 桌面启动体验。
+- [ ] 桌面版按平台实机验收后切换介质：win/mac 仅保留桌面版安装包，Linux 保留桌面版与服务版 zip（D21/D22）。

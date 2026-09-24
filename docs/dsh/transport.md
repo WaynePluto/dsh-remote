@@ -33,7 +33,7 @@ loopback 包括 localhost、[::1] 与 127.0.0.0/8。
 trustedHosts 必须是裸的规范 host 或 host:port；无端口条目匹配任意端口，有端口则精确匹配。
 scheme、路径、userinfo、尾部冒号、未加方括号 IPv6 等非法输入会在插件加载时抛错，IDN 使用 punycode。
 
-dsh-remote 始终原样转发 Host/Origin，并通过 --trusted-host 声明入口 authority。
+dsh-station 始终原样转发 Host/Origin，并通过 --trusted-host 声明入口 authority。
 dsh 的 Web 启动路径要求 loopback 绑定，项目也始终绑定 127.0.0.1；LAN 和公网访问走 relay。
 启动约束出处：`packages/bundle/web-app/src/startup.ts`。
 
@@ -53,7 +53,7 @@ dsh 的 Web 启动路径要求 loopback 绑定，项目也始终绑定 127.0.0.1
 | 保护范围 | API 含 WS，以及 / 和 /index.html；其余静态与插件资源不要求 dsh cookie |
 | Loopback | 也需要先交换 token |
 
-项目链路：launcher 截获 token → DSH_REMOTE_DSH_TOKEN 传给 connector → dsh-auth 帧上报 relay。
+项目链路：launcher 截获 token → DSH_STATION_DSH_TOKEN 传给 connector → dsh-auth 帧上报 relay。
 relay 在认证后的首页 401 上代发一次重定向，不改 API 的 401；token 不写库、不进日志。
 
 ## 远程设置与 OwnsHost

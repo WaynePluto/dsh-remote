@@ -13,7 +13,7 @@ dsh 永远只监听 127.0.0.1。connector 主动拨出，不需要在目标机�
 
 ### 设备
 
-- connector 生成 Ed25519 密钥，私钥存于 dsh-remote home 的 device.key，POSIX 0600，Windows 收紧 ACL。
+- connector 生成 Ed25519 密钥，私钥存于 dsh-station home 的 device.key，POSIX 0600，Windows 收紧 ACL。
 - 管理员签发一次性注册令牌，固定 5 分钟有效，数据库只保存哈希。
 - 首次注册提交令牌、公钥和机器名；之后使用随机挑战签名认证。
 - 管理页“停止 X 并移除”会立即断开该机器；connector 致命退出，launcher 关闭整套进程。
@@ -69,7 +69,7 @@ token 只保存在当前控制信道的内存状态中，不写数据库或日�
 | 路径 | 内容 |
 |---|---|
 | /manifest.webmanifest | 构建期固定 manifest |
-| /_icon/dsh-remote.svg、.ico、.png | 构建期固定图标 |
+| /_icon/dsh-station.svg、.ico、.png | 构建期固定图标 |
 
 这些资源不读数据库、不反射机器状态、不进隧道。图标不占用 dsh 的 favicon 路径。
 新增公开资源前必须确认内容不会因用户、机器或配置变化。
@@ -80,8 +80,8 @@ token 只保存在当前控制信道的内存状态中，不写数据库或日�
 - 泛域名证书使用 DNS-01；配置 HSTS：max-age=31536000、includeSubDomains。
 - Linux systemd 使用个人普通用户运行，不使用 root；个人模式有意不启用 `ProtectHome`、`NoNewPrivileges`、`ProtectSystem` 和 `ReadWritePaths`，
   因而 dsh 看到该用户本来能看到的家目录与系统路径。systemd 配置和迁移步骤见 [部署说明](../deploy/README.md)。
-- 定期备份 `~/.dsh-remote`、设备密钥及 `~/.dsh`；SQLite WAL 模式要求 relay 数据库目录可写。
-- sudo 由系统 sudoers 决定权限和凭据缓存；密码只由用户在交互终端输入，dsh-remote 不保存、不自动续期、不配置免密 sudo。
+- 定期备份 `~/.dsh-station`、设备密钥及 `~/.dsh`；SQLite WAL 模式要求 relay 数据库目录可写。
+- sudo 由系统 sudoers 决定权限和凭据缓存；密码只由用户在交互终端输入，dsh-station 不保存、不自动续期、不配置免密 sudo。
 - 明文局域网 HTTP 仅用于显式开发联调，会使用非 Secure cookie并打印高风险警告；域名模式下本机 loopback HTTP 是独立的本机管理入口，不等于允许局域网访问。
   同网段监听者可能取得密码与会话，不应作为公网部署方式。
 - 发行包排除 pnpm 的 .modules.yaml 与 .pnpm/lock.yaml 等 registry 账本，避免泄露内网镜像地址。

@@ -8,7 +8,7 @@ import type { SettingsPathOp } from '@deepseek-ai/dsh-settings'
 import { PI_AI_NAMESPACE, SUPPORTED_APIS } from './shared.js'
 import type { SupportedApi } from './shared.js'
 
-export const name = 'dsh-remote-model-capabilities'
+export const name = 'dsh-station-model-capabilities'
 
 /** models-catalog overlay 在 llm-pi-ai 启动前等待的服务。 */
 export const BOOTSTRAP_SERVICE = 'modelCapabilitiesBootstrap'

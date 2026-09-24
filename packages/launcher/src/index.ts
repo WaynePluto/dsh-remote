@@ -1,5 +1,5 @@
 /**
- * @dsh-remote/launcher —— 被控机上的双击入口。
+ * @dsh-station/launcher —— 被控机上的双击入口。
  *
  * 职责（见 docs/06-packaging.md §3）：
  *   - 检测 Node 版本
@@ -20,8 +20,11 @@
 import process from 'node:process'
 import { join } from 'node:path'
 import { Command } from 'commander'
-import type { DshRestartStatus, MembershipHub } from '@dsh-remote/protocol'
+import type { DshRestartStatus, MembershipHub } from '@dsh-station/protocol'
 import { renderBanner } from './banner.js'
+import { createDesktopLink, type DesktopLink, type DesktopPhase, type DesktopUrls } from './desktop-link.js'
+import { acquireInstanceLock, type InstanceLock } from './instance-lock.js'
+import { migrateLegacyData } from './migration.js'
 import { CONNECTOR_CHILD, DSH_CHILD, RELAY_CHILD } from './children.js'
 import { loadLauncherConfig } from './config.js'
 import { connectorArguments, resolveConnectorEntry } from './connector.js'
@@ -54,7 +57,7 @@ import { JWT_SECRET_ENV_NAME, jwtSecretFilePath, loadOrCreateJwtSecret } from '.
 import { isSelfHub, membershipFilePath, readMembership } from './membership.js'
 import { assertSupportedNodeVersion } from './node-version.js'
 import { DISTRIBUTION_PACKAGE_NAMES } from './plugin-catalog.js'
-import { DSH_REMOTE_PROFILE_BUNDLES, ensureProfile, profileDirectory, resolveDshHome } from './profile.js'
+import { DSH_STATION_PROFILE_BUNDLES, ensureProfile, profileDirectory, resolveDshHome } from './profile.js'
 import { resolvePluginMediaDirectory, synchronizePluginDistributions } from './plugin-lifecycle.js'
 import { relayArguments, resolveRelayEntry } from './relay.js'
 import { relayAdminInitialized } from './relay-admin.js'
@@ -65,7 +68,7 @@ import { LAUNCHER_VERSION } from './version.js'
 
 
 function say(message: string): void {
-  console.log(`[dsh-remote] ${message}`)
+  console.log(`[dsh-station] ${message}`)
 }
 
 function describeHosts(values: readonly string[]): string {
@@ -74,7 +77,7 @@ function describeHosts(values: readonly string[]): string {
 
 function reportFailure(error: unknown): void {
   if (error instanceof LauncherError) {
-    console.error(`\n[dsh-remote] ${error.message}`)
+    console.error(`\n[dsh-station] ${error.message}`)
     if (error.hint !== undefined) console.error(`           ${error.hint}`)
     console.error('')
     return
@@ -84,15 +87,15 @@ function reportFailure(error: unknown): void {
 
 function reportChildExit(exit: ChildExit): void {
   const how = exit.signal === null ? `退出码 ${String(exit.code ?? '未知')}` : `收到信号 ${exit.signal}`
-  console.error(`\n[dsh-remote] ${exit.name} 意外退出（${how}），正在停止 dsh-remote。`)
+  console.error(`\n[dsh-station] ${exit.name} 意外退出（${how}），正在停止 dsh-station。`)
   // 启动期间退出的子进程几乎总是配置错误，而且它自己的
   // 消息会准确说明问题；launcher 摘要从来不会。
   if (exit.recent.length === 0) {
-    console.error(`[dsh-remote] ${exit.name} 没有输出任何日志，上面也就没有更多线索。`)
+    console.error(`[dsh-station] ${exit.name} 没有输出任何日志，上面也就没有更多线索。`)
     console.error('')
     return
   }
-  console.error(`[dsh-remote] ${exit.name} 最后 ${String(exit.recent.length)} 行输出：`)
+  console.error(`[dsh-station] ${exit.name} 最后 ${String(exit.recent.length)} 行输出：`)
   for (const line of exit.recent) console.error(`           ${line}`)
   console.error('')
 }
@@ -105,19 +108,50 @@ function reportChildExit(exit: ChildExit): void {
  */
 export async function run(argv: readonly string[]): Promise<number> {
   const program = new Command()
-    .name('dsh-remote')
-    .description('启动 dsh、本机控制台与 dsh-remote 隧道连接器')
+    .name('dsh-station')
+    .description('启动 dsh、本机控制台与 dsh-station 隧道连接器')
     .version(LAUNCHER_VERSION)
-    .option('--config <path>', '配置文件路径（默认读取当前目录的 dsh-remote.config.json）')
+    .option('--config <path>', '配置文件路径（默认读取当前目录的 dsh-station.config.json）')
+    .option('--desktop', '由桌面壳托管：向 stdout 输出结构化状态行，从 stdin 接收控制命令')
     .allowExcessArguments(false)
     .parse([...argv], { from: 'user' })
-  const options = program.opts<{ config?: string }>()
+  const options = program.opts<{ config?: string; desktop?: boolean }>()
+
+  const desktop: DesktopLink = createDesktopLink(argv)
+  /** 桌面状态：URL 与管理员状态一旦确定就随每次阶段上报携带。 */
+  let desktopUrls: DesktopUrls | undefined
+  let desktopAdminReady: boolean | undefined
+  const emit = (phase: DesktopPhase, detail?: string): void => {
+    desktop.emit({
+      type: 'status',
+      protocol: 1,
+      phase,
+      pid: process.pid,
+      ...detail === undefined ? {} : { detail },
+      ...desktopUrls === undefined ? {} : { urls: desktopUrls },
+      ...desktopAdminReady === undefined ? {} : { adminReady: desktopAdminReady },
+    })
+  }
 
   const { config, path: configPath } = loadLauncherConfig({
     cwd: process.cwd(),
     configPath: options.config,
   })
   say(configPath === undefined ? '没有找到配置文件，使用默认配置。' : `已读取配置 ${configPath}`)
+
+  const lock: InstanceLock = acquireInstanceLock(config.home)
+  desktopUrls = {
+    local: `http://127.0.0.1:${String(config.relay.port)}/`,
+    admin: `http://127.0.0.1:${String(config.relay.port)}/_admin`,
+    dsh: `http://127.0.0.1:${String(config.dsh.port)}/`,
+  }
+  emit('config', configPath ?? undefined)
+  migrateLegacyData({
+    home: config.home,
+    dshHome: resolveDshHome(),
+    profile: config.dsh.profile,
+    onNote: say,
+  })
 
   const membershipPath = membershipFilePath(config.home)
   const membership = readMembership(membershipPath)
@@ -130,7 +164,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   const { bootstrap } = ensureProfile({
     home: dshHome,
     profile: config.dsh.profile,
-    bundles: DSH_REMOTE_PROFILE_BUNDLES,
+    bundles: DSH_STATION_PROFILE_BUNDLES,
   })
   say(bootstrap === 'created'
     ? `已创建 dsh profile ${profileDirectory(dshHome, config.dsh.profile)}`
@@ -140,7 +174,8 @@ export async function run(argv: readonly string[]): Promise<number> {
   const pnpmCli = resolvePnpmCli()
   const pnpmShimDirectory = preparePnpmShim(join(config.home, 'runtime', 'pnpm-bin'), pnpmCli)
   const dshEnvironment = withBundledPnpmPath(process.env, pnpmCli, pnpmShimDirectory)
-  if (config.dsh.profile === 'dsh-remote-web') {
+  if (config.dsh.profile === 'dsh-station-web') {
+    emit('plugins')
     const mediaDirectory = resolvePluginMediaDirectory({ launcherDirectory: launcherDirectory() })
     const pluginSync = await synchronizePluginDistributions({
       home: dshHome,
@@ -182,7 +217,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   // 从不写入日志：此密钥会签名每个控制台会话。
   const jwtSecret = loadOrCreateJwtSecret(
     jwtSecretFilePath(config.home),
-    message => console.warn(`[dsh-remote] ${message}`),
+    message => console.warn(`[dsh-station] ${message}`),
   )
   const relayEnv: NodeJS.ProcessEnv = { ...process.env, [JWT_SECRET_ENV_NAME]: jwtSecret }
 
@@ -196,18 +231,25 @@ export async function run(argv: readonly string[]): Promise<number> {
   const supervisor = createSupervisor({
     onUnexpectedExit: (exit) => {
       reportChildExit(exit)
+      emit('failed', `${exit.name} 意外退出`)
       void shutdown(1)
     },
   })
   const shutdown = async (code: number): Promise<void> => {
     if (shuttingDown) return
     shuttingDown = true
+    emit('stopping')
     stopTrustWatcher?.()
     // 按反向启动顺序停止，使 connector 在它
     // 拨号的 relay 消失前停止拨号，并使 dsh 比两个客户端都晚退出。
     await supervisor.stopAll()
+    lock.release()
     settle?.(code)
   }
+  // 桌面壳通过 stdin 下发停止命令；CLI 模式的 stdin 无人监听，不会触发。
+  desktop.listen((command) => {
+    if (command.type === 'stop') void shutdown(0)
+  })
 
   // 在第一个子进程存在前就注册：启动期间的 Ctrl+C 也必须
   // 停止子进程，而不是让它们成为孤儿。
@@ -241,10 +283,10 @@ export async function run(argv: readonly string[]): Promise<number> {
       env: dshEnvironment,
       onLine: (line) => {
         // dsh 0.1.7 对损坏 Bundle 是「stderr 诊断 + 跳过」而非启动失败；
-        // dsh-remote 依赖全部插件在位，这里把静默降级转成响亮警告。
+        // dsh-station 依赖全部插件在位，这里把静默降级转成响亮警告。
         const skipped = skippedBundleFromLine(line)
         if (skipped !== undefined) {
-          console.error(`[dsh-remote] dsh 跳过了一个插件 Bundle（页面将缺少对应功能）：${skipped}`)
+          console.error(`[dsh-station] dsh 跳过了一个插件 Bundle（页面将缺少对应功能）：${skipped}`)
         }
         if (dshTokenSeen) return
         const token = dshTokenFromLine(line)
@@ -254,6 +296,7 @@ export async function run(argv: readonly string[]): Promise<number> {
       },
     })
   }
+  emit('dsh')
   startDshChild(trustedHosts)
 
   const ready = await waitForDsh({
@@ -262,13 +305,14 @@ export async function run(argv: readonly string[]): Promise<number> {
   })
   if (!ready) {
     if (!shuttingDown) {
-      console.error(`\n[dsh-remote] dsh 在 60 秒内没有在 127.0.0.1:${String(config.dsh.port)} 上就绪。`)
+      console.error(`\n[dsh-station] dsh 在 60 秒内没有在 127.0.0.1:${String(config.dsh.port)} 上就绪。`)
       console.error('           上面 [dsh] 开头的输出是它的原始日志；常见原因是端口被占用，或 profile 里的插件装不上。')
     }
     await shutdown(1)
     return finished
   }
 
+  emit('relay')
   supervisor.start({
     name: RELAY_CHILD,
     command: process.execPath,
@@ -293,7 +337,7 @@ export async function run(argv: readonly string[]): Promise<number> {
     }),
   ])
   if (token === undefined && !shuttingDown) {
-    console.warn('[dsh-remote] 没有从 dsh 的输出里读到登录 token；通过 relay 访问时可能会看到 dsh 自己的 401。')
+    console.warn('[dsh-station] 没有从 dsh 的输出里读到登录 token；通过 relay 访问时可能会看到 dsh 自己的 401。')
   }
 
   const startConnectorChild = (loginToken: string | undefined): void => {
@@ -317,7 +361,7 @@ export async function run(argv: readonly string[]): Promise<number> {
     try {
       writeDshRestartStatus(restartStatusPath, { ...status, at: Date.now() })
     } catch (error) {
-      console.warn(`[dsh-remote] 写入 dsh 重启状态失败：${error instanceof Error ? error.message : String(error)}`)
+      console.warn(`[dsh-station] 写入 dsh 重启状态失败：${error instanceof Error ? error.message : String(error)}`)
     }
   }
   const describeChange = (change: TrustChange): string => [
@@ -328,6 +372,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   let restartBusy = false
   let queuedChange: TrustChange | undefined
   const restartForTrust = async (change: TrustChange): Promise<void> => {
+    emit('restarting', '远程入口变更，正在重启 dsh')
     say(`远程入口变更（${describeChange(change)}），正在自动重启 dsh；期间本机的 dsh 短暂不可用。`)
     writeRestartStatus({ state: 'restarting', added: [...change.added], removed: [...change.removed] })
     try {
@@ -351,13 +396,14 @@ export async function run(argv: readonly string[]): Promise<number> {
         }),
       ])
       if (freshToken === undefined) {
-        console.warn('[dsh-remote] 重启后没有从 dsh 的输出里读到登录 token；通过 relay 访问时可能会看到 dsh 自己的 401。')
+        console.warn('[dsh-station] 重启后没有从 dsh 的输出里读到登录 token；通过 relay 访问时可能会看到 dsh 自己的 401。')
       }
       await supervisor.stop(CONNECTOR_CHILD)
       if (shuttingDown) return
       startConnectorChild(freshToken)
       writeRestartStatus({ state: 'done', added: [...change.added], removed: [...change.removed] })
       say('dsh 已自动重启完成，信任地址已更新。')
+      emit('ready')
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       writeRestartStatus({
@@ -366,7 +412,7 @@ export async function run(argv: readonly string[]): Promise<number> {
         removed: [...change.removed],
         error: message,
       })
-      console.error(`[dsh-remote] 自动重启 dsh 失败：${message}`)
+      console.error(`[dsh-station] 自动重启 dsh 失败：${message}`)
       console.error('           请右键托盘图标选择「重启」（或手动重启本程序）后重试。')
     }
   }
@@ -401,17 +447,18 @@ export async function run(argv: readonly string[]): Promise<number> {
       })
     },
     onChange: applyTrustChange,
-    onError: error => console.warn(`[dsh-remote] ${error instanceof Error ? error.message : String(error)}`),
+    onError: error => console.warn(`[dsh-station] ${error instanceof Error ? error.message : String(error)}`),
   }).close
 
   // 拒绝配置的 relay 会在几毫秒内退出；此时打印
   // banner 会把唯一有用的错误行埋掉。
+  let adminReady = false
   if (!shuttingDown) {
     // 在这里询问而不是启动时询问：新机器上 relay 会自己创建
     // 数据库，因此更早的回答会对一个尚不存在的文件说“没有管理员”。
     // 不可读数据库与缺失数据库含义相同：
     // 仍需在浏览器中完成设置。
-    const adminReady = relayAdminInitialized(config.relay.data)
+    adminReady = relayAdminInitialized(config.relay.data)
     console.log(renderBanner({
       dshPort: config.dsh.port,
       relayPort: config.relay.port,
@@ -423,6 +470,8 @@ export async function run(argv: readonly string[]): Promise<number> {
       adminReady,
     }))
   }
+  desktopAdminReady = adminReady
+  emit('ready')
   return finished
 }
 
@@ -436,10 +485,18 @@ try {
   process.exit(1)
 }
 
+const startupFailureLink = createDesktopLink(process.argv.slice(2))
 try {
   process.exitCode = await run(process.argv.slice(2))
 } catch (error) {
   reportFailure(error)
+  if (startupFailureLink.enabled) {
+    startupFailureLink.emit({
+      type: 'exit',
+      protocol: 1,
+      message: error instanceof LauncherError ? error.message : String(error),
+    })
+  }
   process.exitCode = 1
 }
 

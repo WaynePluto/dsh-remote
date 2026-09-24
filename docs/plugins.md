@@ -40,7 +40,7 @@
 
 ## 分发组合
 
-20 个功能组件以 10 个第三方 Bundle 随 dsh-remote 提供。组合包是安装、卸载和升级单位；
+20 个功能组件以 10 个第三方 Bundle 随 dsh-station 提供。组合包是安装、卸载和升级单位；
 除表中注明外，其组件行仍可在插件详情中单独停用。
 
 | 分发包 | 类型 | 包含组件或功能 |
@@ -56,7 +56,7 @@
 | files | 独立包 | 文件浏览 |
 | yolo-mode | 独立包 | 固定 YOLO |
 
-完整包名均为 `@dsh-remote/dsh-plugin-<上表名称>`。唯一不在该表中的项目扩展是壳级
+完整包名均为 `@dsh-station/dsh-plugin-<上表名称>`。唯一不在该表中的项目扩展是壳级
 [remote-privileged](../packages/plugins/remote-privileged/README.md)：它提供 connection 的
 webServer 注入和模型 Bundle 在线启停所需的稳定启动屏障，随 launcher 以 `--patch` 常驻加载，
 不可停用或卸载。
@@ -66,9 +66,9 @@ webServer 注入和模型 Bundle 在线启停所需的稳定启动屏障，随 l
 
 ## 安装、升级与停用
 
-- 新建 `dsh-remote-web` profile 时，10 个分发包通过 dsh 官方插件管理器默认安装并启用；
+- 新建 `dsh-station-web` profile 时，10 个分发包通过 dsh 官方插件管理器默认安装并启用；
   官方 `web` profile 不加载它们。
-- dsh-remote 升级时会升级所有**仍安装**的随附包，包括当前停用的 Bundle；不会改变 Bundle
+- dsh-station 升级时会升级所有**仍安装**的随附包，包括当前停用的 Bundle；不会改变 Bundle
   是否启用，也不会改回组件行的停用状态。
 - 从 dsh 插件页卸载包后，launcher 不自动补回。需要恢复时，在「添加插件」中输入随附包目录的
   绝对路径：绿色发行版使用 `<解压目录>/plugins/<包目录>`，源码开发使用

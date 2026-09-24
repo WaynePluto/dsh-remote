@@ -6,22 +6,29 @@ import (
 	"testing"
 )
 
-func TestParsePreviewOptions(t *testing.T) {
-	config, err := parsePreviewOptions([]string{"--attach", "--relay-url", "http://127.0.0.1:30810/"})
+func TestParseRunOptionsAttach(t *testing.T) {
+	config, err := parseRunOptions([]string{"--attach", "--relay-url", "http://127.0.0.1:30810/"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.relayURL != "http://127.0.0.1:30810/" || config.adminURL != "http://127.0.0.1:30810/_admin" {
+	if config.mode != modeAttach || config.relayURL != "http://127.0.0.1:30810/" || config.adminURL != "http://127.0.0.1:30810/_admin" {
 		t.Fatalf("地址解析错误: %+v", config)
 	}
-	if _, err := parsePreviewOptions([]string{"--selfcheck"}); err != nil {
+	selfCheck, err := parseRunOptions([]string{"--attach", "--selfcheck"})
+	if err != nil {
 		t.Fatalf("自检不应要求运行中的后台: %v", err)
+	}
+	if !selfCheck.selfCheck {
+		t.Fatal("自检标记丢失")
+	}
+	standalone, err := parseRunOptions([]string{"--selfcheck"})
+	if err != nil || standalone.mode != modeStandalone {
+		t.Fatalf("默认应为独立模式: %+v %v", standalone, err)
 	}
 }
 
-func TestRejectPreviewOptions(t *testing.T) {
+func TestRejectRunOptions(t *testing.T) {
 	cases := [][]string{
-		nil,
 		{"--attach", "other"},
 		{"--attach", "--relay-url", "http://localhost:30809/"},
 		{"--attach", "--relay-url", "http://127.0.0.2:30809/"},
@@ -32,9 +39,11 @@ func TestRejectPreviewOptions(t *testing.T) {
 		{"--attach", "--relay-url", "http://127.0.0.1:30809/#frag"},
 		{"--attach", "--relay-url", "http://127.0.0.1:30809/?token=secret"},
 		{"--attach", "--relay-url", "http://127.0.0.1:30809/_admin"},
+		{"--attach", "--app-dir", "C:/tmp"},
+		{"--relay-url", "http://127.0.0.1:30810/"},
 	}
 	for _, arguments := range cases {
-		if config, err := parsePreviewOptions(arguments); err == nil {
+		if config, err := parseRunOptions(arguments); err == nil {
 			t.Errorf("错误接受参数 %q: %+v", arguments, config)
 		}
 	}

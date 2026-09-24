@@ -25,10 +25,10 @@ export function resolveConnectorEntry(
   const candidates = [
     // 绿色包和 workspace 都是如此：connector 是 launcher 的真实依赖，
     // 因此两种布局都会把它放在
-    // <root>/node_modules/@dsh-remote/connector。原地启动的原因与 relay 相同，
+    // <root>/node_modules/@dsh-station/connector。原地启动的原因与 relay 相同，
     //（见 resolveRelayEntry）：复制到其他位置的 bundle 会失去
     // 包目录，因此看不到 pnpm 嵌套在其下方的依赖。
-    join(directory, '..', 'node_modules', '@dsh-remote', 'connector', 'dist', 'cli.js'),
+    join(directory, '..', 'node_modules', '@dsh-station', 'connector', 'dist', 'cli.js'),
     // Workspace，已构建：packages/launcher/{dist,src} -> packages/connector/dist。
     join(directory, '..', '..', 'connector', 'dist', 'cli.js'),
     // Workspace，仅源码。
@@ -51,7 +51,7 @@ export function resolveConnectorEntry(
  * `membership.json`，并空闲等待管理控制台将这台机器
  * 加入 hub（D16）。在这里传入它们会在启动时冻结这一选择。
  * @param entry - 已解析的 connector 入口点。
- * @param options - dsh-remote home 和本地 dsh 端口。
+ * @param options - dsh-station home 和本地 dsh 端口。
  * @returns 要传给 `node` 的参数。
  */
 export function connectorArguments(entry: ConnectorEntry, options: {

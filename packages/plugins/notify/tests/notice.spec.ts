@@ -36,13 +36,13 @@ describe('classifying how a turn ended', () => {
 
 describe('naming the project', () => {
   it('takes the last segment of either kind of path', () => {
-    expect(projectName('D:\\dev\\dsh-remote')).toBe('dsh-remote')
-    expect(projectName('/home/me/dsh-remote')).toBe('dsh-remote')
+    expect(projectName('D:\\dev\\dsh-station')).toBe('dsh-station')
+    expect(projectName('/home/me/dsh-station')).toBe('dsh-station')
   })
 
   it('ignores trailing separators', () => {
-    expect(projectName('D:\\dev\\dsh-remote\\')).toBe('dsh-remote')
-    expect(projectName('/home/me/dsh-remote//')).toBe('dsh-remote')
+    expect(projectName('D:\\dev\\dsh-station\\')).toBe('dsh-station')
+    expect(projectName('/home/me/dsh-station//')).toBe('dsh-station')
   })
 
   it('has nothing to say about a session with no directory', () => {
@@ -54,14 +54,14 @@ describe('naming the project', () => {
 
 describe('attributing the toast', () => {
   it('names the harness, the project and the conversation', () => {
-    expect(noticeTitle({ cwd: 'D:\\dev\\dsh-remote', title: '通知插件' }))
-      .toBe('DSH · dsh-remote · 通知插件')
+    expect(noticeTitle({ cwd: 'D:\\dev\\dsh-station', title: '通知插件' }))
+      .toBe('DSH · dsh-station · 通知插件')
   })
 
   it('drops the parts that are not known yet', () => {
     // 模型目录契约：此处说明 provider、协议、目录覆盖和用户条目保留。
     // 实现说明：此处记录相关接口、边界和生命周期约束。
-    expect(noticeTitle({ cwd: 'D:\\dev\\dsh-remote' })).toBe('DSH · dsh-remote')
+    expect(noticeTitle({ cwd: 'D:\\dev\\dsh-station' })).toBe('DSH · dsh-station')
     expect(noticeTitle({ title: '通知插件' })).toBe('DSH · 通知插件')
   })
 

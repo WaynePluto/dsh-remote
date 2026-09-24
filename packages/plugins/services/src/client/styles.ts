@@ -16,7 +16,7 @@ import {
   MONO as DOCK_MONO,
   SECONDARY as DOCK_SECONDARY,
   TERTIARY as DOCK_TERTIARY,
-} from '@dsh-remote/plugin-ui'
+} from '@dsh-station/plugin-ui'
 
 /** 安装日志 dialog stylesheet；每个 panel 实例只安装一份。 */
 export function installLogDialogStyles(): () => void {
@@ -46,7 +46,7 @@ export {
   summaryStyle,
   summaryTextStyle,
   titleStyle,
-} from '@dsh-remote/plugin-ui'
+} from '@dsh-station/plugin-ui'
 
 export const listStyle: CSSProperties = {
   listStyle: 'none',

@@ -42,7 +42,7 @@ type stack struct {
 	root  string
 	node  string
 	entry string
-	// 用户传给 dsh-remote.exe、再交给 launcher 的额外参数。
+	// 用户传给 dsh-station.exe、再交给 launcher 的额外参数。
 	arguments []string
 	log       *rotatingLog
 	onLine    func(string)
@@ -102,7 +102,7 @@ func (s *stack) run() {
 	}
 
 	command := exec.Command(s.node, append([]string{s.entry}, s.arguments...)...)
-	// launcher 会在工作目录查找 dsh-remote.config.json，而双击启动或通过开机自启动启动时使用的目录无法预测。
+	// launcher 会在工作目录查找 dsh-station.config.json，而双击启动或通过开机自启动启动时使用的目录无法预测。
 	command.Dir = s.root
 	command.Stdout = &lineWatcher{sink: s.log, onLine: s.onLine}
 	command.Stderr = &lineWatcher{sink: s.log, onLine: s.onLine}
@@ -114,7 +114,7 @@ func (s *stack) run() {
 		closeJob(job)
 		s.finish()
 		messageBox(
-			"启动 dsh-remote 失败：\n\n"+err.Error()+"\n\n详情见日志：\n"+s.log.path,
+			"启动 dsh-station 失败：\n\n"+err.Error()+"\n\n详情见日志：\n"+s.log.path,
 			appName,
 			mbIconError,
 		)
@@ -150,9 +150,9 @@ func (s *stack) run() {
 
 	err = command.Wait()
 	if err == nil {
-		s.log.printf("dsh-remote 已退出（退出码 0）")
+		s.log.printf("dsh-station 已退出（退出码 0）")
 	} else {
-		s.log.printf("dsh-remote 已退出：%v", err)
+		s.log.printf("dsh-station 已退出：%v", err)
 	}
 
 	s.mu.Lock()

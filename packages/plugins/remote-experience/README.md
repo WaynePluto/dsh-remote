@@ -1,6 +1,6 @@
 # 远程体验 Bundle
 
-`@dsh-remote/dsh-plugin-remote-experience` 是远程体验的整体安装、卸载和升级单位，按固定顺序组合：
+`@dsh-station/dsh-plugin-remote-experience` 是远程体验的整体安装、卸载和升级单位，按固定顺序组合：
 
 1. 远程设置（remote-settings）
 2. 浏览器兼容（browser-compat）

@@ -1,5 +1,5 @@
 {
-  "name": "@dsh-remote/connector",
+  "name": "@dsh-station/connector",
   "version": "0.0.2-20260922",
   "license": "MIT",
   "private": true,
@@ -8,7 +8,7 @@
     ".": "./src/index.ts"
   },
   "bin": {
-    "dsh-remote-connector": "./dist/cli.js"
+    "dsh-station-connector": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsdown",
@@ -17,14 +17,14 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@dsh-remote/protocol": "workspace:*",
+    "@dsh-station/protocol": "workspace:*",
     "commander": "15.0.0",
     "pino": "10.3.1",
     "ws": "8.21.3",
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@dsh-remote/relay": "workspace:*",
+    "@dsh-station/relay": "workspace:*",
     "@types/ws": "8.18.1",
     "vitest": "4.1.11"
   }

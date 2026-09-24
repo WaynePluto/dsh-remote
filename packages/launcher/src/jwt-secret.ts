@@ -7,17 +7,17 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { LauncherError } from './errors.js'
 
-/** dsh-remote home 中 relay JWT 签名密钥的文件名。 */
+/** dsh-station home 中 relay JWT 签名密钥的文件名。 */
 export const JWT_SECRET_FILE_NAME = 'relay-jwt.secret'
 
 /** relay CLI 读取密钥的环境变量。 */
-export const JWT_SECRET_ENV_NAME = 'DSH_REMOTE_JWT_SECRET'
+export const JWT_SECRET_ENV_NAME = 'DSH_STATION_JWT_SECRET'
 
 /** relay 中的 `decodeJwtSecret` 拒绝短于此长度的内容。 */
 export const JWT_SECRET_MIN_BYTES = 32
 
 /**
- * @param home - dsh-remote home 目录。
+ * @param home - dsh-station home 目录。
  * @returns 这台机器 relay JWT 密钥文件的绝对路径。
  */
 export function jwtSecretFilePath(home: string): string {

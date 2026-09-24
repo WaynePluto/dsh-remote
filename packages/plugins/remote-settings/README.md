@@ -1,6 +1,6 @@
 # 远程设置
 
-`@dsh-remote/dsh-plugin-remote-settings` 让已通过 relay 认证的远程浏览器使用完整的 dsh 设置页，
+`@dsh-station/dsh-plugin-remote-settings` 让已通过 relay 认证的远程浏览器使用完整的 dsh 设置页，
 包括模型、凭据和插件配置。组件启用后自动生效，没有单独的设置页面。
 
 它作为远程体验 Bundle 的组件分发（自 `remote-privileged` 拆出的 ownsHost 部分）；connection 的
@@ -41,7 +41,7 @@ store、inject 和 locale，仅把 `explorer` 的 launch 改到本包的认证 R
 
 ## 分发与管理
 
-本包不作为独立安装项分发，而是 `@dsh-remote/dsh-plugin-remote-experience`（远程体验 Bundle）的组件。停用后，经 relay 地址访问的设置页回到 dsh 受限形态；直连 dsh 端口不受影响。
+本包不作为独立安装项分发，而是 `@dsh-station/dsh-plugin-remote-experience`（远程体验 Bundle）的组件。停用后，经 relay 地址访问的设置页回到 dsh 受限形态；直连 dsh 端口不受影响。
 可在该 Bundle 详情中单独停用或重新启用本组件；安装、卸载和升级以整个远程体验 Bundle 为单位。
 launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，并保留 Bundle 与组件的停用状态；卸载后不会自动补回。
 需要重装时，在 dsh「添加插件」中填写发行包 `plugins/remote-experience` 或开发环境 `.dev/plugins/remote-experience` 的绝对目录。
@@ -51,7 +51,7 @@ launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，
 - 不修改 dsh 源码、不改写 Host/Origin，也不绕过 `/api` 的信任校验和浏览器认证。
 - 非 loopback 访问必须先通过 relay 登录；本插件不是认证方案。
 - `ownsHost` 也会开放调用系统程序打开文件的能力，动作发生在运行 dsh 的机器桌面上，手机看不到该窗口；该标志不是浏览器与目标机器同机的证明。
-- 仅加载到 `dsh-remote-web`，不修改官方 `web` profile。
+- 仅加载到 `dsh-station-web`，不修改官方 `web` profile。
 
 ## 维护
 
@@ -61,9 +61,9 @@ Open In… 槽位（`conversation.session.header.utilities` 的 `open-in-app` �
 宿主与浏览器构建产物分别为 `dist/index.js`、`dist/client.js`。修改后必须重建、更新安装介质并重启 dsh。
 
 ```powershell
-pnpm --filter @dsh-remote/dsh-plugin-remote-settings test
-pnpm --filter @dsh-remote/dsh-plugin-remote-settings typecheck
-pnpm --filter @dsh-remote/dsh-plugin-remote-settings build
+pnpm --filter @dsh-station/dsh-plugin-remote-settings test
+pnpm --filter @dsh-station/dsh-plugin-remote-settings typecheck
+pnpm --filter @dsh-station/dsh-plugin-remote-settings build
 ```
 
 源码依据见 [dsh 核实结论](../../../docs/02-dsh-facts.md)。

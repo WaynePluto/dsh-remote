@@ -21,7 +21,7 @@ $target = [IO.Path]::GetFullPath($target).TrimEnd([char]92)
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
-public static class DshRemoteForeground {
+public static class DshStationForeground {
   [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int command);
   [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
@@ -44,24 +44,24 @@ do {
 } while ($null -eq $window -and [DateTime]::UtcNow -lt $deadline)
 if ($null -eq $window) { exit 0 }
 $handle = [IntPtr][long]$window.HWND
-$currentThread = [DshRemoteForeground]::GetCurrentThreadId()
-$foregroundThread = [DshRemoteForeground]::GetWindowThreadProcessId([DshRemoteForeground]::GetForegroundWindow(), [IntPtr]::Zero)
-$targetThread = [DshRemoteForeground]::GetWindowThreadProcessId($handle, [IntPtr]::Zero)
+$currentThread = [DshStationForeground]::GetCurrentThreadId()
+$foregroundThread = [DshStationForeground]::GetWindowThreadProcessId([DshStationForeground]::GetForegroundWindow(), [IntPtr]::Zero)
+$targetThread = [DshStationForeground]::GetWindowThreadProcessId($handle, [IntPtr]::Zero)
 $foregroundAttached = $false
 $targetAttached = $false
 try {
   if ($foregroundThread -ne 0 -and $foregroundThread -ne $currentThread) {
-    $foregroundAttached = [DshRemoteForeground]::AttachThreadInput($currentThread, $foregroundThread, $true)
+    $foregroundAttached = [DshStationForeground]::AttachThreadInput($currentThread, $foregroundThread, $true)
   }
   if ($targetThread -ne 0 -and $targetThread -ne $currentThread) {
-    $targetAttached = [DshRemoteForeground]::AttachThreadInput($currentThread, $targetThread, $true)
+    $targetAttached = [DshStationForeground]::AttachThreadInput($currentThread, $targetThread, $true)
   }
-  [void][DshRemoteForeground]::ShowWindowAsync($handle, 9)
-  [void][DshRemoteForeground]::BringWindowToTop($handle)
-  [void][DshRemoteForeground]::SetForegroundWindow($handle)
+  [void][DshStationForeground]::ShowWindowAsync($handle, 9)
+  [void][DshStationForeground]::BringWindowToTop($handle)
+  [void][DshStationForeground]::SetForegroundWindow($handle)
 } finally {
-  if ($targetAttached) { [void][DshRemoteForeground]::AttachThreadInput($currentThread, $targetThread, $false) }
-  if ($foregroundAttached) { [void][DshRemoteForeground]::AttachThreadInput($currentThread, $foregroundThread, $false) }
+  if ($targetAttached) { [void][DshStationForeground]::AttachThreadInput($currentThread, $targetThread, $false) }
+  if ($foregroundAttached) { [void][DshStationForeground]::AttachThreadInput($currentThread, $foregroundThread, $false) }
 }
 `
   return Buffer.from(script, 'utf16le').toString('base64')

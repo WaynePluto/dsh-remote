@@ -1,7 +1,9 @@
 # AGENTS.md
 
-适用于本仓库中的 AI 编码助手。项目给官方 DeepSeek Harness 添加带认证的反向隧道与插件，
-让浏览器远程操作目标机器上的 dsh。
+适用于本仓库中的 AI 编码助手。本项目 dsh-station（用户文案「DSH 工作站」）是官方
+DeepSeek Harness (dsh) 的完整封装工作站：桌面应用与绿色/服务介质内置并托管 dsh，
+带认证的反向隧道提供远程能力；`remote` 一词只指远程能力（远程入口、remote-* 插件），
+不再是项目名。
 
 ## 开始前
 
@@ -19,9 +21,9 @@
 - 一台机器独立 origin，公网用子域名，局域网可用每机器端口，不能挂子路径。
 - launcher、connector、relay 不引入原生模块，持久化用 node:sqlite，密码哈希用 node:crypto scrypt。
 - 优先成熟依赖，所有直接依赖固定版本，不使用范围、dist-tag 或隐式升级。
-- 与官方 dsh 共用标准 DSH_HOME，仅在 dsh-remote-web profile 安装项目功能插件。
+- 与官方 dsh 共用标准 DSH_HOME，仅在 dsh-station-web profile 安装项目功能插件。
   不写 home 级 patch、不修改官方 web profile，不实现第二套插件管理器。
-- 普通插件位于 packages/plugins/<名字>，包名 @dsh-remote/dsh-plugin-<名字>，
+- 普通插件位于 packages/plugins/<名字>，包名 @dsh-station/dsh-plugin-<名字>，
   包根 overlay 用 ./dist/index.js；launcher、dev-stack、pack 都要检查宿主和浏览器产物。
 - 20 个功能组件按 `plugin-catalog.json` 分发为 4 个组合包和 6 个独立包：首次默认安装，后续配套升级仍安装项并保留 Bundle/组件停用状态，卸载后不自动补回；开发与发行介质分别位于 `.dev/plugins/` 和 `plugins/`。
 - `remote-privileged` 的 connection/webServer 注入与模型 HMR 启动屏障作为不可卸载的壳级基础设施；模型屏障服务挂在 root fiber，避免 Bundle 在线启停重启 `llm-pi-ai`。
@@ -86,7 +88,7 @@ services 与 terminal 共用 IconApiOutlineMedium。
 
 - 插件使用说明放包根 README，docs/plugins.md 做索引；源码契约按 docs/dsh 的主题归属维护。
 - docs 每个文件最多 600 行，只保留现行行为与明确待办，不追加旧方案或调试过程。
-- 修改插件任何一半后都要构建并重启 dsh，dsh-remote-web 没有 HMR，刷新页面不会更新产物。
+- 修改插件任何一半后都要构建并重启 dsh，dsh-station-web 没有 HMR，刷新页面不会更新产物。
 - 安全活动写 relay.db 的 audit_log 与 pino，没有管理页面；查询加载 relay-audit skill。
 - 上游源码引用使用相对 dsh 根路径，不在其他文件记录本地绝对路径。
 - 未记录的架构决策先向用户确认，不猜 dsh 行为。

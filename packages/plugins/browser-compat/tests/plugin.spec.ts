@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { navigationGlyphStylesheet } from '@dsh-remote/plugin-ui'
+import { navigationGlyphStylesheet } from '@dsh-station/plugin-ui'
 import { apply, inject, iteratorInjection, name } from '../src/index.js'
 
 const artwork = ({ size, strokeWidth }: { size: number, strokeWidth: number }) => ({
@@ -12,7 +12,7 @@ const artwork = ({ size, strokeWidth }: { size: number, strokeWidth: number }) =
 })
 const recursiveArtwork = (props: object): unknown => ({ type: recursiveArtwork, props })
 
-describe('dsh-remote-browser-compat', () => {
+describe('dsh-station-browser-compat', () => {
   it('contributes one inline head script containing the compatibility bridge', () => {
     const row = iteratorInjection()
     // head 位置的经典脚本按注入表顺序执行，且先于页面模块加载；
@@ -23,7 +23,7 @@ describe('dsh-remote-browser-compat', () => {
     // 整段是两个立即调用的自包含函数表达式：独立于页面已有脚本求值。
     expect(row.kind === 'script' ? row.text.slice(0, 1) : '').toBe('(')
     expect(row.kind === 'script' ? row.text : '').toContain('AbortSignal')
-    expect(row.kind === 'script' ? row.text : '').toContain('__DSH_REMOTE_BROWSER_COMPAT__')
+    expect(row.kind === 'script' ? row.text : '').toContain('__DSH_STATION_BROWSER_COMPAT__')
   })
 
   it('pushes its row onto every collected injection table', () => {
@@ -95,7 +95,7 @@ describe('dsh-remote-browser-compat', () => {
   })
 
   it('waits for the web server before listening', () => {
-    expect(name).toBe('dsh-remote-browser-compat')
+    expect(name).toBe('dsh-station-browser-compat')
     expect(inject).toEqual(['webServer'])
   })
 })

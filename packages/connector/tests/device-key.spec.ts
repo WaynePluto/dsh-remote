@@ -4,13 +4,13 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { deviceChallengeMessage } from '@dsh-remote/protocol'
+import { deviceChallengeMessage } from '@dsh-station/protocol'
 import { DeviceKeyError, defaultDeviceKeyPath, loadOrCreateDeviceKey } from '../src/device-key.js'
 
 const directories: string[] = []
 
 function tempKeyPath(...segments: string[]): string {
-  const directory = mkdtempSync(join(tmpdir(), 'dsh-remote-device-key-'))
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-station-device-key-'))
   directories.push(directory)
   return join(directory, ...(segments.length === 0 ? ['device.key'] : segments))
 }
@@ -71,7 +71,7 @@ describe('device key', () => {
     expect(() => loadOrCreateDeviceKey({ path })).toThrow(/requires Ed25519/)
   })
 
-  it('defaults to one identity per OS user under the dsh-remote home', () => {
-    expect(defaultDeviceKeyPath()).toMatch(/[\\/]\.dsh-remote[\\/]device\.key$/)
+  it('defaults to one identity per OS user under the dsh-station home', () => {
+    expect(defaultDeviceKeyPath()).toMatch(/[\\/]\.dsh-station[\\/]device\.key$/)
   })
 })

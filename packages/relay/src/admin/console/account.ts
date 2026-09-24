@@ -104,6 +104,6 @@ export function accountUnavailablePage(options: {
     intro: '这台机器上没有唯一的管理员账号，本页无法安全地判断该改谁的凭据。',
     username: options.username,
     appearance: options.appearance,
-    body: '<p class="empty">用 <strong>dsh-remote-relay</strong> 命令行处理账号，改完之后本页会恢复正常。</p>',
+    body: '<p class="empty">用 <strong>dsh-station-relay</strong> 命令行处理账号，改完之后本页会恢复正常。</p>',
   })
 }

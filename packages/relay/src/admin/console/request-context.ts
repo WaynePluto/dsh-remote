@@ -9,7 +9,7 @@ import {
   parseDshRestartStatus,
   type DshRestartStatus,
   type MembershipLastHub,
-} from '@dsh-remote/protocol'
+} from '@dsh-station/protocol'
 import type { RelayConfig } from '../../config.js'
 import {
   isSelfHub,

@@ -266,14 +266,14 @@ describe('relay authentication endpoints', () => {
       expect(login.headers['referrer-policy']).toBe('same-origin')
       // 登录页声明使用自己的图标，因此 CSP 必须允许它。
       expect(login.headers['content-security-policy']).toContain("img-src 'self'")
-      expect(login.body).toContain('/_icon/dsh-remote.svg')
+      expect(login.body).toContain('/_icon/dsh-station.svg')
 
       // 图标获取也不携带 cookie，登录页需要在登录前
       // 能够获取图标。
       const icons = await Promise.all(([
-        ['/_icon/dsh-remote.svg', 'image/svg+xml'],
-        ['/_icon/dsh-remote.ico', 'image/x-icon'],
-        ['/_icon/dsh-remote.png', 'image/png'],
+        ['/_icon/dsh-station.svg', 'image/svg+xml'],
+        ['/_icon/dsh-station.ico', 'image/x-icon'],
+        ['/_icon/dsh-station.png', 'image/png'],
       ] as const).map(async ([iconPath, iconType]) => ({
         iconPath,
         iconType,
@@ -299,9 +299,9 @@ describe('relay authentication endpoints', () => {
       expect(manifest.status).toBe(200)
       expect(manifest.headers['content-type']).toContain('application/manifest+json')
       expect(JSON.parse(manifest.body)).toMatchObject({
-        name: 'dsh-remote',
+        name: 'dsh-station',
         start_url: '/',
-        icons: [{ src: '/_icon/dsh-remote.svg' }, { src: '/_icon/dsh-remote.png' }],
+        icons: [{ src: '/_icon/dsh-station.svg' }, { src: '/_icon/dsh-station.png' }],
       })
       const { csrf, csrfPair } = login
       const form = {

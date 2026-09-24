@@ -13,7 +13,7 @@ afterEach(() => {
 
 describe('plugin installation media', () => {
   it('materializes movable distributions with grouped component packages', () => {
-    const base = mkdtempSync(join(tmpdir(), 'dsh-remote-plugins-'))
+    const base = mkdtempSync(join(tmpdir(), 'dsh-station-plugins-'))
     temporary.push(base)
     // 输出目录带空格：绿色包会被解压到用户任选的目录，介质必须与位置无关。
     // 不用非 ASCII 目录名——CI 的英文代码页 runner 上 cpSync/existsSync 组合
@@ -28,7 +28,7 @@ describe('plugin installation media', () => {
     expect(existsSync(join(
       group,
       'node_modules',
-      '@dsh-remote',
+      '@dsh-station',
       'dsh-plugin-turn-retry',
       'dist',
       'index.js',
@@ -37,12 +37,12 @@ describe('plugin installation media', () => {
     const manifest = JSON.parse(readFileSync(join(group, 'package.json'), 'utf8')) as {
       dependencies: Record<string, string>
     }
-    expect(manifest.dependencies['@dsh-remote/dsh-plugin-turn-retry']).toBe('0.0.2-20260922')
+    expect(manifest.dependencies['@dsh-station/dsh-plugin-turn-retry']).toBe('0.0.2-20260922')
     expect(JSON.stringify(manifest)).not.toContain('workspace:')
   })
 
   it('keeps standalone host and browser artifacts beside their manifest', () => {
-    const base = mkdtempSync(join(tmpdir(), 'dsh-remote-plugins-'))
+    const base = mkdtempSync(join(tmpdir(), 'dsh-station-plugins-'))
     temporary.push(base)
     const output = join(base, 'plugins')
     materializePluginDistributions({ root, output })

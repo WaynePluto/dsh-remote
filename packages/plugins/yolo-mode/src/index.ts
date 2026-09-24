@@ -20,7 +20,7 @@ import {
 } from './tool-wrapper.js'
 
 /** dsh 诊断信息中显示的 Cordis 插件名。 */
-export const name = 'dsh-remote-yolo-mode'
+export const name = 'dsh-station-yolo-mode'
 
 /** 所需 service：agents、tools、sandboxPolicy 和 approval。 */
 export const inject = ['agents', 'tools', 'sandboxPolicy', 'approval']

@@ -7,8 +7,8 @@ import type { SessionRecord, UserRecord } from '../store/types.js'
 
 export const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1_000
 export const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1_000
-export const JWT_ISSUER = 'dsh-remote-relay'
-export const JWT_AUDIENCE = 'dsh-remote-browser'
+export const JWT_ISSUER = 'dsh-station-relay'
+export const JWT_AUDIENCE = 'dsh-station-browser'
 
 export interface AuthPrincipal {
   readonly userId: string

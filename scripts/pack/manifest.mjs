@@ -2,7 +2,7 @@ import { join } from 'node:path'
 
 /** 打包脚本的清单、路径和平台常量；仓库根目录由入口显式传入。 */
 export const STAGING_RELATIVE = 'release/.staging'
-export const WIN_EXECUTABLE = 'dsh-remote.exe'
+export const WIN_EXECUTABLE = 'dsh-station.exe'
 export const WIN_ICON_RESOURCE = 'rsrc_windows_amd64.syso'
 export const PREBUILD_DIRECTORIES = ['node_modules/node-pty/prebuilds']
 export const WIN_EXECUTABLE_MIN_BYTES = 1024 * 1024
@@ -10,7 +10,7 @@ export const WIN_SUBSYSTEM_GUI = 2
 
 export const COMMON_PACKAGING_FILES = [
   { name: 'README.txt', mode: 0o644 },
-  { name: 'dsh-remote.config.example.json', mode: 0o644 },
+  { name: 'dsh-station.config.example.json', mode: 0o644 },
 ]
 
 export const WINDOWS_PACKAGING_FILES = [
@@ -57,21 +57,21 @@ export const TARGETS = {
 }
 
 /** 引擎类重组件：optionalDependencies 平台包、惰性加载、缺失时只在对应功能里报错，
- * 是 core 变体唯一值得剔除的东西。只匹配引擎包本身，不带 `-` 后缀的 JS 壳
+ * 是 lite 变体唯一值得剔除的东西。只匹配引擎包本身，不带 `-` 后缀的 JS 壳
  * （@deepseek-ai/libreoffice-kit）必须保留——dsh-office-to-pdf 顶层 import 它。 */
 export const HEAVY_ENGINE_PACKAGES = [/^@deepseek-ai\/libreoffice-kit-/]
 
 /** 发行变体：同一平台打两次包，zip 名带变体后缀，没有无后缀的默认包。
- * 声明顺序即打包顺序：full 先打（树完整），core 在其后裁剪再打。 */
+ * 声明顺序即打包顺序：full 先打（树完整），lite 在其后裁剪再打。 */
 export const VARIANTS = {
   full: {
-    label: '全功能',
+    label: '完整版',
     zipTag: 'full',
     excludes: [],
   },
-  core: {
-    label: '核心功能',
-    zipTag: 'core',
+  lite: {
+    label: '轻量版',
+    zipTag: 'lite',
     excludes: HEAVY_ENGINE_PACKAGES,
   },
 }
@@ -97,7 +97,6 @@ export const BUILD_ARTIFACTS = [
   'packages/plugins/user-message-fork/dist/index.js',
   'packages/plugins/files/dist/index.js',
   'packages/plugins/agents-md/dist/index.js',
-  'packages/plugins/concise-mode/dist/index.js',
   'packages/plugins/notify/dist/index.js',
   'packages/plugins/services/dist/index.js',
   'packages/plugins/terminal/dist/index.js',
@@ -125,8 +124,8 @@ export const BUILD_ARTIFACTS = [
 
 /** 壳级常驻 overlay 及其运行时代码，随 launcher 以 --patch 传入。 */
 export const SHELL_OVERLAY_FILES = [
-  'node_modules/@dsh-remote/dsh-plugin-remote-privileged/dsh-overlay.yml',
-  'node_modules/@dsh-remote/dsh-plugin-remote-privileged/model-bootstrap.mjs',
+  'node_modules/@dsh-station/dsh-plugin-remote-privileged/dsh-overlay.yml',
+  'node_modules/@dsh-station/dsh-plugin-remote-privileged/model-bootstrap.mjs',
 ]
 
 /** 第三方插件发行介质由 plugin-catalog.json 唯一驱动。 */
@@ -134,14 +133,14 @@ export const PLUGIN_CATALOG_FILE = 'plugin-catalog.json'
 export const PLUGIN_MEDIA_DIRECTORY = 'plugins'
 
 export const STUB_ENTRIES = [
-  { name: 'relay.js', target: '../node_modules/@dsh-remote/relay/dist/cli.js' },
-  { name: 'connector.js', target: '../node_modules/@dsh-remote/connector/dist/cli.js' },
+  { name: 'relay.js', target: '../node_modules/@dsh-station/relay/dist/cli.js' },
+  { name: 'connector.js', target: '../node_modules/@dsh-station/connector/dist/cli.js' },
 ]
 
 export const RUNTIME_ENTRIES = [
   { label: 'launcher', path: 'dist/index.js', check: ['--version'] },
-  { label: 'relay', path: 'node_modules/@dsh-remote/relay/dist/cli.js', check: ['--help'] },
-  { label: 'connector', path: 'node_modules/@dsh-remote/connector/dist/cli.js', check: ['--help'] },
+  { label: 'relay', path: 'node_modules/@dsh-station/relay/dist/cli.js', check: ['--help'] },
+  { label: 'connector', path: 'node_modules/@dsh-station/connector/dist/cli.js', check: ['--help'] },
   { label: 'relay 跳转入口', path: 'dist/relay.js', check: ['--help'] },
   { label: 'connector 跳转入口', path: 'dist/connector.js', check: ['--help'] },
 ]

@@ -1,5 +1,5 @@
 import type { RelayConfig } from '../../config.js'
-import { PROBE_INTERVAL_MS } from '@dsh-remote/protocol'
+import { PROBE_INTERVAL_MS } from '@dsh-station/protocol'
 import {
   ENROLL_TOKEN_SHOWN_ONCE_NOTICE,
   ENROLL_TOKEN_SINGLE_USE_NOTICE,
@@ -93,7 +93,7 @@ function machineItem(options: {
   const { device, online, probedAt, now, csrf, config, hostname } = options
   const revoked = device.revokedAt !== null
   // 本机（directSlug）就是运行这个控制台的机器：停止并移除它会
-  // 杀掉它自己的 dsh-remote，这个操作没有意义，也不提供入口。
+  // 杀掉它自己的 dsh-station，这个操作没有意义，也不提供入口。
   const self = device.slug === config.directSlug
   const presence: Presence = online
     ? 'online'
@@ -160,7 +160,7 @@ function connectorCommand(options: {
   // 未知时省略而不是猜测：占位符会被写入另一台机器的 membership.json，
   // 导致其 dsh 无法启动。
   const trust = options.hubAuthority === undefined ? '' : ` --hub-authority ${options.hubAuthority}`
-  return `dsh-remote-connector --relay ${wsScheme}://${authority} --slug ${options.slug} --enroll-token ${options.token}${trust}`
+  return `dsh-station-connector --relay ${wsScheme}://${authority} --slug ${options.slug} --enroll-token ${options.token}${trust}`
 }
 
 function tokenPanel(options: {
@@ -260,7 +260,7 @@ export function machinesPage(options: {
     appearance: options.appearance,
     body: `${panel}
 <h2 class="section">通过 ${escapeHtml(machine)} 开放的机器</h2>
-<p class="hint">这些机器把自己挂在 ${escapeHtml(machine)} 上，所以能从这里打开。「已断开 · 可唤醒」表示那台机器的 dsh-remote 还在运行、只是断开了远程入口——点「请求上线」约一分钟内连回；「请求」对已关机的机器会保留 24 小时等它回来。「离线」则可能是关机，也可能挂去了别的入口——这两种从这里无法区分。在线机器的「停止并移除」会让对方 dsh-remote 整个退出并作废令牌；离线机器只能「移除」它的设备身份，停不到它上面运行的服务。</p>
+<p class="hint">这些机器把自己挂在 ${escapeHtml(machine)} 上，所以能从这里打开。「已断开 · 可唤醒」表示那台机器的 dsh-station 还在运行、只是断开了远程入口——点「请求上线」约一分钟内连回；「请求」对已关机的机器会保留 24 小时等它回来。「离线」则可能是关机，也可能挂去了别的入口——这两种从这里无法区分。在线机器的「停止并移除」会让对方 dsh-station 整个退出并作废令牌；离线机器只能「移除」它的设备身份，停不到它上面运行的服务。</p>
 ${list}
 ${issueForm({ csrf, machine, error: options.error })}`,
   })

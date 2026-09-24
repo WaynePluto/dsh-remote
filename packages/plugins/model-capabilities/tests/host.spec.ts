@@ -43,7 +43,7 @@ function mount(section?: Record<string, unknown>) {
 describe('model-capabilities host half', () => {
   it('applies overrides from the composed config and provides its bootstrap token', () => {
     const mounted = mount()
-    expect(name).toBe('dsh-remote-model-capabilities')
+    expect(name).toBe('dsh-station-model-capabilities')
     expect(apply(mounted.ctx, mounted.config as never)).toBeUndefined()
     expect(mounted.runtime.applyProtocolOverrides).toHaveBeenCalledWith({})
     expect(mounted.root.provide).toHaveBeenCalledWith(BOOTSTRAP_SERVICE, true)

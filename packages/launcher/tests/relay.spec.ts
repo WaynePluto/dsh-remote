@@ -8,7 +8,7 @@ import {
   resolveRelayEntry,
 } from '../src/relay.js'
 
-const GREEN_PACKAGE = join('C:', 'dsh-remote', 'dist')
+const GREEN_PACKAGE = join('C:', 'dsh-station', 'dist')
 
 describe('machine slug', () => {
   it.each([
@@ -30,7 +30,7 @@ describe('machine slug', () => {
 
 describe('relay entry', () => {
   it('prefers the relay deployed into the package own node_modules', () => {
-    const deployed = join(GREEN_PACKAGE, '..', 'node_modules', '@dsh-remote', 'relay', 'dist', 'cli.js')
+    const deployed = join(GREEN_PACKAGE, '..', 'node_modules', '@dsh-station', 'relay', 'dist', 'cli.js')
     const entry = resolveRelayEntry(GREEN_PACKAGE, path => path === deployed)
     expect(entry).toEqual({ path: deployed, needsTsx: false })
   })
@@ -41,7 +41,7 @@ describe('relay entry', () => {
   })
 
   it('falls back to the workspace build, then to the sources', () => {
-    const directory = join('D:', 'dev', 'dsh-remote', 'packages', 'launcher', 'src')
+    const directory = join('D:', 'dev', 'dsh-station', 'packages', 'launcher', 'src')
     const built = join(directory, '..', '..', 'relay', 'dist', 'cli.js')
     const source = join(directory, '..', '..', 'relay', 'src', 'cli.ts')
     expect(resolveRelayEntry(directory, path => path === built))
@@ -60,8 +60,8 @@ describe('relay arguments', () => {
     host: '0.0.0.0',
     port: 30_809,
     slug: 'pc1',
-    data: join('C:', 'home', '.dsh-remote', 'relay.db'),
-    home: join('C:', 'home', '.dsh-remote'),
+    data: join('C:', 'home', '.dsh-station', 'relay.db'),
+    home: join('C:', 'home', '.dsh-station'),
   }
 
   it('serves the LAN in the authenticated explicit HTTP mode', () => {

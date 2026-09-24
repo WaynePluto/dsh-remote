@@ -1,4 +1,4 @@
-# @dsh-remote/dsh-plugin-files
+# @dsh-station/dsh-plugin-files
 
 给 dsh 原生右侧 Sidebar 文件能力增加 Git 状态和文件树右键菜单。
 本插件不再提供第二套目录树或文件预览；原生 `ui-sidebar-files` 负责树，原生
@@ -67,9 +67,9 @@ ContextMenu/Shift+F10、portal 定位、Escape 关闭和焦点归还。右键不
 ## 开发检查
 
 ```powershell
-pnpm --filter @dsh-remote/dsh-plugin-files test
-pnpm --filter @dsh-remote/dsh-plugin-files typecheck
-pnpm --filter @dsh-remote/dsh-plugin-files build
+pnpm --filter @dsh-station/dsh-plugin-files test
+pnpm --filter @dsh-station/dsh-plugin-files typecheck
+pnpm --filter @dsh-station/dsh-plugin-files build
 node scripts/files-check.mjs
 ```
 
@@ -77,7 +77,7 @@ node scripts/files-check.mjs
 声明对 `@deepseek-ai/dsh-client-ui-sidebar-files` 的模块图依赖，但不深层 import 上游源码。
 如果上游登记项、行 data 属性或 Sidebar 导航契约变化，检查必须响亮失败并重新适配。
 
-`dsh-remote-web` 没有 HMR。修改宿主、浏览器代码或样式后，必须重新构建并重启 dsh；只刷新页面不会
+`dsh-station-web` 没有 HMR。修改宿主、浏览器代码或样式后，必须重新构建并重启 dsh；只刷新页面不会
 重新加载冻结的浏览器产物。
 
 ## 分发与管理
@@ -86,4 +86,4 @@ node scripts/files-check.mjs
 launcher 首次默认安装本插件；后续只升级仍已安装的插件并保留停用状态，卸载后不会自动补回。
 需要重装时，在 dsh「添加插件」中填写发行包 `plugins/files` 或开发环境 `.dev/plugins/files` 的绝对目录，而不是源码目录或 `dist/index.js`。
 
-原生插件列表中的标题是 **plugin-files**，详情页显示完整包名 `@dsh-remote/dsh-plugin-files` 与 Bundle 行 `files`。副标题来自 package.json 的中文 `description`；标题仍由 dsh 根据 npm 包名生成。
+原生插件列表中的标题是 **plugin-files**，详情页显示完整包名 `@dsh-station/dsh-plugin-files` 与 Bundle 行 `files`。副标题来自 package.json 的中文 `description`；标题仍由 dsh 根据 npm 包名生成。

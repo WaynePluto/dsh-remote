@@ -7,5 +7,5 @@
     "host": "0.0.0.0",
     "slug": "my-pc"
   },
-  "home": "~/.dsh-remote"
+  "home": "~/.dsh-station"
 }

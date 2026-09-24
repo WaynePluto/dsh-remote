@@ -26,7 +26,7 @@ export {
 export { project, readParams, type RawToolSchema } from './project.js'
 
 /** Cordis 插件名，出现在 dsh 的插件树与诊断里。 */
-export const name = 'dsh-remote-tools-inspector'
+export const name = 'dsh-station-tools-inspector'
 
 /**
  * 必需服务。

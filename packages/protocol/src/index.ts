@@ -1,5 +1,5 @@
 /**
- * @dsh-remote/protocol —— relay 与 connector 共享的隧道控制面。
+ * @dsh-station/protocol —— relay 与 connector 共享的隧道控制面。
  *
  * 铁律：这里只有控制帧、路径、超时、错误码，以及两侧必须逐字节一致的本地交接契约；
  * 绝不放 dsh 业务协议。

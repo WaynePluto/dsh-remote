@@ -124,9 +124,9 @@ button:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
  * 使用 `/_icon` 命名空间而不是常规 `/favicon.ico`，避免 relay 遮蔽隧道中 dsh 前端拥有的路径。
  */
 export const ICON_PATH_PREFIX = '/_icon'
-export const ICON_SVG_PATH = `${ICON_PATH_PREFIX}/dsh-remote.svg`
-export const ICON_ICO_PATH = `${ICON_PATH_PREFIX}/dsh-remote.ico`
-export const ICON_PNG_PATH = `${ICON_PATH_PREFIX}/dsh-remote.png`
+export const ICON_SVG_PATH = `${ICON_PATH_PREFIX}/dsh-station.svg`
+export const ICON_ICO_PATH = `${ICON_PATH_PREFIX}/dsh-station.ico`
+export const ICON_PNG_PATH = `${ICON_PATH_PREFIX}/dsh-station.png`
 
 /** 每个 relay 页面都携带的 <link> 区块。 */
 const ICON_LINKS = [
@@ -204,7 +204,7 @@ ${PAGE_STYLE}${extra}
 </style>
 </head>
 <body><main>
-<header class="brand"><span class="mark"><img src="${ICON_SVG_PATH}" alt="" width="22" height="22">dsh-remote</span>${themeSwitcher(appearance)}</header>
+<header class="brand"><span class="mark"><img src="${ICON_SVG_PATH}" alt="" width="22" height="22">dsh-station</span>${themeSwitcher(appearance)}</header>
 <section class="panel">
 ${options.body}
 </section></main></body></html>`

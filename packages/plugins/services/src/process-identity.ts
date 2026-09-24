@@ -2,7 +2,7 @@
  * Node-only pid 存活与身份核验：记录的 pid 只有在创建时间一致时才可确认属于本插件。
  * 无法取得 OS 创建时间时保留 `unknown`，停止路径必须 fail closed。
  *
- * @module @dsh-remote/dsh-plugin-services/process-identity
+ * @module @dsh-station/dsh-plugin-services/process-identity
  */
 
 import { spawnSync } from 'node:child_process'

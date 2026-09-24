@@ -34,7 +34,7 @@ dsh 是官方 npm 依赖，不 fork、不改源码。浏览器使用 dsh 自带 
 ### Home 与 Profile
 
 沿用标准 `$DSH_HOME`（默认 `~/.dsh`），共享设置、凭据、会话和用户全局 patch。
-内置扩展只加载到 `dsh-remote-web`：
+内置扩展只加载到 `dsh-station-web`：
 
 ```text
 dsh-base → dsh-web-app → 已启用的第三方 Bundle（默认 10 个分发包）
@@ -62,7 +62,7 @@ remote-privileged（壳级、不可停），负责 connection 注入和模型 Bu
 第三方 Bundle 使用官方命令：
 
 ```powershell
-dsh plugin --profile dsh-remote-web add <bundle-package>
+dsh plugin --profile dsh-station-web add <bundle-package>
 ```
 
 此 profile 没有 HMR；改动插件后必须构建并重启 dsh。

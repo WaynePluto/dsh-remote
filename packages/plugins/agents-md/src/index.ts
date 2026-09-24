@@ -25,7 +25,7 @@ export type {
 } from './shared.js'
 
 /** Cordis 插件名；它会出现在 dsh 插件树和诊断信息中。 */
-export const name = 'dsh-remote-agents-md'
+export const name = 'dsh-station-agents-md'
 
 /** 必需服务；`connection` 承载本插件唯一的接缝。 */
 export const inject = ['connection']

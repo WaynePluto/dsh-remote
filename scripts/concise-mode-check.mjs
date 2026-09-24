@@ -1,5 +1,5 @@
 /**
- * dsh-remote 精简代理预设及随附 Bundle HMR 的真实宿主端冒烟检查。
+ * dsh-station 精简代理预设及随附 Bundle HMR 的真实宿主端冒烟检查。
  *
  * 每次升级 dsh 后运行：
  *
@@ -80,13 +80,13 @@ const PROBE_SOURCE = [
   'export function apply(ctx) {',
   "  const dispose = ctx.connection.rpc.handle('/concise-mode-check', async (endpoint) => {",
   "    if (endpoint === 'toggle') {",
-  "      const disabled = await ctx.pluginManager.setBundleEnabled('@dsh-remote/dsh-plugin-concise-mode', false)",
-  "      const enabled = await ctx.pluginManager.setBundleEnabled('@dsh-remote/dsh-plugin-concise-mode', true)",
+  "      const disabled = await ctx.pluginManager.setBundleEnabled('@dsh-station/dsh-plugin-concise-mode', false)",
+  "      const enabled = await ctx.pluginManager.setBundleEnabled('@dsh-station/dsh-plugin-concise-mode', true)",
   '      return { ok: true, value: { disabled, enabled } }',
   '    }',
   "    if (endpoint === 'toggle-all') {",
   '      const listed = await ctx.pluginManager.listBundles()',
-  "      const names = listed.map(bundle => bundle.name).filter(name => name.startsWith('@dsh-remote/dsh-plugin-')).toSorted()",
+  "      const names = listed.map(bundle => bundle.name).filter(name => name.startsWith('@dsh-station/dsh-plugin-')).toSorted()",
   '      const results = []',
   '      for (const name of names) {',
   '        const disabled = await ctx.pluginManager.setBundleEnabled(name, false)',
@@ -404,7 +404,7 @@ async function main() {
       // 释放，构造器二次注册即抛错。铁律 1 禁止改 dsh；等上游修复后删除本豁免，
       // 且只有签名完全匹配才豁免——其它失败照常响亮报错。
       const resolverClash = JSON.stringify(result).includes('file-upload: Agent resolver is already registered')
-      if (resolverClash && result.name === '@dsh-remote/dsh-plugin-yolo-mode') {
+      if (resolverClash && result.name === '@dsh-station/dsh-plugin-yolo-mode') {
         check(true, result.name + ' toggles hit the known dsh 0.1.7 session-controller remount race (upstream)')
         continue
       }

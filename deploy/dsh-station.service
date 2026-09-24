@@ -1,6 +1,6 @@
-# /etc/systemd/system/dsh-remote.service
+# /etc/systemd/system/dsh-station.service
 #
-# 一台 dsh-remote 机器 = 一个 launcher 进程 + 它自己拉起的三个子进程（dsh / relay / connector）。
+# 一台 dsh-station 机器 = 一个 launcher 进程 + 它自己拉起的三个子进程（dsh / relay / connector）。
 # 这个 unit 只管 launcher，不要再给 relay 或 connector 单独写 unit：三个子进程的启动顺序、
 # 关闭顺序和 JWT 密钥都由 launcher 负责（packages/launcher/src/index.ts）。
 #
@@ -13,15 +13,15 @@
 # 需要替换的占位符：
 #   <user>                         日常登录的普通用户；必须已经存在
 #   <group>                        该用户的主组（可与用户名相同，也可按实际情况填写）
-#   /opt/dsh-remote                解压出来的绿色包所在目录（保持只读）
-#   /etc/dsh-remote/dsh-remote.config.json   launcher 配置文件
-#   /home/<user>/.dsh-remote       dsh-remote home：relay.db、relay-jwt.secret、membership.json、device.key
+#   /opt/dsh-station                解压出来的绿色包所在目录（保持只读）
+#   /etc/dsh-station/dsh-station.config.json   launcher 配置文件
+#   /home/<user>/.dsh-station       dsh-station home：relay.db、relay-jwt.secret、membership.json、device.key
 #   /home/<user>/.dsh              DSH_HOME：dsh 的 profiles / settings / credentials / sessions
 #   /home/<user>                   dsh 里的 agent 默认工作目录，也是下面的 WorkingDirectory
 #   /usr/bin/node                  Node 22.19+ 的绝对路径，用 `command -v node` 确认
 
 [Unit]
-Description=dsh-remote (dsh + relay + connector, supervised by the launcher)
+Description=dsh-station (dsh + relay + connector, supervised by the launcher)
 After=network-online.target
 Wants=network-online.target
 
@@ -38,18 +38,18 @@ Group=<group>
 # dsh / relay / connector 的入口都按 launcher 的安装位置解析。
 WorkingDirectory=/home/<user>
 # 绿色包里的启动器入口是 dist/index.js（源码仓库里是 packages/launcher/dist/index.js）。
-# 解压后用 `ls /opt/dsh-remote/dist` 确认一次再填。
-ExecStart=/usr/bin/node /opt/dsh-remote/dist/index.js --config /etc/dsh-remote/dsh-remote.config.json
+# 解压后用 `ls /opt/dsh-station/dist` 确认一次再填。
+ExecStart=/usr/bin/node /opt/dsh-station/dist/index.js --config /etc/dsh-station/dsh-station.config.json
 
-# HOME 决定 node 的 os.homedir()，也决定默认的 dsh-remote home（$HOME/.dsh-remote）。
+# HOME 决定 node 的 os.homedir()，也决定默认的 dsh-station home（$HOME/.dsh-station）。
 Environment=HOME=/home/<user>
 # 与官方 dsh 共用标准 DSH_HOME（铁律 10 / D14）；显式写出便于 systemd 环境核对。
 Environment=DSH_HOME=/home/<user>/.dsh
 # relay、connector 和 launcher 都读这个变量（pino 的日志级别）。
 Environment=LOG_LEVEL=info
-# 不要在这里写 DSH_REMOTE_JWT_SECRET：launcher 首次运行会自己生成
-# /home/<user>/.dsh-remote/relay-jwt.secret（0600）并传给 relay 子进程。
-# 也不要在这里写 DSH_REMOTE_ADMIN_PASSWORD：它只在一次性的 init 命令里用。
+# 不要在这里写 DSH_STATION_JWT_SECRET：launcher 首次运行会自己生成
+# /home/<user>/.dsh-station/relay-jwt.secret（0600）并传给 relay 子进程。
+# 也不要在这里写 DSH_STATION_ADMIN_PASSWORD：它只在一次性的 init 命令里用。
 
 Restart=always
 RestartSec=5
@@ -68,14 +68,14 @@ TimeoutStopSec=45
 # ---- 个人用户模式的文件系统与提权边界 ----
 # dsh 应当看到与该用户 SSH 登录后相同的家目录和系统路径。
 # 这些限制若打开，会分别屏蔽 /home、阻止 sudo 获得新权限，或把系统目录挂成只读，
-# 因此这里明确关闭；个人用户的 Unix 权限、sudoers 和 dsh-remote 登录认证仍然生效。
+# 因此这里明确关闭；个人用户的 Unix 权限、sudoers 和 dsh-station 登录认证仍然生效。
 NoNewPrivileges=false
 PrivateTmp=false
 ProtectHome=false
 ProtectSystem=false
 UMask=0077
 
-# 不使用 StateDirectory / ReadWritePaths：运行数据位于用户自己的 ~/.dsh-remote，
+# 不使用 StateDirectory / ReadWritePaths：运行数据位于用户自己的 ~/.dsh-station，
 # dsh 的工作区也可以是该用户本来就有权限访问的任意目录。
 # 不要再加 MemoryDenyWriteExecute=true：它会直接打死 V8 的 JIT，Node 起不来。
 # 同理，收紧 SystemCallFilter= / RestrictAddressFamilies= 之前先想清楚 dsh 会派生

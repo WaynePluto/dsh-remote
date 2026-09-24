@@ -1,4 +1,4 @@
-# @dsh-remote/dsh-plugin-copilot-auth
+# @dsh-station/dsh-plugin-copilot-auth
 
 在 dsh 的**设置 → 模型**页里，为 GitHub Copilot 提供方卡片加一个订阅登录区：点一下、在手机上打开 GitHub 的设备码页面输入代码，就能用 Copilot 订阅，不需要 API 密钥。登录区位于提供方卡片的**编辑**展开面板内，隐藏该卡片原生 API 密钥标签和输入框，其他提供方不受影响；收起卡片时不会占用列表空间。
 
@@ -19,7 +19,7 @@ dsh 已经具备登录流程与凭据支持（核实结论见 [模型与代理](
 | 宿主 | `dist/index.js`（由 `cordis.patch.yml` 的 Bundle 层装载） | 跑 pi-ai 的登录流程，把凭据写进 `ctx.credentials`，登录成功后写 `llm-pi-ai.providers['github-copilot']` |
 | 浏览器 | `dist/client.js`（由 dsh 的客户端模块系统按 `dsh.client` + `exports["./client"]` 下发） | 占用模型页官方扩展槽 `settings.models.provider-card`（key = `llm-pi-ai`），只在 `github-copilot` 那张卡上渲染登录区；同时声明 provider-card 子槽，供同一适配器的模型能力插件挂入原生展开行 |
 
-两半通过 `ctx.connection.rpc` 上的 `/copilot-auth` 通道通信，dsh 会给它套上和 `/api` 一样的 Host/Origin 围栏与浏览器认证；在 dsh-remote 部署里，外面还叠着 relay 的登录。
+两半通过 `ctx.connection.rpc` 上的 `/copilot-auth` 通道通信，dsh 会给它套上和 `/api` 一样的 Host/Origin 围栏与浏览器认证；在 dsh-station 部署里，外面还叠着 relay 的登录。
 
 ## 边界
 
@@ -55,7 +55,7 @@ node scripts/copilot-auth-check.mjs
 
 ## 分发与管理
 
-本包不作为独立安装项分发，而是 `@dsh-remote/dsh-plugin-model-enhancements`（模型增强 Bundle）的组件。停用后，Copilot 登录入口消失；已保存的凭据与账号模型条目保留。
+本包不作为独立安装项分发，而是 `@dsh-station/dsh-plugin-model-enhancements`（模型增强 Bundle）的组件。停用后，Copilot 登录入口消失；已保存的凭据与账号模型条目保留。
 可在该 Bundle 详情中单独停用或重新启用本组件；安装、卸载和升级以整个模型增强 Bundle 为单位。
 launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，并保留 Bundle 与组件的停用状态；卸载后不会自动补回。
 需要重装时，在 dsh「添加插件」中填写发行包 `plugins/model-enhancements` 或开发环境 `.dev/plugins/model-enhancements` 的绝对目录。

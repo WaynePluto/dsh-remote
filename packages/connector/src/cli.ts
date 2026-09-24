@@ -2,7 +2,7 @@ import { hostname } from 'node:os'
 import { Command, InvalidArgumentError } from 'commander'
 import { createConnector, ConnectorFatalError, type Connector } from './connector.js'
 import { DeviceKeyError } from './device-key.js'
-import { MembershipFileError, defaultDshRemoteHome } from './membership.js'
+import { MembershipFileError, defaultDshStationHome } from './membership.js'
 
 function port(value: string): number {
   const parsed = Number(value)
@@ -22,23 +22,23 @@ function dshHost(value: string): '127.0.0.1' {
 /** 回退到根据主机名生成的稳定、符合 DNS label 形状的 id。 */
 function defaultMachineId(slug: string | undefined): string {
   const host = hostname().toLowerCase().replaceAll(/[^a-z0-9-]+/gu, '-').replace(/^-+|-+$/gu, '')
-  if (host === '') return slug ?? 'dsh-remote-machine'
+  if (host === '') return slug ?? 'dsh-station-machine'
   return slug === undefined ? host : `${host}-${slug}`
 }
 
 const program = new Command()
-  .name('dsh-remote-connector')
-  .description('dsh-remote reverse-tunnel connector')
+  .name('dsh-station-connector')
+  .description('dsh-station reverse-tunnel connector')
   .option('--relay <url>', 'relay WebSocket origin, e.g. wss://relay.dsh.example.com; overrides membership.json. Without it the connector idles until a hub admin console joins this machine')
   .option('--slug <slug>', 'this machine\'s slug when using --relay; a hub joined from an admin console supplies its own')
-  .option('--home <path>', `dsh-remote home holding device.key and membership.json (default: ${defaultDshRemoteHome()})`)
+  .option('--home <path>', `dsh-station home holding device.key and membership.json (default: ${defaultDshStationHome()})`)
   .option('--machine-id <id>', 'stable device id (default: <hostname>-<slug>)')
   .option('--device-key <path>', 'Ed25519 device key file (default: <home>/device.key)')
-  .option('--enroll-token <token>', 'one-time relay enrollment token, only needed until this device is registered (prefer DSH_REMOTE_ENROLL_TOKEN)')
+  .option('--enroll-token <token>', 'one-time relay enrollment token, only needed until this device is registered (prefer DSH_STATION_ENROLL_TOKEN)')
   .option('--hub-authority <host>', 'browser-facing authority of the hub, e.g. 10.1.2.87; mode A forwards the browser Host untouched, so this machine\'s dsh must trust it')
   .option('--dsh-host <host>', 'local dsh bind host (must remain 127.0.0.1)', dshHost, '127.0.0.1')
   .option('--dsh-port <port>', 'local dsh port', port, 3080)
-  .option('--dsh-token <token>', 'dsh web login token printed by dsh on start-up (prefer DSH_REMOTE_DSH_TOKEN)')
+  .option('--dsh-token <token>', 'dsh web login token printed by dsh on start-up (prefer DSH_STATION_DSH_TOKEN)')
 
 program.parse()
 const options = program.opts<{
@@ -56,17 +56,17 @@ const options = program.opts<{
 
 // dsh 每次启动都会生成新 token，因此环境变量是通常的
 // 路径：启动 dsh 的进程从它的第一行输出中读出 token。
-const dshToken = options.dshToken ?? process.env.DSH_REMOTE_DSH_TOKEN
+const dshToken = options.dshToken ?? process.env.DSH_STATION_DSH_TOKEN
 
-const enrollToken = options.enrollToken ?? process.env.DSH_REMOTE_ENROLL_TOKEN
+const enrollToken = options.enrollToken ?? process.env.DSH_STATION_ENROLL_TOKEN
 if (enrollToken !== undefined && enrollToken.length < 16) {
-  program.error('--enroll-token (or DSH_REMOTE_ENROLL_TOKEN) must be at least 16 characters; copy it verbatim from the relay')
+  program.error('--enroll-token (or DSH_STATION_ENROLL_TOKEN) must be at least 16 characters; copy it verbatim from the relay')
   throw new Error('unreachable')
 }
 // CLI token 只适用于通过 CLI 选择的 relay；从管理控制台加入的
 // hub 会在 membership.json 中携带自己的 token。
 if (options.enrollToken !== undefined && options.relay === undefined) {
-  program.error('--enroll-token (or DSH_REMOTE_ENROLL_TOKEN) needs --relay; a hub joined from an admin console carries its own token in membership.json')
+  program.error('--enroll-token (or DSH_STATION_ENROLL_TOKEN) needs --relay; a hub joined from an admin console carries its own token in membership.json')
   throw new Error('unreachable')
 }
 

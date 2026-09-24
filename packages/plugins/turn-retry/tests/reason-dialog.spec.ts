@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { dialogFullscreenGeometry } from '@dsh-remote/plugin-ui'
-import { assertDialogGeometry } from '@dsh-remote/plugin-ui/test'
+import { dialogFullscreenGeometry } from '@dsh-station/plugin-ui'
+import { assertDialogGeometry } from '@dsh-station/plugin-ui/test'
 import {
   applyReasonDialogMove,
   applyReasonDialogResize,

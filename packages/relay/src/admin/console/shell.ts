@@ -155,14 +155,14 @@ export function consolePage(options: {
     ? ''
     : `<a class="open" href="${LOGOUT_PATH}?returnTo=${encodeURIComponent(options.current)}">退出登录</a>`
   return renderPage({
-    title: `${options.title} · ${options.machine} · dsh-remote`,
+    title: `${options.title} · ${options.machine} · DSH 工作站`,
     extraStyle: CONSOLE_STYLE,
     appearance: options.appearance,
     body: `${tabStrip(options.current)}
 <p class="eyebrow">你正在管理 ${escapeHtml(options.machine)}</p><h1>${options.heading}</h1>
 <p class="intro">${options.intro}</p>
 ${options.body}
-<div class="signout"><p class="foot">dsh-remote / signed in as ${who}</p>${signOut}</div>`,
+<div class="signout"><p class="foot">DSH 工作站 / signed in as ${who}</p>${signOut}</div>`,
   })
 }
 
@@ -195,7 +195,7 @@ export function confirmPage(options: {
     : `
 <input type="hidden" name="machineId" value="${escapeHtml(options.machineId)}">`
   return renderPage({
-    title: `${options.title} · ${options.machine} · dsh-remote`,
+    title: `${options.title} · ${options.machine} · DSH 工作站`,
     extraStyle: CONSOLE_STYLE,
     appearance: options.appearance,
     body: `<p class="eyebrow">你正在管理 ${escapeHtml(options.machine)}</p><h1>${escapeHtml(options.heading)}</h1>
@@ -216,13 +216,13 @@ export function confirmPage(options: {
  */
 export function renderOfflinePage(slug: string, appearance: PageAppearance): string {
   return renderPage({
-    title: '机器离线 · dsh-remote',
+    title: '机器离线 · DSH 工作站',
     extraStyle: CONSOLE_STYLE,
     appearance,
     body: `<p class="eyebrow">Machine offline</p><h1>${escapeHtml(slug)} 当前离线</h1>
 <p class="intro">${escapeHtml(slug)} 上的 connector 没有连过来，所以现在没法把请求送到它的 dsh。</p>
-<p class="empty">让那台机器开机并启动 dsh-remote 即可；connector 会自动重连，届时刷新本页就能继续使用，不需要在这里做任何设置。</p>
+<p class="empty">让那台机器开机并启动 DSH 工作站 即可；connector 会自动重连，届时刷新本页就能继续使用，不需要在这里做任何设置。</p>
 <div class="actions"><a class="open" href="${ADMIN_PATH_PREFIX}">看看能打开哪些机器 →</a></div>
-<p class="foot">dsh-remote / relay</p>`,
+<p class="foot">DSH 工作站 / relay</p>`,
   })
 }

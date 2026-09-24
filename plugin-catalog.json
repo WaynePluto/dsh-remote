@@ -2,89 +2,89 @@
   "schemaVersion": 1,
   "shell": [
     {
-      "name": "@dsh-remote/dsh-plugin-remote-privileged",
+      "name": "@dsh-station/dsh-plugin-remote-privileged",
       "source": "packages/plugins/remote-privileged"
     }
   ],
   "distributions": [
     {
-      "name": "@dsh-remote/dsh-plugin-remote-experience",
+      "name": "@dsh-station/dsh-plugin-remote-experience",
       "source": "packages/plugins/remote-experience",
       "components": [
-        { "name": "@dsh-remote/dsh-plugin-remote-settings", "rowId": "remote-settings" },
-        { "name": "@dsh-remote/dsh-plugin-browser-compat", "rowId": "browser-compat" }
+        { "name": "@dsh-station/dsh-plugin-remote-settings", "rowId": "remote-settings" },
+        { "name": "@dsh-station/dsh-plugin-browser-compat", "rowId": "browser-compat" }
       ]
     },
     {
-      "name": "@dsh-remote/dsh-plugin-directory-picker-browse",
+      "name": "@dsh-station/dsh-plugin-directory-picker-browse",
       "source": "packages/plugins/directory-picker-browse",
       "components": [
-        { "name": "@dsh-remote/dsh-plugin-directory-picker-browse", "rowId": "directory-picker" }
+        { "name": "@dsh-station/dsh-plugin-directory-picker-browse", "rowId": "directory-picker" }
       ]
     },
     {
-      "name": "@dsh-remote/dsh-plugin-proxy",
+      "name": "@dsh-station/dsh-plugin-proxy",
       "source": "packages/plugins/proxy",
       "components": [
-        { "name": "@dsh-remote/dsh-plugin-proxy", "rowId": "proxy" }
+        { "name": "@dsh-station/dsh-plugin-proxy", "rowId": "proxy" }
       ]
     },
     {
-      "name": "@dsh-remote/dsh-plugin-model-enhancements",
+      "name": "@dsh-station/dsh-plugin-model-enhancements",
       "source": "packages/plugins/model-enhancements",
       "components": [
-        { "name": "@dsh-remote/dsh-plugin-copilot-auth", "rowId": "copilot-auth" },
-        { "name": "@dsh-remote/dsh-plugin-models-catalog", "rowId": "models-catalog", "toggleable": false },
-        { "name": "@dsh-remote/dsh-plugin-model-capabilities", "rowId": "model-capabilities", "toggleable": false },
-        { "name": "@dsh-remote/dsh-plugin-favorite-models", "rowId": "favorite-models" }
+        { "name": "@dsh-station/dsh-plugin-copilot-auth", "rowId": "copilot-auth" },
+        { "name": "@dsh-station/dsh-plugin-models-catalog", "rowId": "models-catalog", "toggleable": false },
+        { "name": "@dsh-station/dsh-plugin-model-capabilities", "rowId": "model-capabilities", "toggleable": false },
+        { "name": "@dsh-station/dsh-plugin-favorite-models", "rowId": "favorite-models" }
       ]
     },
     {
-      "name": "@dsh-remote/dsh-plugin-concise-mode",
+      "name": "@dsh-station/dsh-plugin-concise-mode",
       "source": "packages/plugins/concise-mode",
       "components": [
-        { "name": "@dsh-remote/dsh-plugin-concise-mode", "rowId": "agent-presets" }
+        { "name": "@dsh-station/dsh-plugin-concise-mode", "rowId": "agent-presets" }
       ]
     },
     {
-      "name": "@dsh-remote/dsh-plugin-conversation-enhancements",
+      "name": "@dsh-station/dsh-plugin-conversation-enhancements",
       "source": "packages/plugins/conversation-enhancements",
       "components": [
-        { "name": "@dsh-remote/dsh-plugin-turn-retry", "rowId": "turn-retry" },
-        { "name": "@dsh-remote/dsh-plugin-chat-scroll", "rowId": "chat-scroll" },
-        { "name": "@dsh-remote/dsh-plugin-user-message-fork", "rowId": "user-message-fork" },
-        { "name": "@dsh-remote/dsh-plugin-notify", "rowId": "notify" }
+        { "name": "@dsh-station/dsh-plugin-turn-retry", "rowId": "turn-retry" },
+        { "name": "@dsh-station/dsh-plugin-chat-scroll", "rowId": "chat-scroll" },
+        { "name": "@dsh-station/dsh-plugin-user-message-fork", "rowId": "user-message-fork" },
+        { "name": "@dsh-station/dsh-plugin-notify", "rowId": "notify" }
       ]
     },
     {
-      "name": "@dsh-remote/dsh-plugin-agents-md",
+      "name": "@dsh-station/dsh-plugin-agents-md",
       "source": "packages/plugins/agents-md",
       "components": [
-        { "name": "@dsh-remote/dsh-plugin-agents-md", "rowId": "agents-md" }
+        { "name": "@dsh-station/dsh-plugin-agents-md", "rowId": "agents-md" }
       ]
     },
     {
-      "name": "@dsh-remote/dsh-plugin-development-tools",
+      "name": "@dsh-station/dsh-plugin-development-tools",
       "source": "packages/plugins/development-tools",
       "components": [
-        { "name": "@dsh-remote/dsh-plugin-services", "rowId": "services" },
-        { "name": "@dsh-remote/dsh-plugin-terminal", "rowId": "terminal" },
-        { "name": "@dsh-remote/dsh-plugin-tools-inspector", "rowId": "tools-inspector" },
-        { "name": "@dsh-remote/dsh-plugin-skills-inspector", "rowId": "skills-inspector" }
+        { "name": "@dsh-station/dsh-plugin-services", "rowId": "services" },
+        { "name": "@dsh-station/dsh-plugin-terminal", "rowId": "terminal" },
+        { "name": "@dsh-station/dsh-plugin-tools-inspector", "rowId": "tools-inspector" },
+        { "name": "@dsh-station/dsh-plugin-skills-inspector", "rowId": "skills-inspector" }
       ]
     },
     {
-      "name": "@dsh-remote/dsh-plugin-files",
+      "name": "@dsh-station/dsh-plugin-files",
       "source": "packages/plugins/files",
       "components": [
-        { "name": "@dsh-remote/dsh-plugin-files", "rowId": "files" }
+        { "name": "@dsh-station/dsh-plugin-files", "rowId": "files" }
       ]
     },
     {
-      "name": "@dsh-remote/dsh-plugin-yolo-mode",
+      "name": "@dsh-station/dsh-plugin-yolo-mode",
       "source": "packages/plugins/yolo-mode",
       "components": [
-        { "name": "@dsh-remote/dsh-plugin-yolo-mode", "rowId": "yolo-mode" }
+        { "name": "@dsh-station/dsh-plugin-yolo-mode", "rowId": "yolo-mode" }
       ]
     }
   ]

@@ -15,6 +15,7 @@ import type {} from '@deepseek-ai/dsh-user-questions'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session, TurnEndReason } from '@deepseek-ai/dsh-session'
 import type { ConnectionRpcResult } from '@deepseek-ai/dsh-client-connection'
+import { forwardToDesktop } from './desktop.js'
 import { outcomeOf, settledNotice, waitingNotice } from './notice.js'
 import { WindowsToastNotifier } from './toast.js'
 import type { Notifier } from './toast.js'
@@ -34,7 +35,7 @@ export {
 export type { Notice, Notifier } from './toast.js'
 
 /** 出现在 dsh 插件树和诊断信息中的 Cordis 插件名。 */
-export const name = 'dsh-remote-notify'
+export const name = 'dsh-station-notify'
 
 /**
  * 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`agents`）
@@ -211,7 +212,10 @@ export function apply(ctx: Context, config: Config, options: NotifyOptions = {})
    * 实现说明：此处记录相关接口、边界和生命周期约束。
    * 实现说明：此处记录相关接口、边界和生命周期约束。
    */
-  const show = (notice: { title: string; body: string }): void => {
+  const show = (notice: { title: string; body: string }, session?: Session): void => {
+    // S1.6：桌面壳驻留时经命名管道接管通知（点击可在壳内定位会话）；
+    // 壳不在时回落 Windows toast，Web/CLI 行为不变。
+    if (forwardToDesktop({ sessionId: session?.header.id, title: notice.title, body: notice.body })) return
     void notifier.send(notice).catch((error: unknown) => {
       ctx.logger?.debug('notify: could not show a notification: %s', error)
     })
@@ -253,7 +257,7 @@ export function apply(ctx: Context, config: Config, options: NotifyOptions = {})
         ...sessionFacts(ctx, agent.session),
         outcome,
         ...reason?.kind === 'error' ? { code: reason.error.code } : {},
-      }))
+      }), agent.session)
     }, settleDebounceMs)
     timer.unref?.()
     timers.add(timer)
@@ -278,7 +282,7 @@ export function apply(ctx: Context, config: Config, options: NotifyOptions = {})
     const settings = readConfig(config)
     if (!settings.enabled || !settings.waiting) return () => {}
     if (agent !== undefined && !ctx.agents.roots().includes(agent)) return () => {}
-    return arm(waitingDelayMs, () => { show(notice) })
+    return arm(waitingDelayMs, () => { show(notice, agent?.session) })
   }
 
   // 实现说明：此处记录相关接口、边界和生命周期约束。

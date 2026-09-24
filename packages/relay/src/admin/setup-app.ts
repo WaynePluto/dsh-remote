@@ -99,7 +99,7 @@ function passwordPage(options: {
   error?: string
 }): string {
   return renderPage({
-    title: '初始设置 · dsh-remote',
+    title: '初始设置 · dsh-station',
     extraStyle: SETUP_STYLE,
     appearance: options.appearance,
     body: `<p class="eyebrow">First run setup</p><h1>创建管理员账号</h1>
@@ -112,7 +112,7 @@ ${alertMarkup(options.error)}
 <div class="field"><label for="confirmPassword">再输入一次</label><input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" required maxlength="256"></div>
 <button type="submit">下一步：绑定验证器</button></form>
 <p class="hint">账号名默认是 <strong>${escapeHtml(DEFAULT_ADMIN_USERNAME)}</strong>，可以改成别的，只能用字母、数字和 <strong>. _ -</strong>；设好之后要自己记住它。任何拿到这个账号的人都能在本机执行任意命令，请不要复用其他网站的密码。</p>
-<p class="foot">dsh-remote / first run</p>`,
+<p class="foot">dsh-station / first run</p>`,
   })
 }
 
@@ -124,7 +124,7 @@ function enrollmentPage(options: {
   error?: string
 }): string {
   return renderPage({
-    title: '绑定验证器 · dsh-remote',
+    title: '绑定验证器 · dsh-station',
     extraStyle: SETUP_STYLE,
     appearance: options.appearance,
     body: `<p class="eyebrow">First run setup</p><h1>绑定验证器</h1>
@@ -136,7 +136,7 @@ ${enrollmentPanel({
       confirm: { action: SETUP_CONFIRM_PATH, csrf: options.csrf, label: '完成设置并进入控制台' },
     })}
 <p class="hint">确认之前请先把密钥抄下来放在安全的地方；手机丢了以后，它是重新绑定验证器的唯一凭据。</p>
-<p class="foot">dsh-remote / first run</p>`,
+<p class="foot">dsh-station / first run</p>`,
   })
 }
 
@@ -152,19 +152,19 @@ export function renderSetupRequiredPage(
   appearance: PageAppearance,
 ): string {
   return renderPage({
-    title: '尚未完成初始设置 · dsh-remote',
+    title: '尚未完成初始设置 · dsh-station',
     extraStyle: SETUP_STYLE,
     appearance,
     body: `<p class="eyebrow">Setup required</p><h1>还没有创建管理员账号</h1>
 <p class="intro">这台机器上还没有任何账号，所以现在没有人能登录。出于安全考虑，账号<strong>只能在运行它的那台电脑上创建</strong>，否则同一个网络里的任何人都能抢先把它据为己有。</p>
 <ol class="steps">
-<li>走到运行 dsh-remote 的那台电脑前；</li>
+<li>走到运行 dsh-station 的那台电脑前；</li>
 <li>在它自己的浏览器里打开下面这个地址；</li>
 <li>设好密码、扫码绑定验证器，然后再回到这台设备登录。</li>
 </ol>
 <p class="hint">要打开的地址：</p>
 <p class="cmd">${escapeHtml(loopbackUrl)}</p>
-<p class="foot">dsh-remote / relay</p>`,
+<p class="foot">dsh-station / relay</p>`,
   })
 }
 

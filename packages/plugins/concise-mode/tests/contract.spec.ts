@@ -23,7 +23,7 @@ describe('concise mode profile bundle', () => {
     expect(patch).toContain('id: concise-ptc')
     // 绿色包可移植性：不携带开发机绝对路径，也不引用本包 dist。
     expect(patch).not.toMatch(/[A-Za-z]:\\/)
-    expect(patch).not.toContain('dshRemoteConcisePresetRoot')
+    expect(patch).not.toContain('dshStationConcisePresetRoot')
     expect(patch).not.toContain('./dist/')
   })
 })

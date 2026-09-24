@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 // 使用 dsh primitives 和本插件的 dialog resize helper；布局保持 dock-card 约定。
 import { Button, IconFullscreenOutlineMedium, IconRefreshOutlineMedium, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
-import { DialogFullscreenButton, useDialogFullscreen } from '@dsh-remote/plugin-ui'
+import { DialogFullscreenButton, useDialogFullscreen } from '@dsh-station/plugin-ui'
 import type { RetryResult, TurnRetryState } from '../shared.js'
 import { fill } from './locales.js'
 import type { RetryKey } from './locales.js'

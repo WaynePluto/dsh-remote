@@ -1,6 +1,6 @@
 import type { IncomingMessage, OutgoingHttpHeaders } from 'node:http'
 import { isIP } from 'node:net'
-import { machineSlugSchema } from '@dsh-remote/protocol'
+import { machineSlugSchema } from '@dsh-station/protocol'
 import { isLoopbackBrowserRequest } from '../auth/loopback.js'
 import type { RelayConfig } from '../config.js'
 

@@ -62,7 +62,7 @@ function loginPage(options: {
     ? ''
     : `<p class="error" role="alert">${escapeHtml(options.error)}</p>`
   return renderPage({
-    title: '登录 · dsh-remote',
+    title: '登录 · dsh-station',
     appearance: options.appearance,
     body: `<p class="eyebrow">Authenticated relay</p><h1>建立安全控制链路</h1>
 <p class="intro">输入管理员凭据和验证器中的 6 位动态码。</p>${error}
@@ -74,7 +74,7 @@ function loginPage(options: {
 <div class="field"><label for="totp">动态验证码</label><input class="code" id="totp" name="totp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></div>
 <button type="submit">连接到这台机器</button></form>
 <p class="hint">账号是初次设置时自己填的名字（默认 admin）。忘了的话，在运行它的那台电脑上打开控制台的「账号」页就能看到。</p>
-<p class="foot">dsh-remote / access gateway</p>`,
+<p class="foot">dsh-station / access gateway</p>`,
   })
 }
 
@@ -97,7 +97,7 @@ function logoutPage(options: {
   appearance: PageAppearance
 }): string {
   return renderPage({
-    title: '退出登录 · dsh-remote',
+    title: '退出登录 · dsh-station',
     extraStyle: LOGOUT_STYLE,
     appearance: options.appearance,
     body: `<p class="eyebrow">Sign out</p><h1>退出登录？</h1>
@@ -106,7 +106,7 @@ function logoutPage(options: {
 <input type="hidden" name="csrf" value="${escapeHtml(options.csrf)}">
 <button type="submit">退出登录</button></form>
 <p class="back"><a href="${escapeHtml(options.returnTo)}">取消，回到刚才的页面</a></p>
-<p class="foot">dsh-remote / access gateway</p>`,
+<p class="foot">dsh-station / access gateway</p>`,
   })
 }
 

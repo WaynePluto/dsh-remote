@@ -224,7 +224,7 @@ describe('device challenge message', () => {
   it('is deterministic and domain separated', () => {
     expect(deviceChallengeMessage(base)).toEqual(deviceChallengeMessage({ ...base }))
     expect(Buffer.from(deviceChallengeMessage(base)).toString('utf8'))
-      .toContain('dsh-remote/device-challenge/v2')
+      .toContain('dsh-station/device-challenge/v2')
   })
 
   it('changes when any bound field changes', () => {

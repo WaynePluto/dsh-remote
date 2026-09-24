@@ -1,10 +1,10 @@
-# dsh-remote
+# DSH Station (dsh-station)
 
 [简体中文](README.md) | **English**
 
 Drive **DeepSeek Harness (dsh)** from any browser: let dsh work on your desktop, keep directing it from your phone on the road, and pick up the same session on your laptop at home.
 
-- **Bundles dsh**: installing dsh-remote is all you need — **no separate dsh installation**. dsh ships as a dependency; upgrading dsh-remote upgrades dsh
+- **Bundles dsh**: installing dsh-station is all you need — **no separate dsh installation**. dsh ships as a dependency; upgrading dsh-station upgrades dsh
 - **No dsh forks or patches** — always tracks the official release
 - Controlled machines **listen on no public port**; they dial out, so your router needs no port forwarding
 - The UI is dsh's own (all 40 official UI plugins work unchanged)
@@ -12,7 +12,7 @@ Drive **DeepSeek Harness (dsh)** from any browser: let dsh work on your desktop,
 
 ## How it connects
 
-Every machine running dsh-remote is **identical**: its own dsh, a console, and a dialer. The only difference is **which one you treat as the entry machine** — the one your browser actually opens.
+Every machine running dsh-station is **identical**: its own dsh, a console, and a dialer. The only difference is **which one you treat as the entry machine** — the one your browser actually opens.
 
 > **Each machine runs its own dsh; file access and command execution happen locally on that machine.**
 > Opening pc2's page directs pc2's dsh working on pc2's code; pc1 only forwards. "Attaching pc2 to pc1" means pc2's dsh becomes reachable at pc1's address from then on — not the other way around. **Choosing a machine = choosing where your code runs.**
@@ -55,21 +55,21 @@ Every machine running dsh-remote is **identical**: its own dsh, a console, and a
 
 ## Install
 
-Download the zip for **your platform** from [Releases](../../releases) and unpack (dsh is included). Each platform comes in **core / full** variants — pick what you need:
+Download the zip for **your platform** from [Releases](../../releases) and unpack (dsh is included). Each platform comes in **lite / full** (轻量版 / 完整版) variants — pick what you need:
 
-| Feature | core | full |
+| Feature | lite | full |
 |---|---|---|
 | dsh core features | ✅ | ✅ |
 | Office document preview | ❌ | ✅ |
 
-- **Windows**: double-click `dsh-remote.exe`. The exe is unsigned; if SmartScreen complains, choose "More info → Run anyway". Or run `pwsh -File .\start.ps1`
+- **Windows**: double-click `dsh-station.exe`. The exe is unsigned; if SmartScreen complains, choose "More info → Run anyway". Or run `pwsh -File .\start.ps1`
 - **Linux / macOS**: `./start.sh`
 
-> Packages are per-platform because dsh's dependencies ship prebuilt platform binaries; dsh-remote's own code has zero native modules.
+> Packages are per-platform because dsh's dependencies ship prebuilt platform binaries; dsh-station's own code has zero native modules.
 
 ### Bundled functional plugins
 
-On the first start of the `dsh-remote-web` profile, dsh-remote uses dsh's official plugin manager to install
+On the first start of the `dsh-station-web` profile, dsh-station uses dsh's official plugin manager to install
 and enable 10 bundled third-party Bundles containing 20 functional components: four grouped packages
 (remote experience, model enhancements, conversation enhancements, and development tools) plus six
 standalone packages (directory picker, proxy, concise mode, global instructions, files, and fixed YOLO).
@@ -78,7 +78,7 @@ standalone packages (directory picker, proxy, concise mode, global instructions,
   disabled independently. The model catalog and model capabilities components share the `llm-pi-ai`
   startup barrier and must not be disabled separately.
 - The browser directory picker is standalone because it must statically override dsh's native picker.
-- Upgrading dsh-remote also upgrades every bundled package that is still installed, including disabled
+- Upgrading dsh-station also upgrades every bundled package that is still installed, including disabled
   Bundles, while preserving Bundle and component disabled states.
 - Uninstalling is remembered: neither the launcher nor the tray restores the package. To reinstall the
   version shipped with the current release, use dsh's “Add plugin” action with the absolute path
@@ -92,17 +92,17 @@ standalone packages (directory picker, proxy, concise mode, global instructions,
 Or build the exact same package from source:
 
 ```bash
-git clone <this-repo-url> dsh-remote
-cd dsh-remote
+git clone <this-repo-url> dsh-station
+cd dsh-station
 pnpm install
 pnpm release
 ```
 
-`pnpm release` builds first (skip with `--skip-build`), targets the host platform by default (`--target=all` for all), packs both core and full variants per platform (filter with `--variant=core`), and writes the zips to `release/` — unpack and start it as above. Packing requires pnpm >=10 (the project does not force a local pnpm version; CI pins 10.17.0 for reproducibility). The Windows `dsh-remote.exe` is compiled with [Go](https://go.dev/dl/); without Go, add `--skip-exe` and that package starts via `start.ps1` only.
+`pnpm release` builds first (skip with `--skip-build`), targets the host platform by default (`--target=all` for all), packs both lite and full variants per platform (filter with `--variant=lite`), and writes the zips to `release/` — unpack and start it as above. Packing requires pnpm >=10 (the project does not force a local pnpm version; CI pins 10.17.0 for reproducibility). The Windows `dsh-station.exe` is compiled with [Go](https://go.dev/dl/); without Go, add `--skip-exe` and that package starts via `start.ps1` only.
 
 ## First start
 
-Unpack and start on the machine you want as the **entry machine** (double-click `dsh-remote.exe` on Windows, run `./start.sh` on Linux / macOS). The first start has no admin account yet, and the program hands you the setup address:
+Unpack and start on the machine you want as the **entry machine** (double-click `dsh-station.exe` on Windows, run `./start.sh` on Linux / macOS). The first start has no admin account yet, and the program hands you the setup address:
 
 - **Windows**: the tray pops up a "setup not finished" notification — clicking it opens the setup page; started via `start.ps1`, the terminal prints the same address
 - **Linux / macOS**: the `./start.sh` terminal prints an address like `http://127.0.0.1:30809`
@@ -135,10 +135,10 @@ On the machine itself, `http://127.0.0.1:30809` is **login-free** (loopback only
 
 ## Attaching a second machine
 
-1. Start dsh-remote on **pc2** too; it will say "no remote entry" — expected, leave it running
+1. Start dsh-station on **pc2** too; it will say "no remote entry" — expected, leave it running
 2. On **pc1**, open `http://127.0.0.1:30809/_admin`, enter pc2's machine name under "expose another machine via pc1", and issue a token. The page shows a copy-paste command:
    ```
-   dsh-remote-connector --relay ws://192.168.1.10:30809 --slug pc2 --enroll-token xxxxx --hub-authority 192.168.1.10
+   dsh-station-connector --relay ws://192.168.1.10:30809 --slug pc2 --enroll-token xxxxx --hub-authority 192.168.1.10
    ```
 3. On **pc2**, open the console → "Remote entry" page (`http://127.0.0.1:30809/_admin/hub`) and paste the whole command into the only input box
 
@@ -146,7 +146,7 @@ pc2 **connects immediately, no restart**, and gets a fixed port on pc1; from pc1
 
 > The token is single-use and valid for **5 minutes**: it is deleted from the database once pc2 registers its device public key and is never shown again — just issue a new one if it expires.
 >
-> ⚠️ pc2's dsh must trust pc1's address: after pasting, **restart dsh-remote on pc2 once** and the launcher adds it automatically.
+> ⚠️ pc2's dsh must trust pc1's address: after pasting, **restart dsh-station on pc2 once** and the launcher adds it automatically.
 
 ## Day-to-day
 
@@ -162,7 +162,7 @@ Everything happens in the browser. The console at `/_admin` has three tabs; each
 |---|---|
 | See which machines you can open | "Machines" |
 | Expose one more machine | "Machines" → "expose another machine via …" |
-| Detach and disable a machine | "Machines" → "stop … and remove" — **dsh-remote on that machine exits entirely**, its tokens are revoked |
+| Detach and disable a machine | "Machines" → "stop … and remove" — **dsh-station on that machine exits entirely**, its tokens are revoked |
 | Set / cancel this machine's remote entry | "Remote entry" |
 | Change password / new phone for authenticator | "Account" |
 | See what happened recently | There is no such page in the UI — see "Security" below |
@@ -196,7 +196,7 @@ This tool hands your dev machine to a browser. Read this once:
 - **Never expose it to the public internet without HTTPS.** Plain HTTP on the LAN is an accepted trade-off (a loud warning is printed at startup); on the public internet you must put HTTPS in front (Caddy or similar with automatic certificates).
 - dsh itself has no authentication and only listens on `127.0.0.1`; the console is the only door — **a compromised console account equals a compromised machine** (whoever can start a session can run commands).
 - Five failed logins lock the account for 15 minutes.
-- **The default is fixed YOLO mode**: `dsh-remote-web` hides the permission selector, `bash` / `pwsh` / `write` / `edit` run with the dsh process user's permissions, and legitimate approval requests are allowed automatically. Disable the `yolo-mode` plugin and restart dsh to restore dsh's native permission protection. `ask_user_question` still asks you questions.
+- **The default is fixed YOLO mode**: `dsh-station-web` hides the permission selector, `bash` / `pwsh` / `write` / `edit` run with the dsh process user's permissions, and legitimate approval requests are allowed automatically. Disable the `yolo-mode` plugin and restart dsh to restore dsh's native permission protection. `ask_user_question` still asks you questions.
 - **Security records are not in the web UI**: login attempts, machine attach/remove, password/authenticator changes are written to both the relay log (JSON lines with `"audit":true`) and the `audit_log` table in `relay.db`, never auto-expiring; inspect them on the machine running the relay.
 - Threat model and accepted trade-offs: [docs/04-security.md](docs/04-security.md) (Chinese).
 
@@ -205,9 +205,9 @@ This tool hands your dev machine to a browser. Read this once:
 | Symptom | Cause |
 |---|---|
 | Node version too low | Install 22.19+ |
-| Works locally, not from the LAN | Firewall. Windows: `New-NetFirewallRule -DisplayName "dsh-remote" -Direction Inbound -LocalPort 30809 -Protocol TCP -Action Allow` |
+| Works locally, not from the LAN | Firewall. Windows: `New-NetFirewallRule -DisplayName "dsh-station" -Direction Inbound -LocalPort 30809 -Protocol TCP -Action Allow` |
 | Correct password rejected | Check the startup log for a "pre-scrypt password hash" warning; if present, reset the password once on the local admin page |
-| 403 on an attached machine's page | Its dsh doesn't trust the entry machine's address yet — restart dsh-remote on that machine |
+| 403 on an attached machine's page | Its dsh doesn't trust the entry machine's address yet — restart dsh-station on that machine |
 
 ## Local development and debugging (for developers)
 
@@ -218,7 +218,7 @@ loads the third-party Bundles installed into the profile. The stack then runs th
 upgrade, disable, and uninstall-memory lifecycle as a release and prints the `.dev/plugins/` reinstall path.
 
 The relay database, device key, membership, and JWT secret still use the release default
-`~/.dsh-remote`; dsh settings, profiles, and sessions still use standard `~/.dsh`. Do not run the dev stack
+`~/.dsh-station`; dsh settings, profiles, and sessions still use standard `~/.dsh`. Do not run the dev stack
 and an installed release at the same time: they contend for ports and share device identity. `pnpm start`
 only runs existing build artifacts; it does not replace the plugin build, media generation, and isolated
 runtime preparation performed by `pnpm run dev`.
@@ -256,9 +256,9 @@ The tunnel, authentication, portable packages, and 20 functional plugin componen
 |---|---|
 | dsh version | `0.1.7-rc.1` (next channel, developer preview, **breaking changes expected**) |
 | dsh Node requirement | `^22.19.0 \|\| >=24.0.0` |
-| Runtime policy | uses your local Node; no Node binary bundled |
+| Runtime policy | current zips all use your local Node, no Node binary bundled; the desktop full edition (planned) will bundle a pinned Node |
 | Native modules | zero in our own code (scrypt from Node core); dsh ships prebuilt per-platform binaries, hence per-platform packages |
 
 ## License
 
-[MIT](LICENSE) © dsh-remote contributors
+[MIT](LICENSE) © dsh-station contributors

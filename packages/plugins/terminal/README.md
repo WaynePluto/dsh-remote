@@ -1,6 +1,6 @@
 # 交互终端
 
-`@dsh-remote/dsh-plugin-terminal` 在输入框上方提供能由用户直接输入的 PTY 终端。
+`@dsh-station/dsh-plugin-terminal` 在输入框上方提供能由用户直接输入的 PTY 终端。
 Windows 使用 PowerShell 7，POSIX 使用 bash，底层复用 dsh 的终端运行时与 node-pty。
 
 ## 使用
@@ -53,7 +53,7 @@ registry 直接实例化 Service，backend 用 ctx.plugin，wrapper 捕获上游
 详细契约见 [工具与进程](../../../docs/dsh/runtime.md)，界面规则见 [插件机制](../../../docs/dsh/plugins.md)。
 
 ```powershell
-pnpm --filter @dsh-remote/dsh-plugin-terminal test
+pnpm --filter @dsh-station/dsh-plugin-terminal test
 node scripts/terminal-check.mjs
 ```
 
@@ -61,7 +61,7 @@ live 测试需真实 PTY，验证等待用户输入、发送与回显。修改�
 
 ## 分发与管理
 
-本包不作为独立安装项分发，而是 `@dsh-remote/dsh-plugin-development-tools`（开发工具 Bundle）的组件。停用后，交互终端工具与输入框入口消失；Linux 上经交互终端使用 sudo 的入口也不可用。
+本包不作为独立安装项分发，而是 `@dsh-station/dsh-plugin-development-tools`（开发工具 Bundle）的组件。停用后，交互终端工具与输入框入口消失；Linux 上经交互终端使用 sudo 的入口也不可用。
 可在该 Bundle 详情中单独停用或重新启用本组件；安装、卸载和升级以整个开发工具 Bundle 为单位。
 launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，并保留 Bundle 与组件的停用状态；卸载后不会自动补回。
 需要重装时，在 dsh「添加插件」中填写发行包 `plugins/development-tools` 或开发环境 `.dev/plugins/development-tools` 的绝对目录。

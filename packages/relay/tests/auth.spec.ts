@@ -89,7 +89,7 @@ describe('TOTP enrollment and verification', () => {
     const uri = new URL(enrollment.uri)
     expect(uri.protocol).toBe('otpauth:')
     expect(uri.hostname).toBe('totp')
-    expect(uri.searchParams.get('issuer')).toBe('dsh-remote')
+    expect(uri.searchParams.get('issuer')).toBe('dsh-station')
     expect(uri.searchParams.get('secret')).toBe(enrollment.secret)
     expect(enrollment.secret).toMatch(/^[A-Z2-7]{32}$/)
   })

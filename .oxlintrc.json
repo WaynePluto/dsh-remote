@@ -15,6 +15,6 @@
     "no-console": "off",
     "typescript/consistent-type-imports": "error",
     "unicorn/require-module-specifiers": "off",
-    "eslint/no-underscore-dangle": ["warn", { "allow": ["require_", "__DSH_REMOTE_ITERATOR_POLYFILLED__", "__DSH_REMOTE_BROWSER_COMPAT__"] }]
+    "eslint/no-underscore-dangle": ["warn", { "allow": ["require_", "__DSH_STATION_ITERATOR_POLYFILLED__", "__DSH_STATION_BROWSER_COMPAT__"] }]
   }
 }

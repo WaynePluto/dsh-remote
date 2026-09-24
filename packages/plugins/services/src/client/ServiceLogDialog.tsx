@@ -2,7 +2,7 @@
 
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { Button, IconFullscreenOutlineMedium, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
-import { DialogFullscreenButton } from '@dsh-remote/plugin-ui'
+import { DialogFullscreenButton } from '@dsh-station/plugin-ui'
 import type { ServiceLogsResult } from '../shared.js'
 import { fill } from './locales.js'
 import type { ServicesKey } from './locales.js'

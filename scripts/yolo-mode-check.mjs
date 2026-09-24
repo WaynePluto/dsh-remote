@@ -16,7 +16,7 @@ import { inspectHostBundle as inspectHostArtifact } from './lib/check-client-bun
 const PACKAGE_DIRECTORY = join(ROOT, 'packages', 'plugins', 'yolo-mode')
 const HOST_BUNDLE = join(PACKAGE_DIRECTORY, 'dist', 'index.js')
 const BUNDLE_PATCH = join(PACKAGE_DIRECTORY, 'cordis.patch.yml')
-const YOLO_BUNDLE = '@dsh-remote/dsh-plugin-yolo-mode'
+const YOLO_BUNDLE = '@dsh-station/dsh-plugin-yolo-mode'
 const portArgument = process.argv.indexOf('--port')
 const PORT = portArgument === -1 ? 3101 : Number(process.argv[portArgument + 1])
 const HOME = join(DEV_DIRECTORY, 'yolo-mode-check-home')
@@ -44,7 +44,7 @@ function prepareProbe() {
   writeFileSync(PROBE_MODULE, `
 let lastAgent
 
-export const name = 'dsh-remote-yolo-mode-smoke-probe'
+export const name = 'dsh-station-yolo-mode-smoke-probe'
 export const inject = ['agents', 'tools', 'sandboxPolicy', 'approval', 'connection']
 
 function nextTurn(agent) {

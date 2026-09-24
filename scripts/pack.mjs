@@ -1,9 +1,9 @@
-/** 打绿色包，输出 release/dsh-remote-<version>-<zipTag>-<variant>.zip；条目直接放在 zip 根目录，没有版本目录层。
+/** 打绿色包，输出 release/dsh-station-<version>-<zipTag>-<variant>.zip；条目直接放在 zip 根目录，没有版本目录层。
  *
- * 支持 --target=<目标>（可重复或逗号分隔）、all、--variant=<core|full>（可重复或逗号分隔，默认全打）、
+ * 支持 --target=<目标>（可重复或逗号分隔）、all、--variant=<lite|full>（可重复或逗号分隔，默认全打）、
  * --skip-build 和 --skip-exe。变体没有无后缀的默认包：full 带引擎类重组件（Office 预览），
- * core 裁掉它们。目标共用 staging，按命令顺序串行部署；同一目标先打 full 再打 core
- * （core 的裁剪是破坏性的）；跨平台目标在裁剪前、本机目标在裁剪后冒烟。
+ * lite 裁掉它们。目标共用 staging，按命令顺序串行部署；同一目标先打 full 再打 lite
+ * （lite 的裁剪是破坏性的）；跨平台目标在裁剪前、本机目标在裁剪后冒烟。
  */
 /* oxlint-disable no-await-in-loop -- 打包目标共用 staging，必须串行部署和验收。 */
 import {
@@ -72,7 +72,7 @@ const context = {
 const launcherManifest = readJson(context, join(ROOT, 'packages/launcher/package.json'))
 const version = launcherManifest.version
 if (typeof version !== 'string' || version === '') fail('packages/launcher/package.json 里没有 version。')
-const prefix = `dsh-remote-${version}`
+const prefix = `dsh-station-${version}`
 
 /** 解析 target 参数；all 宽松跳过缺少二进制的目标，显式目标硬失败。 */
 function resolveRequestedTargets() {
@@ -104,7 +104,7 @@ function resolveRequestedTargets() {
 const { keys: requestedTargets, lenient } = resolveRequestedTargets()
 context.lenient = lenient
 
-/** 解析 variant 参数；默认全打，且按 VARIANTS 声明顺序执行（full 在 core 前，core 的裁剪不可逆）。 */
+/** 解析 variant 参数；默认全打，且按 VARIANTS 声明顺序执行（full 在 lite 前，lite 的裁剪不可逆）。 */
 function resolveRequestedVariants() {
   const ordered = Object.keys(context.variants)
   const values = process.argv
@@ -168,7 +168,7 @@ async function buildTarget(key) {
   say('清理暂存目录')
   rmSync(context.staging, { recursive: true, force: true })
 
-  deployProduction(context, '@dsh-remote/launcher', `${context.stagingRelative}/package`)
+  deployProduction(context, '@dsh-station/launcher', `${context.stagingRelative}/package`)
   cleanStrayDeployMirrors(context)
 
   if (!existsSync(join(context.packageDir, 'node_modules'))) {
@@ -218,7 +218,7 @@ async function buildTarget(key) {
   writeRootManifest(context.packageDir, launcherManifest)
 
   if (target.platform === 'win32') {
-    if (skipExe) say('跳过编译 dsh-remote.exe（--skip-exe）；这个包在 Windows 上只能用 start.ps1 启动。')
+    if (skipExe) say('跳过编译 dsh-station.exe（--skip-exe）；这个包在 Windows 上只能用 start.ps1 启动。')
     else buildWindowsExecutable(context)
   }
 
@@ -236,7 +236,7 @@ async function buildTarget(key) {
   if (target.platform === 'win32' && withExecutable) smokeTestWindowsExecutable(context)
 
   const entryHint = target.platform === 'win32'
-    ? (withExecutable ? `双击 ${context.winExecutable}（常驻通知区域）或 pwsh -File .\\start.ps1` : '用 pwsh -File .\\start.ps1（本次没有打进 dsh-remote.exe）')
+    ? (withExecutable ? `双击 ${context.winExecutable}（常驻通知区域）或 pwsh -File .\\start.ps1` : '用 pwsh -File .\\start.ps1（本次没有打进 dsh-station.exe）')
     : '跑 ./start.sh'
 
   const results = []
@@ -293,4 +293,4 @@ if (skipped.length !== 0) {
        ${UNLOCK_CROSS_BUILD_HINT}`)
 }
 console.log('       dsh 的原生依赖按平台安装，别发错平台。')
-console.log('       同一平台的 core/full 是同一个程序：core 只少了 Office 预览引擎，打开 Office 预览会报转换不可用。\n')
+console.log('       同一平台的 lite/full 是同一个程序：lite 只少了 Office 预览引擎，打开 Office 预览会报转换不可用。\n')

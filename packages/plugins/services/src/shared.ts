@@ -3,7 +3,7 @@
  * 本模块同时编译到 Host 与 browser，不能导入 `node:*` 或 dsh package；文件系统和 spawn 逻辑只在 `./core.ts`，浏览器不会加载。
  * 不能追加自定义 session event：dsh 的持久化事件类型受 `KNOWN_SESSION_EVENT_TYPES` 约束，OS 进程状态也必须实时 probe，因此 panel 由 Host 每次 fresh reconciliation 后回答。
  *
- * @module @dsh-remote/dsh-plugin-services/shared
+ * @module @dsh-station/dsh-plugin-services/shared
  */
 
 /**

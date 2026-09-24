@@ -1,12 +1,12 @@
 import { existsSync } from 'node:fs'
 import { hostname } from 'node:os'
 import { join } from 'node:path'
-import { machineSlugSchema } from '@dsh-remote/protocol'
+import { machineSlugSchema } from '@dsh-station/protocol'
 import { launcherDirectory } from './dsh.js'
 import { LauncherError } from './errors.js'
 
 /** 主机名中没有可转为 DNS label 的内容时使用。 */
-export const FALLBACK_MACHINE_SLUG = 'dsh-remote-machine'
+export const FALLBACK_MACHINE_SLUG = 'dsh-station-machine'
 
 /** slug 是一个 DNS label，之后可以成为一个子域名（D16）。 */
 const DNS_LABEL_MAX_LENGTH = 63
@@ -15,7 +15,7 @@ const DNS_LABEL_MAX_LENGTH = 63
  * 这台机器在自己控制台上的名称。
  *
  * 与 connector 推导 machine id
- *（`@dsh-remote/connector` 中的 `defaultMachineId`）完全相同，因此控制台、隧道和
+ *（`@dsh-station/connector` 中的 `defaultMachineId`）完全相同，因此控制台、隧道和
  * 审计日志无需配置就会使用同一个机器名。
  * @param host - 主机名；测试中注入。
  * @returns 有效的机器 slug。
@@ -50,11 +50,11 @@ export function resolveRelayEntry(
 ): RelayEntry {
   const candidates = [
     // 绿色包和 workspace 都是如此：relay 是 launcher 的真实依赖，
-    // 因此两种布局都会把它放在 <root>/node_modules/@dsh-remote/relay。
+    // 因此两种布局都会把它放在 <root>/node_modules/@dsh-station/relay。
     // 它会原地启动，而不是复制到扁平的 dist/relay.js，
     // 因为 bundle 只有从自己的目录才能正确解析依赖：pnpm 可以将版本冲突的传递依赖嵌套
     // 在该目录下，而其他位置的副本永远不会在那里查找。
-    join(directory, '..', 'node_modules', '@dsh-remote', 'relay', 'dist', 'cli.js'),
+    join(directory, '..', 'node_modules', '@dsh-station', 'relay', 'dist', 'cli.js'),
     // Workspace，已构建：packages/launcher/{dist,src} -> packages/relay/dist。
     join(directory, '..', '..', 'relay', 'dist', 'cli.js'),
     // Workspace，仅源码。
@@ -70,7 +70,7 @@ export function resolveRelayEntry(
   return { path: found, needsTsx: found.endsWith('.ts') }
 }
 
-/** relay 子进程需要、但未由 dsh-remote 自己规则固定的全部内容。 */
+/** relay 子进程需要、但未由 dsh-station 自己规则固定的全部内容。 */
 export interface RelayArgumentOptions {
   /** 绑定地址；域名模式固定 loopback（见 `config.ts` 的校验），局域网模式为 `0.0.0.0`。 */
   readonly host: string
@@ -85,7 +85,7 @@ export interface RelayArgumentOptions {
   readonly domain?: string | undefined
   /** 保存管理员、会话、设备和审计日志的 SQLite 文件。 */
   readonly data: string
-  /** 这台机器与 connector 共享的 dsh-remote home。 */
+  /** 这台机器与 connector 共享的 dsh-station home。 */
   readonly home: string
 }
 

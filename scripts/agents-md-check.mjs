@@ -15,7 +15,7 @@ import { DSH_BIN, DSH_PROFILE, DEV_DIRECTORY, ROOT, dshPluginOverlays } from './
 import { createCheckContext, runLiveDshCheck } from './lib/check-context.mjs'
 
 
-const PACKAGE_ID = '@dsh-remote/dsh-plugin-agents-md'
+const PACKAGE_ID = '@dsh-station/dsh-plugin-agents-md'
 const NAMESPACE = 'dsh-plugin-agents-md'
 const CHANNEL = 'agents-md'
 const portArgument = process.argv.indexOf('--port')
@@ -23,7 +23,7 @@ const PORT = portArgument === -1 ? 3097 : Number(process.argv[portArgument + 1])
 /** 独立的 home：不碰用户正在用的 ~/.dsh，尤其不碰他真正的 AGENTS.md。 */
 const HOME = join(DEV_DIRECTORY, 'agents-md-check-home')
 /** 写进文件的唯一标记，用来在 dsh 的基线里找回它。 */
-const MARKER = `dsh-remote-agents-md-smoke-${randomUUID()}`
+const MARKER = `dsh-station-agents-md-smoke-${randomUUID()}`
 
 let failures = 0
 

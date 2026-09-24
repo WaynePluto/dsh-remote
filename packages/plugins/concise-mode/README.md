@@ -1,6 +1,6 @@
 # 简洁模式
 
-`@dsh-remote/dsh-plugin-concise-mode` 为 `dsh-remote-web` 提供两个简洁 Agent 预设。
+`@dsh-station/dsh-plugin-concise-mode` 为 `dsh-station-web` 提供两个简洁 Agent 预设。
 新建会话时选择对应预设即可使用，不影响官方 `web` profile。
 
 ## 两个预设
@@ -32,7 +32,7 @@ Bundle patch 通过 profile 根的 `baseUrl` 创建 `require`，解析当前已�
 ## 验证
 
 ```powershell
-pnpm --filter @dsh-remote/dsh-plugin-concise-mode test
+pnpm --filter @dsh-station/dsh-plugin-concise-mode test
 node scripts/concise-mode-check.mjs
 ```
 

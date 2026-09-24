@@ -21,7 +21,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** 设置页和全局桥接共用的稳定命名空间。 */
 const NAMESPACE = 'dsh-plugin-browser-compat'
 
-/** 设置导航中的顺序；日志页靠近其他 dsh-remote 诊断/工具设置。 */
+/** 设置导航中的顺序；日志页靠近其他 dsh-station 诊断/工具设置。 */
 const ORDER = 110
 
 /** client 侧只需要 Slots 与 locale，不接触 RPC、设置持久化或 Host 文件。 */

@@ -1,7 +1,7 @@
 /**
  * 本地开发栈的共享设置。
  *
- * 范围：仅用于开发入口。发行绿色包使用 `@dsh-remote/launcher`
+ * 范围：仅用于开发入口。发行绿色包使用 `@dsh-station/launcher`
  *（M3.1）启动 dsh + connector；此脚本还会启动 relay，
  * 以便单机验证完整的局域网链路。开发栈的运行数据沿用发行版默认 home。
  */
@@ -15,40 +15,40 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 export const ROOT = fileURLToPath(new URL('..', import.meta.url))
 /** `.dev` 只供隔离冒烟脚本使用，开发栈本身不写这里。 */
 export const DEV_DIRECTORY = join(ROOT, '.dev')
-/** 开发栈沿用发行版默认的 dsh-remote home。 */
-export const DSH_REMOTE_HOME = join(homedir(), '.dsh-remote')
-export const RELAY_DATABASE = join(DSH_REMOTE_HOME, 'relay.db')
-export const DEVICE_KEY_FILE = join(DSH_REMOTE_HOME, 'device.key')
+/** 开发栈沿用发行版默认的 dsh-station home。 */
+export const DSH_STATION_HOME = join(homedir(), '.dsh-station')
+export const RELAY_DATABASE = join(DSH_STATION_HOME, 'relay.db')
+export const DEVICE_KEY_FILE = join(DSH_STATION_HOME, 'device.key')
 
 export const RELAY_PORT = 30_809
 export const DSH_PORT = 3080
-export const DSH_PROFILE = 'dsh-remote-web'
+export const DSH_PROFILE = 'dsh-station-web'
 
 // 冒烟脚本直接装载每个源码组件，便于精确归因；这不是 launcher 的第三方
 // 分发清单。产品分组与默认顺序以根目录 plugin-catalog.json 为准。
 export const DEFAULT_PROFILE_BUNDLES = [
   '@deepseek-ai/dsh-base',
   '@deepseek-ai/dsh-web-app',
-  '@dsh-remote/dsh-plugin-remote-settings',
-  '@dsh-remote/dsh-plugin-browser-compat',
-  '@dsh-remote/dsh-plugin-directory-picker-browse',
-  '@dsh-remote/dsh-plugin-proxy',
-  '@dsh-remote/dsh-plugin-copilot-auth',
-  '@dsh-remote/dsh-plugin-models-catalog',
-  '@dsh-remote/dsh-plugin-model-capabilities',
-  '@dsh-remote/dsh-plugin-favorite-models',
-  '@dsh-remote/dsh-plugin-concise-mode',
-  '@dsh-remote/dsh-plugin-turn-retry',
-  '@dsh-remote/dsh-plugin-chat-scroll',
-  '@dsh-remote/dsh-plugin-user-message-fork',
-  '@dsh-remote/dsh-plugin-agents-md',
-  '@dsh-remote/dsh-plugin-notify',
-  '@dsh-remote/dsh-plugin-services',
-  '@dsh-remote/dsh-plugin-terminal',
-  '@dsh-remote/dsh-plugin-tools-inspector',
-  '@dsh-remote/dsh-plugin-skills-inspector',
-  '@dsh-remote/dsh-plugin-files',
-  '@dsh-remote/dsh-plugin-yolo-mode',
+  '@dsh-station/dsh-plugin-remote-settings',
+  '@dsh-station/dsh-plugin-browser-compat',
+  '@dsh-station/dsh-plugin-directory-picker-browse',
+  '@dsh-station/dsh-plugin-proxy',
+  '@dsh-station/dsh-plugin-copilot-auth',
+  '@dsh-station/dsh-plugin-models-catalog',
+  '@dsh-station/dsh-plugin-model-capabilities',
+  '@dsh-station/dsh-plugin-favorite-models',
+  '@dsh-station/dsh-plugin-concise-mode',
+  '@dsh-station/dsh-plugin-turn-retry',
+  '@dsh-station/dsh-plugin-chat-scroll',
+  '@dsh-station/dsh-plugin-user-message-fork',
+  '@dsh-station/dsh-plugin-agents-md',
+  '@dsh-station/dsh-plugin-notify',
+  '@dsh-station/dsh-plugin-services',
+  '@dsh-station/dsh-plugin-terminal',
+  '@dsh-station/dsh-plugin-tools-inspector',
+  '@dsh-station/dsh-plugin-skills-inspector',
+  '@dsh-station/dsh-plugin-files',
+  '@dsh-station/dsh-plugin-yolo-mode',
 ]
 
 // pnpm run dev 会先在仓库外生成不含功能插件的 dsh 运行环境，避免安装锚
@@ -65,11 +65,11 @@ export const DSH_INSTALL_ANCHOR = runtimeDescriptor?.installAnchor ?? sourceRequ
 export const PNPM_CLI = runtimeDescriptor?.pnpmCli ?? join(dirname(sourceRequire.resolve('pnpm')), 'bin', 'pnpm.cjs')
 export const DSH_RUNTIME_BIN_DIRECTORY = join(runtimeDescriptor?.runtime ?? ROOT, 'node_modules', '.bin')
 
-/** 所有 dsh-remote dsh 插件所在的位置（D17）。 */
+/** 所有 dsh-station dsh 插件所在的位置（D17）。 */
 export const PLUGINS_DIRECTORY = join(ROOT, 'packages/plugins')
 
 /**
- * 读取 dsh-remote 壳级常驻 overlay（当前只有 remote-privileged 的 connection 注入）。
+ * 读取 dsh-station 壳级常驻 overlay（当前只有 remote-privileged 的 connection 注入）。
  * 普通插件已是受管 Profile Bundle，随 profile 的 bundles 数组装载，不经过 `--patch`；
  * 根 package.json 的 devDependencies 把每个插件链接进根 node_modules，
  * dsh 的 Bundle 双锚解析（安装锚点优先）才能在源码工作区找到它们。
@@ -115,7 +115,7 @@ export function lanAddress() {
 export function relayEnvironment(jwtSecret) {
   return {
     ...process.env,
-    DSH_REMOTE_JWT_SECRET: jwtSecret,
+    DSH_STATION_JWT_SECRET: jwtSecret,
   }
 }
 

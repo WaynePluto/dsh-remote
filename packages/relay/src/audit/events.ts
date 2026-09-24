@@ -6,7 +6,7 @@
  * 把审计轨迹分裂成两个无人察觉的拼写。
  */
 export const AUDIT_EVENTS = {
-  /** 通过 `dsh-remote-relay init` 创建了唯一的 v1 管理员。 */
+  /** 通过 `dsh-station-relay init` 创建了唯一的 v1 管理员。 */
   adminInitialized: 'admin.initialized',
   /** 管理员密码已替换；所有会话均已吊销。 */
   adminPasswordChanged: 'admin.password-changed',

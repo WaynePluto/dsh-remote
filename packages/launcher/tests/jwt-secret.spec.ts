@@ -15,7 +15,7 @@ import {
 const directories: string[] = []
 
 function newHome(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'dsh-remote-launcher-secret-'))
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-station-launcher-secret-'))
   directories.push(directory)
   return directory
 }
@@ -25,8 +25,8 @@ afterEach(() => {
 })
 
 describe('relay jwt secret', () => {
-  it('lives next to device.key and membership.json in the dsh-remote home', () => {
-    expect(jwtSecretFilePath('/home/u/.dsh-remote')).toBe(join('/home/u/.dsh-remote', JWT_SECRET_FILE_NAME))
+  it('lives next to device.key and membership.json in the dsh-station home', () => {
+    expect(jwtSecretFilePath('/home/u/.dsh-station')).toBe(join('/home/u/.dsh-station', JWT_SECRET_FILE_NAME))
   })
 
   it('creates a secret the relay will accept on first run', () => {

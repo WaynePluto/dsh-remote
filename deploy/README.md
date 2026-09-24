@@ -6,12 +6,12 @@ Linux 服务器：它自己跑 dsh，同时接住其他机器拨过来的隧道�
 
 | 文件 | 作用 |
 |---|---|
-| [`dsh-remote.service`](dsh-remote.service) | systemd unit 模板，用个人普通用户跑启动器 |
+| [`dsh-station.service`](dsh-station.service) | systemd unit 模板，用个人普通用户跑启动器 |
 | [`Caddyfile`](Caddyfile) | Caddy 在前面终结 TLS（泛域名 + apex），保留原始 Host |
 
 ## 先说清楚：你的台式机不需要这些
 
-按 D16，每台装了 dsh-remote 的机器都是一样的：本机跑 dsh、一个中转服务、一个拨号器。
+按 D16，每台装了 dsh-station 的机器都是一样的：本机跑 dsh、一个中转服务、一个拨号器。
 **被开放的机器（你桌上那台电脑、家里的笔记本）不需要 systemd，也不需要 Caddy 和域名**——
 解压绿色包、跑启动脚本，然后在入口机器的控制台里签个令牌、粘到它自己的「远程入口」页就行，
 全部步骤见仓库根目录的 [README.md](../README.md)。它不需要公网 IP，也不用做端口映射。
@@ -20,11 +20,11 @@ Linux 服务器：它自己跑 dsh，同时接住其他机器拨过来的隧道�
 
 本部署模式让 launcher、dsh、relay、connector 以你的个人普通用户运行：dsh 默认从个人家目录开始，
 普通命令使用该用户权限；需要管理员权限时，由你在网页交互终端里输入 sudo 密码。它不是 root 服务，
-也不把 sudo 密码交给 dsh-remote 保存。
+也不把 sudo 密码交给 dsh-station 保存。
 
 ## 一个服务，三个进程
 
-一台 dsh-remote 机器同时跑三个进程：dsh、relay（中转 + 控制台）、connector（拨号器）。
+一台 dsh-station 机器同时跑三个进程：dsh、relay（中转 + 控制台）、connector（拨号器）。
 它们由**一个启动器进程**拉起来并按顺序关掉，所以：
 
 > **只给启动器写一个 unit，不要给 dsh / relay / connector 分别写三个。**
@@ -54,56 +54,56 @@ getent passwd <user>
 ```
 
 把 unit 顶部的 `<user>` 和 `<group>` 替换成实际值。个人用户的家目录必须已经存在，且服务启动时可以访问。
-如果这是从旧 `/var/lib/dsh-remote` 部署迁移，先跳到下面的迁移章节，不要先创建目标目录。
+如果这是从旧 `/var/lib/dsh-station` 部署迁移，先跳到下面的迁移章节，不要先创建目标目录。
 
 ```bash
-# dsh-remote home（relay.db / relay-jwt.secret / membership.json / device.key）
-sudo install -d -o <user> -g <group> -m 0700 /home/<user>/.dsh-remote
+# dsh-station home（relay.db / relay-jwt.secret / membership.json / device.key）
+sudo install -d -o <user> -g <group> -m 0700 /home/<user>/.dsh-station
 # 官方 dsh 的标准 DSH_HOME；已有目录不要覆盖其中的设置、凭据或会话
 if [ ! -d /home/<user>/.dsh ]; then
   sudo install -d -o <user> -g <group> -m 0700 /home/<user>/.dsh
 fi
 # 配置文件目录
-sudo install -d -o root -g root -m 0755 /etc/dsh-remote
+sudo install -d -o root -g root -m 0755 /etc/dsh-station
 ```
 
 运行数据和 dsh 数据是两个不同目录：
 
 ```text
-/home/<user>/.dsh-remote/   relay.db、relay-jwt.secret、membership.json、device.key
+/home/<user>/.dsh-station/   relay.db、relay-jwt.secret、membership.json、device.key
 /home/<user>/.dsh/          dsh profiles、settings、credentials、sessions
 ```
 
-程序仍放在 `/opt/dsh-remote`，工作目录是 `/home/<user>`。unit 显式关闭 `ProtectHome`、
+程序仍放在 `/opt/dsh-station`，工作目录是 `/home/<user>`。unit 显式关闭 `ProtectHome`、
 `NoNewPrivileges` 和 `ProtectSystem`，让服务看到与该用户通过 SSH 登录时相近的文件系统和 sudo 能力。
 这也意味着默认 YOLO 下，远程模型可以使用该普通用户本来就能访问的个人文件；公网部署仍必须使用 HTTPS/WSS。
 
-## 已有 `/var/lib/dsh-remote` 部署的迁移
+## 已有 `/var/lib/dsh-station` 部署的迁移
 
-如果服务器以前按旧模板使用了 `/var/lib/dsh-remote`，先停服并备份，再分别迁移两类数据。
-不要把旧目录整体复制成 `~/.dsh-remote/dsh`：官方 dsh 的数据目标是 `~/.dsh`。
+如果服务器以前按旧模板使用了 `/var/lib/dsh-station`，先停服并备份，再分别迁移两类数据。
+不要把旧目录整体复制成 `~/.dsh-station/dsh`：官方 dsh 的数据目标是 `~/.dsh`。
 
 迁移前确认两个目标目录不存在（如果之前创建了空目录，也先移除）；如果 `~/.dsh` 已有数据，不要自动覆盖或合并，先保留旧服务或人工制定合并方案。
 以下命令中的 `<user>`、`<group>` 替换为服务用户：
 
 ```bash
-sudo systemctl stop dsh-remote
-sudo cp -a /var/lib/dsh-remote /var/lib/dsh-remote.backup
+sudo systemctl stop dsh-station
+sudo cp -a /var/lib/dsh-station /var/lib/dsh-station.backup
 
 # 目标目录已有内容时停止，不要覆盖已有凭据、设置或会话
-if [ -e /home/<user>/.dsh-remote ] || [ -e /home/<user>/.dsh ]; then
+if [ -e /home/<user>/.dsh-station ] || [ -e /home/<user>/.dsh ]; then
   echo '目标目录已存在，请先备份并人工确认是否合并' >&2
   exit 1
 fi
-sudo install -d -o <user> -g <group> -m 0700 /home/<user>/.dsh-remote
+sudo install -d -o <user> -g <group> -m 0700 /home/<user>/.dsh-station
 sudo install -d -o <user> -g <group> -m 0700 /home/<user>/.dsh
 
-# relay 数据：复制旧目录的顶层内容，但不把旧的 dsh/ 嵌套进新的 dsh-remote home
-sudo find /var/lib/dsh-remote -mindepth 1 -maxdepth 1 ! -name dsh -exec cp -a {} /home/<user>/.dsh-remote/ \;
+# relay 数据：复制旧目录的顶层内容，但不把旧的 dsh/ 嵌套进新的 dsh-station home
+sudo find /var/lib/dsh-station -mindepth 1 -maxdepth 1 ! -name dsh -exec cp -a {} /home/<user>/.dsh-station/ \;
 # dsh 数据：旧目录下的 dsh/ 直接成为标准 ~/.dsh/
-sudo cp -a /var/lib/dsh-remote/dsh/. /home/<user>/.dsh/
-sudo chown -R <user>:<group> /home/<user>/.dsh-remote /home/<user>/.dsh
-sudo chmod 700 /home/<user>/.dsh-remote /home/<user>/.dsh
+sudo cp -a /var/lib/dsh-station/dsh/. /home/<user>/.dsh/
+sudo chown -R <user>:<group> /home/<user>/.dsh-station /home/<user>/.dsh
+sudo chmod 700 /home/<user>/.dsh-station /home/<user>/.dsh
 ```
 
 然后更新 unit 的 `HOME`、`DSH_HOME`、`WorkingDirectory` 和配置中的 `home`，再按下面步骤启动。
@@ -116,11 +116,11 @@ zip 条目直接放在压缩包根目录、没有版本目录层，所以先建�
 （文件名里的 `linux-x64` 是平台段，别下错平台的包）：
 
 ```bash
-sudo mkdir -p /opt/dsh-remote
-sudo unzip dsh-remote-<版本>-linux-x64.zip -d /opt/dsh-remote
-sudo chown -R root:root /opt/dsh-remote      # 程序目录保持只读
+sudo mkdir -p /opt/dsh-station
+sudo unzip dsh-station-<版本>-linux-x64.zip -d /opt/dsh-station
+sudo chown -R root:root /opt/dsh-station      # 程序目录保持只读
 
-ls /opt/dsh-remote/dist                      # 应该能看到 index.js 和 relay.js
+ls /opt/dsh-station/dist                      # 应该能看到 index.js 和 relay.js
 ```
 
 - `dist/index.js` 是启动器入口（unit 的 `ExecStart` 用它）
@@ -140,11 +140,11 @@ dsh.example.com       A    <入口机器公网 IP>
 
 TLS 证书同时覆盖 `dsh.example.com` 和 `*.dsh.example.com`。DNS-01 能签发泛域名证书；不要为每台机器单独申请证书。
 
-`/etc/dsh-remote/dsh-remote.config.json`：
+`/etc/dsh-station/dsh-station.config.json`：
 
 ```json
 {
-  "home": "/home/<user>/.dsh-remote",
+  "home": "/home/<user>/.dsh-station",
   "dsh": {
     "port": 3080
   },
@@ -163,7 +163,7 @@ TLS 证书同时覆盖 `dsh.example.com` 和 `*.dsh.example.com`。DNS-01 能签
 
 | 字段 | 说明 |
 |---|---|
-| `home` | dsh-remote home，个人模式建议使用 `/home/<user>/.dsh-remote`；`relay.db` 默认落在它下面 |
+| `home` | dsh-station home，个人模式建议使用 `/home/<user>/.dsh-station`；`relay.db` 默认落在它下面 |
 | `dsh.port` | dsh 的端口，**永远只 bind `127.0.0.1`**，不要放行到防火墙外 |
 | `relay.host` | `127.0.0.1` = 只让本机的 Caddy/nginx 连得到；填 `0.0.0.0` 则局域网也能直连（明文 HTTP，见下）。配置了 `domain` 时必须留空或填 `127.0.0.1`，launcher 会拒绝其他值 |
 | `relay.port` | 控制台与隧道入口，默认 `30809` |
@@ -180,9 +180,9 @@ TLS 证书同时覆盖 `dsh.example.com` 和 `*.dsh.example.com`。DNS-01 能签
 云服务器上没有图形界面，你本地的浏览器也直接打不开它——所以无头机器上用 relay 的救急命令：
 
 ```bash
-# 以 unit 中配置的个人用户执行；如果服务已经在跑，先 sudo systemctl stop dsh-remote
-node /opt/dsh-remote/dist/relay.js init \
-  --data /home/<user>/.dsh-remote/relay.db
+# 以 unit 中配置的个人用户执行；如果服务已经在跑，先 sudo systemctl stop dsh-station
+node /opt/dsh-station/dist/relay.js init \
+  --data /home/<user>/.dsh-station/relay.db
 ```
 
 它会：
@@ -199,8 +199,8 @@ node /opt/dsh-remote/dist/relay.js init \
 如果非要脚本化（不推荐，密码会进入进程表和 shell 历史）：
 
 ```bash
-env DSH_REMOTE_ADMIN_PASSWORD='<至少12位的密码>' \
-  node /opt/dsh-remote/dist/relay.js init --data /home/<user>/.dsh-remote/relay.db
+env DSH_STATION_ADMIN_PASSWORD='<至少12位的密码>' \
+  node /opt/dsh-station/dist/relay.js init --data /home/<user>/.dsh-station/relay.db
 ```
 
 > 顺带一提：如果你已经有 `ssh -L 30809:127.0.0.1:30809` 这样的端口转发，
@@ -214,24 +214,24 @@ env DSH_REMOTE_ADMIN_PASSWORD='<至少12位的密码>' \
 
 ## 步骤 5 · 装上 unit
 
-先按 `dsh-remote.service` 顶部的注释把占位符改掉（用户名、用户组、各个路径、node 的绝对路径），
-`command -v node` 能告诉你最后一个。确认 `/home/<user>/.dsh-remote` 和 `/home/<user>/.dsh` 都由该用户拥有，
+先按 `dsh-station.service` 顶部的注释把占位符改掉（用户名、用户组、各个路径、node 的绝对路径），
+`command -v node` 能告诉你最后一个。确认 `/home/<user>/.dsh-station` 和 `/home/<user>/.dsh` 都由该用户拥有，
 再安装 unit；不要把 `<user>` 填成 `root`。
 
 ```bash
-sudo install -m 0644 deploy/dsh-remote.service /etc/systemd/system/dsh-remote.service
+sudo install -m 0644 deploy/dsh-station.service /etc/systemd/system/dsh-station.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now dsh-remote
+sudo systemctl enable --now dsh-station
 
-systemctl status dsh-remote
-journalctl -u dsh-remote -f
+systemctl status dsh-station
+journalctl -u dsh-station -f
 ```
 
 日志里应当依次出现 dsh 就绪、`relay listening`、以及启动器打印的地址框。
 
 > 这是个人用户模式，unit 没有 `ProtectHome`、`NoNewPrivileges`、`ProtectSystem` 或 `ReadWritePaths` 的旧式限制。
 > dsh 的可访问范围由个人用户的 Unix 权限、挂载状态和 sudoers 决定；sudo 密码只在交互终端由你输入，
-> dsh-remote 不保存密码，也不主动建立 root shell。
+> dsh-station 不保存密码，也不主动建立 root shell。
 
 ## 步骤 6 · 前面放 Caddy
 
@@ -260,10 +260,10 @@ Caddy 默认保留原始 Host、默认正确处理 WebSocket 升级，这正是 
 
 ```bash
 # 1. 服务在跑
-systemctl is-active dsh-remote
+systemctl is-active dsh-station
 
 # 2. 日志里没有报错，能看到 relay listening
-journalctl -u dsh-remote -n 50 --no-pager
+journalctl -u dsh-station -n 50 --no-pager
 
 # 3. 本机控制台（loopback socket + loopback Host 免登录）→ 200
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:30809/_admin
@@ -278,7 +278,7 @@ curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' https://dsh.example.co
 curl -sS -I https://hub.dsh.example.com/_admin | head -1
 
 # 7. 重启一次，确认开机自启和数据都还在
-sudo systemctl restart dsh-remote && sleep 5 && systemctl is-active dsh-remote
+sudo systemctl restart dsh-station && sleep 5 && systemctl is-active dsh-station
 ```
 
 第 3 条能通说明 relay 起来了；第 4 条拿到 302 说明 TLS、反代与域名模式三者接上了，
@@ -288,7 +288,7 @@ sudo systemctl restart dsh-remote && sleep 5 && systemctl is-active dsh-remote
 > ⚠️ 第 3 条同时说明：**任何能在这台机器上开 loopback 连接的人都免登录**，
 > 包括通过 `ssh -L 30809:127.0.0.1:30809` 转发出去的浏览器。
 > 这是 D15 明确接受的取舍（能在这台机器上执行命令的人本来就能读数据库），
-> 但它意味着这台机器的 SSH 权限等价于 dsh-remote 的管理员权限。
+> 但它意味着这台机器的 SSH 权限等价于 dsh-station 的管理员权限。
 
 ## 防火墙
 
@@ -323,7 +323,7 @@ DNS 只需一次配置 `dsh.example.com` 和 `*.dsh.example.com` 指向入口；
 
 | 想做什么 | 现在怎么办 |
 |---|---|
-| 让入口机器长期在线、开机自启 | ✅ 用这里的 `dsh-remote.service` |
+| 让入口机器长期在线、开机自启 | ✅ 用这里的 `dsh-station.service` |
 | 用 `https://<机器>.<域名>` 访问 | ✅ 配置 `relay.domain` + 泛域名 DNS/证书 + TLS 反代（见上文） |
 | 让别的机器从外网拨进来 | ✅ 注册命令里的 `--relay` 用 `wss://<域名>`；域名模式下签发的命令会自动带上正确的 `--hub-authority <机器>.<域名>`，粘到对方控制台即可 |
 | 没有域名 / 不想上 TLS | 内网或 VPN 直连：目标机器不配 `domain`，`relay.host` 用 `0.0.0.0`，放行 `30809` 和机器端口段 `30810-30873`（明文 HTTP，启动时会打印 `HIGH RISK` 告警，**只能在 VPN 或可信内网里用**），或 `ssh -L 30809:127.0.0.1:30809` 之后开 `http://127.0.0.1:30809` |
@@ -333,24 +333,24 @@ DNS 只需一次配置 `dsh.example.com` 和 `*.dsh.example.com` 指向入口；
 
 ## 备份与升级
 
-- **要备份的是 `/home/<user>/.dsh-remote` 和 `/home/<user>/.dsh`**：前者的 `relay.db` 里有管理员、会话、设备公钥和审计日志，
+- **要备份的是 `/home/<user>/.dsh-station` 和 `/home/<user>/.dsh`**：前者的 `relay.db` 里有管理员、会话、设备公钥和审计日志，
   后者保存 dsh 的 profiles、设置、凭据和会话；`relay-jwt.secret` 丢了不致命，只是所有浏览器要重新登录一次。
 - `relay.db` 是 WAL 模式，运行中直接 `cp` 单个文件可能拿到不一致的快照。要么先停服务，
-  要么用 `sqlite3 /home/<user>/.dsh-remote/relay.db ".backup '/备份路径/relay.db'"`。
+  要么用 `sqlite3 /home/<user>/.dsh-station/relay.db ".backup '/备份路径/relay.db'"`。
 - 升级：停服务后把整个目录挪开留作回滚，再往新目录解压新版 zip：
 
   ```bash
-  sudo systemctl stop dsh-remote
-  sudo mv /opt/dsh-remote /opt/dsh-remote-<旧版本>    # 出问题时改回名字即回滚
-  sudo mkdir -p /opt/dsh-remote
-  sudo unzip dsh-remote-<新版本>-linux-x64.zip -d /opt/dsh-remote
-  sudo chown -R root:root /opt/dsh-remote
-  sudo systemctl start dsh-remote
+  sudo systemctl stop dsh-station
+  sudo mv /opt/dsh-station /opt/dsh-station-<旧版本>    # 出问题时改回名字即回滚
+  sudo mkdir -p /opt/dsh-station
+  sudo unzip dsh-station-<新版本>-linux-x64.zip -d /opt/dsh-station
+  sudo chown -R root:root /opt/dsh-station
+  sudo systemctl start dsh-station
   ```
 
   不要在原目录里解压覆盖：不带 `-o` 的 unzip 会逐个文件询问要不要替换，
   带了也会把上游已删除的旧文件留在 `node_modules` 里。
-  配置和数据都在 `/etc/dsh-remote`、`/home/<user>/.dsh-remote` 与 `/home/<user>/.dsh`，不受影响。
+  配置和数据都在 `/etc/dsh-station`、`/home/<user>/.dsh-station` 与 `/home/<user>/.dsh`，不受影响。
 
 ## 相关文档
 

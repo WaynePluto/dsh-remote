@@ -19,7 +19,7 @@ export type { Config as ProxyConfig } from './settings.js'
 export { ProxyDispatcher } from './dispatcher.js'
 
 /** Cordis 插件名；它会出现在 dsh 插件树和诊断信息中。 */
-export const name = 'dsh-remote-proxy'
+export const name = 'dsh-station-proxy'
 
 /** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`connection`） */
 export const inject = ['connection']

@@ -4,7 +4,7 @@
  * `pnpm dev` 通过 tsx 运行 TypeScript 源码；`pnpm start` 运行构建后的
  * `dist/` 产物。两者都会在明确的、需要认证的局域网 HTTP 模式下把 relay
  * 绑定到所有接口，因此手机或另一台机器可以访问，同时所有非 loopback 请求仍必须登录。
- * 运行数据沿用发行版默认的 `~/.dsh-remote`，不要与发行版实例并发启动。
+ * 运行数据沿用发行版默认的 `~/.dsh-station`，不要与发行版实例并发启动。
  */
 
 import { spawn } from 'node:child_process'
@@ -24,7 +24,7 @@ import { developmentProfileOptions } from './dev-profile.ts'
 import { issueDeviceEnrollToken, openRelayStore } from '../packages/relay/src/store/index.ts'
 import {
   DEVICE_KEY_FILE,
-  DSH_REMOTE_HOME,
+  DSH_STATION_HOME,
   DSH_BIN,
   DSH_INSTALL_ANCHOR,
   DSH_PORT,
@@ -44,7 +44,7 @@ const children = new Map()
 let shuttingDown = false
 
 function fail(message, hint) {
-  console.error(`\n[dsh-remote] ${message}`)
+  console.error(`\n[dsh-station] ${message}`)
   if (hint !== undefined) console.error(`           ${hint}\n`)
   process.exit(1)
 }
@@ -52,7 +52,7 @@ function fail(message, hint) {
 /** 与 launcher 未传 --slug 时的 connector 默认 machine id 保持一致。 */
 function defaultConnectorMachineId() {
   const host = hostname().toLowerCase().replaceAll(/[^a-z0-9-]+/gu, '-').replace(/^-+|-+$/gu, '')
-  return host === '' ? 'dsh-remote-machine' : host
+  return host === '' ? 'dsh-station-machine' : host
 }
 
 /**
@@ -171,7 +171,7 @@ function start(name, command, argv, environment, onLine) {
   child.on('exit', (exitCode, signal) => {
     children.delete(name)
     if (shuttingDown) return
-    console.error(`\n[dsh-remote] ${name} 已退出 (code=${exitCode ?? 'null'}, signal=${signal ?? 'null'})，正在停止整个本地栈。`)
+    console.error(`\n[dsh-station] ${name} 已退出 (code=${exitCode ?? 'null'}, signal=${signal ?? 'null'})，正在停止整个本地栈。`)
     shutdown(exitCode ?? 1)
   })
   return child
@@ -182,16 +182,16 @@ const adminReady = adminInitialized()
 const machineSlug = defaultMachineSlug()
 const machineId = defaultConnectorMachineId()
 const jwtSecret = loadOrCreateJwtSecret(
-  jwtSecretFilePath(DSH_REMOTE_HOME),
-  message => console.warn(`[dsh-remote] ${message}`),
+  jwtSecretFilePath(DSH_STATION_HOME),
+  message => console.warn(`[dsh-station] ${message}`),
 )
 const environment = relayEnvironment(jwtSecret)
-const pnpmShimDirectory = preparePnpmShim(join(DSH_REMOTE_HOME, 'runtime', 'pnpm-bin'), PNPM_CLI)
+const pnpmShimDirectory = preparePnpmShim(join(DSH_STATION_HOME, 'runtime', 'pnpm-bin'), PNPM_CLI)
 const runtimeEnvironment = withBundledPnpmPath(environment, PNPM_CLI, pnpmShimDirectory)
 const lanIp = lanAddress()
 
 // 不预加载 proxy：出站 proxy 在 dsh 自己的
-// Settings → Proxy 页面由 `@dsh-remote/dsh-plugin-proxy` 配置，
+// Settings → Proxy 页面由 `@dsh-station/dsh-plugin-proxy` 配置，
 // 该处刻意是这一事实的唯一来源（docs/dsh/models.md）。
 
 // 模式 A：relay 转发原始 Host，因此 dsh 必须信任浏览器会发送的准确
@@ -203,7 +203,7 @@ const dshHome = resolveDshHome()
 const profileOptions = developmentProfileOptions(dshHome)
 const dshProfile = profileOptions.profile
 const { bootstrap: profileBootstrap } = ensureProfile(profileOptions)
-console.log(`[dsh-remote] ${profileBootstrap === 'created' ? '已创建' : '使用已有的'} dsh profile ${profileDirectory(dshHome, dshProfile)}`)
+console.log(`[dsh-station] ${profileBootstrap === 'created' ? '已创建' : '使用已有的'} dsh profile ${profileDirectory(dshHome, dshProfile)}`)
 const pluginMediaDirectory = join(ROOT, '.dev', 'plugins')
 const pluginSync = await synchronizePluginDistributions({
   home: dshHome,
@@ -215,10 +215,10 @@ const pluginSync = await synchronizePluginDistributions({
   packageManager: { command: process.execPath, args: [PNPM_CLI], version: resolvePnpmVersion(PNPM_CLI) },
   onOutput: text => process.stdout.write(text),
 })
-console.log(`[dsh-remote] 开发插件目录：${pluginMediaDirectory}`)
-if (pluginSync.migrated) console.log('[dsh-remote] 已把旧受管 Bundle 迁移为第三方插件。')
+console.log(`[dsh-station] 开发插件目录：${pluginMediaDirectory}`)
+if (pluginSync.migrated) console.log('[dsh-station] 已把旧受管 Bundle 迁移为第三方插件。')
 if (pluginSync.skippedRemoved.length > 0) {
-  console.log(`[dsh-remote] 已卸载且未自动补回：${pluginSync.skippedRemoved.join('、')}`)
+  console.log(`[dsh-station] 已卸载且未自动补回：${pluginSync.skippedRemoved.join('、')}`)
 }
 
 const enrollToken = needsEnrollment() ? createEnrollToken() : undefined
@@ -265,7 +265,7 @@ start('relay', process.execPath, [
   '--scheme', 'http',
   '--lan-http',
   '--data', RELAY_DATABASE,
-  '--home', DSH_REMOTE_HOME,
+  '--home', DSH_STATION_HOME,
 ], environment)
 
 // connector 需要 dsh 的 token 才能认证，因此栈在这里等待 URL 行。
@@ -275,7 +275,7 @@ const dshToken = await Promise.race([
   new Promise((resolve) => { setTimeout(() => resolve(undefined), 60_000).unref() }),
 ])
 if (dshToken === undefined) {
-  console.warn('[dsh-remote] 没有从 dsh 的输出里读到登录 token；浏览器可能会看到 dsh 自己的 401。')
+  console.warn('[dsh-station] 没有从 dsh 的输出里读到登录 token；浏览器可能会看到 dsh 自己的 401。')
 }
 
 // 开发栈显式拨本机 relay，不能像 launcher 一样从 membership 选择 hub；
@@ -287,12 +287,12 @@ start('connector', process.execPath, [
   '--machine-id', machineId,
   '--dsh-port', String(DSH_PORT),
   '--device-key', DEVICE_KEY_FILE,
-  '--home', DSH_REMOTE_HOME,
+  '--home', DSH_STATION_HOME,
   ...enrollToken === undefined ? [] : ['--enroll-token', enrollToken],
-], dshToken === undefined ? environment : { ...environment, DSH_REMOTE_DSH_TOKEN: dshToken })
+], dshToken === undefined ? environment : { ...environment, DSH_STATION_DSH_TOKEN: dshToken })
 
 console.log(`
-[dsh-remote] 本地栈已启动（${built ? '打包版本' : '开发模式'}）${adminReady
+[dsh-station] 本地栈已启动（${built ? '打包版本' : '开发模式'}）${adminReady
   ? ''
   : `
            ⚠ 还没有管理员账号。用浏览器打开 http://127.0.0.1:${RELAY_PORT} 完成设置向导。`}

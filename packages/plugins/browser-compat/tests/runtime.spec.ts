@@ -35,7 +35,7 @@ const RUNTIME_HARNESS = `
   globalThis.CSS = { supports() { return true } }
   globalThis.structuredClone = () => ({})
   globalThis.ReadableStream = function ReadableStream() {}
-  globalThis.__DSH_REMOTE_BROWSER_COMPAT__ = undefined;
+  globalThis.__DSH_STATION_BROWSER_COMPAT__ = undefined;
   ${iteratorInjection().text}
   const first = new AbortController()
   const second = new AbortController()
@@ -47,7 +47,7 @@ const RUNTIME_HARNESS = `
     combinedAborted: combined.aborted,
     combinedReason: combined.reason,
     resolved: undefined,
-    capabilities: globalThis.__DSH_REMOTE_BROWSER_COMPAT__.getSnapshot().capabilities,
+    capabilities: globalThis.__DSH_STATION_BROWSER_COMPAT__.getSnapshot().capabilities,
   }
   deferred.promise.then(value => { values.resolved = value })
   console.error('captured error')
@@ -66,16 +66,16 @@ it('installs AbortSignal/Promise compatibility and records a bounded bridge snap
   }
   await new Promise<void>(resolve => setTimeout(resolve, 0))
   const resolved = vm.runInContext(
-    'globalThis.__DSH_REMOTE_BROWSER_COMPAT__.getSnapshot().entries[0].message',
+    'globalThis.__DSH_STATION_BROWSER_COMPAT__.getSnapshot().entries[0].message',
     context,
   )
   expect(values.combinedAborted).toBe(true)
   expect(values.combinedReason).toBe('second reason')
   expect(resolved).toBe('captured error')
-  expect(vm.runInContext('globalThis.__DSH_REMOTE_BROWSER_COMPAT__.getSnapshot().entries.length', context)).toBe(2)
-  expect(vm.runInContext('globalThis.__DSH_REMOTE_BROWSER_COMPAT__.getSnapshot().entries[0].count', context)).toBe(2)
-  vm.runInContext("for (let i = 0; i < 205; i++) globalThis.__DSH_REMOTE_BROWSER_COMPAT__.recordMessage('compatibility', 'unique-' + i)", context)
-  expect(vm.runInContext('globalThis.__DSH_REMOTE_BROWSER_COMPAT__.getSnapshot().entries.length', context)).toBe(200)
+  expect(vm.runInContext('globalThis.__DSH_STATION_BROWSER_COMPAT__.getSnapshot().entries.length', context)).toBe(2)
+  expect(vm.runInContext('globalThis.__DSH_STATION_BROWSER_COMPAT__.getSnapshot().entries[0].count', context)).toBe(2)
+  vm.runInContext("for (let i = 0; i < 205; i++) globalThis.__DSH_STATION_BROWSER_COMPAT__.recordMessage('compatibility', 'unique-' + i)", context)
+  expect(vm.runInContext('globalThis.__DSH_STATION_BROWSER_COMPAT__.getSnapshot().entries.length', context)).toBe(200)
   expect(values.capabilities.find(item => item.id === 'AbortSignal.any')?.status).toBe('polyfilled')
   expect(values.capabilities.find(item => item.id === 'Promise.withResolvers')?.status).toBe('polyfilled')
 })
@@ -86,10 +86,10 @@ it('keeps the standalone runtime bootstrap idempotent', () => {
   const result = vm.runInContext(`
     globalThis.console = { error() {}, warn() {} };
     ${bootstrap}
-    const first = globalThis.__DSH_REMOTE_BROWSER_COMPAT__;
+    const first = globalThis.__DSH_STATION_BROWSER_COMPAT__;
     first.clear();
     ${bootstrap}
-    ({ same: first === globalThis.__DSH_REMOTE_BROWSER_COMPAT__, count: first.getSnapshot().entries.length })
+    ({ same: first === globalThis.__DSH_STATION_BROWSER_COMPAT__, count: first.getSnapshot().entries.length })
   `, context) as { same: boolean, count: number }
   expect(result).toEqual({ same: true, count: 0 })
 })

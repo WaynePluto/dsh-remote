@@ -1,4 +1,4 @@
-# dsh-remote 的「常用模型」受管 Bundle patch 层。
+# dsh-station 的「常用模型」受管 Bundle patch 层。
 # 这里的相对路径由 dsh 锚定到本文件目录；不能写开发机绝对路径。
 - insert:
     - id: favorite-models

@@ -1,6 +1,6 @@
 # 开发工具 Bundle
 
-`@dsh-remote/dsh-plugin-development-tools` 是开发工具的整体安装、卸载和升级单位，按固定顺序组合：
+`@dsh-station/dsh-plugin-development-tools` 是开发工具的整体安装、卸载和升级单位，按固定顺序组合：
 
 1. 常驻服务（services）
 2. 交互终端（terminal）

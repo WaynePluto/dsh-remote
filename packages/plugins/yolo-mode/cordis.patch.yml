@@ -1,4 +1,4 @@
-# dsh-remote 的固定 YOLO 受管 Bundle patch 层。
+# dsh-station 的固定 YOLO 受管 Bundle patch 层。
 #
 # 本 Bundle 必须是受管 Bundle 的最后一项：它把部署默认固定为 full-access + ask，
 # 并禁用会误导用户的权限选择器。`config` 是整段替换，
@@ -27,4 +27,4 @@
 - insert:
     - id: yolo-mode
       name: './dist/index.js'
-      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-yolo-mode")'
+      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-station/dsh-plugin-yolo-mode")'

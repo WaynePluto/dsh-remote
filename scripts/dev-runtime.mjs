@@ -10,10 +10,10 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const rootManifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const launcherManifest = JSON.parse(readFileSync(join(root, 'packages', 'launcher', 'package.json'), 'utf8'))
 const runtimeDependencies = Object.fromEntries(Object.entries(launcherManifest.dependencies)
-  .filter(([name]) => !name.startsWith('@dsh-remote/') || name === '@dsh-remote/plugin-ui')
+  .filter(([name]) => !name.startsWith('@dsh-station/') || name === '@dsh-station/plugin-ui')
   .map(([name, version]) => [
     name,
-    name === '@dsh-remote/plugin-ui' ? `file:${join(root, 'packages', 'plugin-ui')}` : version,
+    name === '@dsh-station/plugin-ui' ? `file:${join(root, 'packages', 'plugin-ui')}` : version,
   ]))
 const workspace = parseYaml(readFileSync(join(root, 'pnpm-workspace.yaml'), 'utf8'))
 if (workspace.overrides !== undefined) {
@@ -44,7 +44,7 @@ if (!existsSync(dshBin) || !existsSync(installAnchor) || !existsSync(pnpmCli)) {
   rmSync(temporary, { recursive: true, force: true })
   mkdirSync(temporary, { recursive: true })
   writeFileSync(join(temporary, 'package.json'), `${JSON.stringify({
-    name: 'dsh-remote-development-runtime',
+    name: 'dsh-station-development-runtime',
     private: true,
     version: '0.0.0',
     dependencies: runtimeDependencies,
@@ -69,4 +69,4 @@ if (!existsSync(dshBin) || !existsSync(installAnchor) || !existsSync(pnpmCli)) {
 const descriptor = { fingerprint, runtime, dshBin, installAnchor, pnpmCli }
 mkdirSync(join(root, '.dev'), { recursive: true })
 writeFileSync(join(root, '.dev', 'runtime.json'), `${JSON.stringify(descriptor, undefined, 2)}\n`)
-console.log(`[dsh-remote] 开发运行时：${runtime}`)
+console.log(`[dsh-station] 开发运行时：${runtime}`)

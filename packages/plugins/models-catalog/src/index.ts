@@ -25,7 +25,7 @@ export { CHANNEL, DEFAULT_SOURCE_URL, ENTRY_ID, PI_AI_NAMESPACE, SELF_NAMESPACE 
 export type { CatalogStatusView, RoutePreview } from './shared.js'
 
 /** Cordis 插件名；它会出现在 dsh 插件树和诊断信息中。 */
-export const name = 'dsh-remote-models-catalog'
+export const name = 'dsh-station-models-catalog'
 
 /** overlay 等待 llm-pi-ai 启动前使用的 bootstrap service 名。 */
 export const BOOTSTRAP_SERVICE = 'modelsCatalogBootstrap'

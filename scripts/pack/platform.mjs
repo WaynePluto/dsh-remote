@@ -153,13 +153,13 @@ export function pruneToVariant(context, variant) {
   return [...new Set(matches.map(match => match.name))]
 }
 
-/** 变体验收：full 必须真的带着引擎类重组件，core 必须一个不剩。 */
+/** 变体验收：full 必须真的带着引擎类重组件，lite 必须一个不剩。 */
 export function checkVariantTree(context, variantKey, variant) {
   if (variant.excludes.length === 0) {
     const engines = listMatchingPackages(context, context.heavyEnginePackages)
     if (engines.length === 0) {
       context.fail(
-        `${variantKey} 变体里没有找到任何引擎类重组件，full 与 core 就没有区别了。`,
+        `${variantKey} 变体里没有找到任何引擎类重组件，full 与 lite 就没有区别了。`,
         '上游改名或调整结构时更新 manifest.mjs 的 HEAVY_ENGINE_PACKAGES。',
       )
     }

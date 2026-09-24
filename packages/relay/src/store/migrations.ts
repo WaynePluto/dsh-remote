@@ -18,10 +18,17 @@ export class StoreMigrationError extends Error {
   }
 }
 
+/**
+ * 项目改名 dsh-station 时合并了历史迁移：version 1 一次性创建最终 schema
+ * （旧 v2 的 browser_port、旧 v3 的 enroll_tokens.used_at 移除、旧 v4 的
+ * wakeup_requested_at 全部并入 CREATE）。v2–v4 保留为空迁移，只为让
+ * 旧版本数据库（user_version 已是 4）继续通过连续性校验；全新数据库
+ * 从 v1 直接得到与旧库逐列一致的最终形态。
+ */
 export const STORE_MIGRATIONS: readonly StoreMigration[] = Object.freeze([
   {
     version: 1,
-    name: 'initial authentication and device schema',
+    name: 'authentication and device schema (consolidated)',
     sql: `
       CREATE TABLE users (
         id TEXT PRIMARY KEY,
@@ -42,6 +49,10 @@ export const STORE_MIGRATIONS: readonly StoreMigration[] = Object.freeze([
         display_name TEXT,
         public_key TEXT NOT NULL,
         revoked_at INTEGER,
+        -- dsh-station 名下的浏览器成员端口（D16 路由键之二）。
+        browser_port INTEGER,
+        -- 机器页发起的唤醒请求；机器上线时清除，按 TTL 过期。
+        wakeup_requested_at INTEGER,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       ) STRICT;
@@ -74,7 +85,6 @@ export const STORE_MIGRATIONS: readonly StoreMigration[] = Object.freeze([
         created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
         created_at INTEGER NOT NULL,
         expires_at INTEGER NOT NULL,
-        used_at INTEGER,
         CHECK (expires_at > created_at)
       ) STRICT;
 
@@ -97,40 +107,15 @@ export const STORE_MIGRATIONS: readonly StoreMigration[] = Object.freeze([
       CREATE INDEX audit_log_occurred_at_idx ON audit_log(occurred_at DESC);
       CREATE INDEX audit_log_actor_user_id_idx ON audit_log(actor_user_id, occurred_at DESC);
       CREATE INDEX audit_log_machine_id_idx ON audit_log(machine_id, occurred_at DESC);
-    `,
-  },
-  {
-    version: 2,
-    name: 'per-device browser port (D16 routing key 2)',
-    sql: `
-      ALTER TABLE devices ADD COLUMN browser_port INTEGER;
 
-      -- SQLite cannot add a UNIQUE column with ALTER TABLE, and a unique index
-      -- is equivalent here: it still treats every NULL as distinct, so any
-      -- number of devices may wait without an allocated port.
+      -- SQLite 不能用 ALTER TABLE 加 UNIQUE 列；唯一索引等价：任意数量的
+      -- 设备都可以处于未分配端口状态（NULL 互不相同）。
       CREATE UNIQUE INDEX devices_browser_port_idx ON devices(browser_port);
     `,
   },
-  {
-    version: 3,
-    name: 'enrollment tokens are deleted rather than marked used',
-    sql: `
-      -- A spent token authorizes nothing and is only a hash: keeping the row
-      -- would grow the table forever for no operator-visible benefit.
-      DELETE FROM enroll_tokens WHERE used_at IS NOT NULL;
-
-      ALTER TABLE enroll_tokens DROP COLUMN used_at;
-    `,
-  },
-  {
-    version: 4,
-    name: 'operator wakeup requests for disconnected machines',
-    sql: `
-      -- Set by the machines page and delivered to the machine's next wakeup
-      -- probe; cleared when the machine comes online, expired by TTL.
-      ALTER TABLE devices ADD COLUMN wakeup_requested_at INTEGER;
-    `,
-  },
+  { version: 2, name: 'historic no-op: browser_port consolidated into version 1', sql: '' },
+  { version: 3, name: 'historic no-op: enroll_tokens.used_at removal consolidated into version 1', sql: '' },
+  { version: 4, name: 'historic no-op: wakeup_requested_at consolidated into version 1', sql: '' },
 ])
 
 export const CURRENT_STORE_VERSION = STORE_MIGRATIONS.at(-1)?.version ?? 0

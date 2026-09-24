@@ -24,7 +24,7 @@ interface FakeAgent {
 
 /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 function fakeAgent(overrides: Partial<FakeAgent> = {}): FakeAgent {
-  return { status: 'idle', session: { header: { cwd: 'D:\\dev\\dsh-remote' } }, ...overrides }
+  return { status: 'idle', session: { header: { cwd: 'D:\\dev\\dsh-station' } }, ...overrides }
 }
 
 /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
@@ -177,7 +177,7 @@ describe('an agent coming to rest', () => {
 
     vi.advanceTimersByTime(SETTLE_DEBOUNCE_MS)
     expect(notifier.sent).toEqual([
-      { title: 'DSH · dsh-remote · 通知插件', body: '任务已完成，等待输入' },
+      { title: 'DSH · dsh-station · 通知插件', body: '任务已完成，等待输入' },
     ])
   })
 
@@ -305,7 +305,7 @@ describe('an agent coming to rest', () => {
     built.emit('agent/status', { agent, status: 'idle' })
     vi.advanceTimersByTime(SETTLE_DEBOUNCE_MS)
 
-    expect(notifier.sent[0]?.title).toBe('DSH · dsh-remote')
+    expect(notifier.sent[0]?.title).toBe('DSH · dsh-station')
   })
 
   it('drops a pending notification for an agent that went away', () => {
@@ -363,7 +363,7 @@ describe('a turn stalled on a person', () => {
     )
 
     vi.advanceTimersByTime(WAITING_DELAY_MS)
-    expect(notifier.sent).toEqual([{ title: 'DSH · dsh-remote', body: 'pwsh 在等你批准' }])
+    expect(notifier.sent).toEqual([{ title: 'DSH · dsh-station', body: 'pwsh 在等你批准' }])
 
     answer.settle('allowed-once')
     await expect(pending).resolves.toBe('allowed-once')

@@ -1,7 +1,7 @@
 /**
  * Windows 通知实现。使用系统自带 PowerShell 和 WinRT API，不引入原生 Node 模块；标题与正文通过环境变量传给固定脚本，避免把模型或工具输入插值进 PowerShell/XML。
  *
- * @module @dsh-remote/dsh-plugin-notify/toast
+ * @module @dsh-station/dsh-plugin-notify/toast
  */
 
 import { execFile } from 'node:child_process'

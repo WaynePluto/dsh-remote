@@ -22,12 +22,12 @@ describe('dsh arguments', () => {
   it('runs mode A: loopback bind plus every authority a browser may send', () => {
     expect(dshArguments({
       dshBin: DSH_BIN,
-      profile: 'dsh-remote-web',
+      profile: 'dsh-station-web',
       port: 3080,
       trustedHosts: ['127.0.0.1', 'localhost', '10.1.2.87:30810'],
     })).toEqual([
       DSH_BIN,
-      '--profile', 'dsh-remote-web',
+      '--profile', 'dsh-station-web',
       '--no-open',
       '--host', '127.0.0.1',
       '--port', '3080',
@@ -38,7 +38,7 @@ describe('dsh arguments', () => {
   it('appends extraArgs after the launcher own flags', () => {
     const args = dshArguments({
       dshBin: DSH_BIN,
-      profile: 'dsh-remote-web',
+      profile: 'dsh-station-web',
       port: 3080,
       trustedHosts: ['127.0.0.1'],
       extraArgs: ['--log-level', 'debug'],
@@ -47,10 +47,10 @@ describe('dsh arguments', () => {
   })
 
   it('passes every plugin overlay as a launcher --patch, before the web app flags', () => {
-    const overlay = join('C:', 'green', 'node_modules', '@dsh-remote', 'p', PLUGIN_OVERLAY_FILE)
+    const overlay = join('C:', 'green', 'node_modules', '@dsh-station', 'p', PLUGIN_OVERLAY_FILE)
     const args = dshArguments({
       dshBin: DSH_BIN,
-      profile: 'dsh-remote-web',
+      profile: 'dsh-station-web',
       port: 3080,
       trustedHosts: ['127.0.0.1'],
       patchFiles: [overlay],
@@ -58,7 +58,7 @@ describe('dsh arguments', () => {
     // --patch 是 dsh launcher flag：位于 --profile 之后、--no-open 之前，
     // 其余内容由 web app 自己解析。
     expect(args.slice(0, 6)).toEqual([
-      DSH_BIN, '--profile', 'dsh-remote-web', '--patch', overlay, '--no-open',
+      DSH_BIN, '--profile', 'dsh-station-web', '--patch', overlay, '--no-open',
     ])
   })
 
@@ -69,7 +69,7 @@ describe('dsh arguments', () => {
     // 页面却报告直连（docs/dsh/models.md）。
     const args = dshArguments({
       dshBin: DSH_BIN,
-      profile: 'dsh-remote-web',
+      profile: 'dsh-station-web',
       port: 3080,
       trustedHosts: ['127.0.0.1'],
     })
@@ -87,14 +87,14 @@ describe('dsh plugin package manager environment', () => {
 
   it('puts the local-directory pnpm shim before the bundled pnpm binary', () => {
     const pnpmCli = join('D:', 'runtime', 'node_modules', 'pnpm', 'bin', 'pnpm.cjs')
-    const directory = mkdtempSync(join(tmpdir(), 'dsh-remote-pnpm-shim-'))
+    const directory = mkdtempSync(join(tmpdir(), 'dsh-station-pnpm-shim-'))
     try {
       const shim = preparePnpmShim(directory, pnpmCli)
       const environment = withBundledPnpmPath({ Path: 'C:\\Windows' }, pnpmCli, shim)
       expect(environment.Path).toBe(`${shim}${delimiter}${join('D:', 'runtime', 'node_modules', '.bin')}${delimiter}C:\\Windows`)
       expect(existsSync(join(shim, 'pnpm-wrapper.mjs'))).toBe(true)
       expect(existsSync(join(shim, process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'))).toBe(true)
-      expect(readFileSync(join(shim, 'pnpm-wrapper.mjs'), 'utf8')).toContain("join(process.cwd(), '.dsh-remote-plugin-media')")
+      expect(readFileSync(join(shim, 'pnpm-wrapper.mjs'), 'utf8')).toContain("join(process.cwd(), '.dsh-station-plugin-media')")
     } finally {
       rmSync(directory, { recursive: true, force: true })
     }
@@ -126,8 +126,8 @@ describe('dsh browser login token', () => {
 
 describe('dsh skipped bundle diagnostics', () => {
   it('reads the bundle name and reason out of a skip line', () => {
-    expect(skippedBundleFromLine('dsh: skipping profile bundle "@dsh-remote/dsh-plugin-proxy": cannot read manifest'))
-      .toBe('"@dsh-remote/dsh-plugin-proxy" cannot read manifest')
+    expect(skippedBundleFromLine('dsh: skipping profile bundle "@dsh-station/dsh-plugin-proxy": cannot read manifest'))
+      .toBe('"@dsh-station/dsh-plugin-proxy" cannot read manifest')
   })
 
   it('returns undefined for unrelated lines', () => {
@@ -146,7 +146,7 @@ describe('connector entry', () => {
   const source = join(repositoryRoot, 'packages', 'launcher', 'src')
 
   it('prefers the connector deployed into the package own node_modules', () => {
-    const deployed = join(packed, '..', 'node_modules', '@dsh-remote', 'connector', 'dist', 'cli.js')
+    const deployed = join(packed, '..', 'node_modules', '@dsh-station', 'connector', 'dist', 'cli.js')
     expect(resolveConnectorEntry(packed, path => path === deployed))
       .toEqual({ path: deployed, needsTsx: false })
   })
@@ -184,11 +184,11 @@ describe('dsh shell plugin overlay', () => {
     [name, join(repositoryRoot, 'packages', 'plugins', barePluginName(name))]))
 
   it('keeps exactly one non-removable shell overlay', () => {
-    expect([...SHELL_PLUGIN_PACKAGES]).toEqual(['@dsh-remote/dsh-plugin-remote-privileged'])
+    expect([...SHELL_PLUGIN_PACKAGES]).toEqual(['@dsh-station/dsh-plugin-remote-privileged'])
   })
 
   it('keeps connection and model HMR prerequisites in the shell overlay', () => {
-    const root = workspaceRoots['@dsh-remote/dsh-plugin-remote-privileged'] as string
+    const root = workspaceRoots['@dsh-station/dsh-plugin-remote-privileged'] as string
     const overlay = readFileSync(join(root, PLUGIN_OVERLAY_FILE), 'utf8')
     expect(overlay).toContain('id: connection')
     expect(overlay).toContain('id: llm-pi-ai')
@@ -213,10 +213,10 @@ describe('dsh shell plugin overlay', () => {
 describe('connector arguments', () => {
   it('leaves the hub to membership.json, so joining needs no restart of the connector', () => {
     const args = connectorArguments({ path: 'C:/green/dist/connector.js', needsTsx: false }, {
-      home: 'C:/Users/me/.dsh-remote',
+      home: 'C:/Users/me/.dsh-station',
       dshPort: 3080,
     })
-    expect(args).toEqual(['C:/green/dist/connector.js', '--home', 'C:/Users/me/.dsh-remote', '--dsh-port', '3080'])
+    expect(args).toEqual(['C:/green/dist/connector.js', '--home', 'C:/Users/me/.dsh-station', '--dsh-port', '3080'])
     expect(args).not.toContain('--relay')
     expect(args).not.toContain('--slug')
   })

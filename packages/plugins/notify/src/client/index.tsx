@@ -6,9 +6,11 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import { CHANNEL, ENTRY_ID, NAMESPACE, TEST_ENDPOINT } from '../shared.js'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { NotifySettings, NotifyTestResult } from '../shared.js'
 import { NotifySection } from './NotifySection.js'
 import { installNavGlyph } from './nav-glyph.js'
@@ -29,7 +31,7 @@ const NS = NAMESPACE
 const ORDER = 70
 
 /** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`configForms`、`slots`、`locale`、`connection`） */
-export const inject = ['slots', 'locale', 'connection', 'remote', 'configForms']
+export const inject = ['slots', 'locale', 'connection', 'remote', 'configForms', 'uiWorkspace']
 
 /** 实现说明：此处记录相关接口、边界和生命周期约束。 */
 export class NotifyChannelError extends Error {}
@@ -63,4 +65,17 @@ export function apply(ctx: Context): void {
   // shell 自己绘制导航图标且没有我们的槽位，因此从外部把铃铛
   // 画到本行（见 nav-glyph.ts）。
   ctx.effect(installNavGlyph, 'notify: settings nav glyph')
+
+  // S1.6：桌面壳通知点击（CustomEvent）与外部浏览器深链（?open-session=）
+  // 的会话定位入口；导航复用 dsh 原生 uiWorkspace.openSession。
+  ctx.effect(() => {
+    const open = (event: Event): void => {
+      const sessionId = (event as CustomEvent<string>).detail
+      if (typeof sessionId === 'string' && sessionId !== '') ctx.uiWorkspace.openSession(sessionId as SessionId)
+    }
+    window.addEventListener('dsh-station:open-session', open)
+    const requested = new URLSearchParams(window.location.search).get('open-session')
+    if (requested !== null && requested !== '') ctx.uiWorkspace.openSession(requested as SessionId)
+    return () => window.removeEventListener('dsh-station:open-session', open)
+  }, 'notify: desktop session navigation')
 }

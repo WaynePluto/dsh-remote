@@ -13,7 +13,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ROOT } from './local-config.mjs'
 
-const PACKAGE_ID = '@dsh-remote/dsh-plugin-chat-scroll'
+const PACKAGE_ID = '@dsh-station/dsh-plugin-chat-scroll'
 const BUNDLE = join(ROOT, 'packages', 'plugins', 'chat-scroll', 'dist', 'client.js')
 const NOOP = () => {}
 let failures = 0

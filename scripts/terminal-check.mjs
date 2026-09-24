@@ -18,7 +18,7 @@ import {
   inspectionNoop,
 } from './lib/check-client-bundle.mjs'
 
-const PACKAGE_ID = '@dsh-remote/dsh-plugin-terminal'
+const PACKAGE_ID = '@dsh-station/dsh-plugin-terminal'
 const portArgument = process.argv.indexOf('--port')
 const PORT = portArgument === -1 ? 3098 : Number(process.argv[portArgument + 1])
 const HOME = join(DEV_DIRECTORY, 'terminal-check-home')

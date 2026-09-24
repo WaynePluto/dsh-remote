@@ -2,7 +2,7 @@
  * 两半共享的 terminal contract：RPC channel、端点、wire shape 及纯校验/投影函数。
  * dsh 的 PTY package 不发布 session projection 或事件，且插件不能追加自定义 session event，因此 browser 通过 revision poll 向 Host 请求最新 screen。
  *
- * @module @dsh-remote/dsh-plugin-terminal/shared
+ * @module @dsh-station/dsh-plugin-terminal/shared
  */
 
 /** 本插件 identity；RPC channel、文案 namespace 和 slot entry id 都由 package suffix 派生。 */

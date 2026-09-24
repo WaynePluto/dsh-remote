@@ -8,7 +8,7 @@ import { relayAdminInitialized } from '../src/relay-admin.js'
 const directories: string[] = []
 
 function newDirectory(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'dsh-remote-launcher-admin-'))
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-station-launcher-admin-'))
   directories.push(directory)
   return directory
 }

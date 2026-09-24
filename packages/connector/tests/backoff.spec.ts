@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { RECONNECT_BACKOFF } from '@dsh-remote/protocol'
+import { RECONNECT_BACKOFF } from '@dsh-station/protocol'
 import { nextBackoffDelay } from '../src/backoff.js'
 
 const noJitter = (): number => 0.5

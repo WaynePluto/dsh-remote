@@ -1,4 +1,4 @@
-# @dsh-remote/dsh-plugin-model-capabilities
+# @dsh-station/dsh-plugin-model-capabilities
 
 在 dsh 的「设置 → 模型」页，为模型展开行增加能力与协议配置。打开模型行右侧的容量按钮后，配置会直接出现在 dsh 原生「上下文窗口 / 最大输出 token 数」下面：
 
@@ -34,9 +34,9 @@ wire 值，表示不发送推理参数；其他已启用等级必须填写非空
 
 ## 装载与开发
 
-插件通过 dsh-remote 的 `settings.models.provider-card.capabilities` 子槽和 React portal 挂入原生
+插件通过 dsh-station 的 `settings.models.provider-card.capabilities` 子槽和 React portal 挂入原生
 模型展开行，不修改 dsh 源码。它依赖 models-catalog 提供同一份外部 pi-ai 运行时桥接；两者由
-`dsh-remote-web` profile 一起装载。如果上游改变模型目录 DOM 结构，能力与协议控件会安全地不显示，
+`dsh-station-web` profile 一起装载。如果上游改变模型目录 DOM 结构，能力与协议控件会安全地不显示，
 不会把字段写到错误模型。
 
 样式也沿用 dsh 模型编辑器字段：32px border-box、0.5px border-l4、bg-layer-1、14px/22px，
@@ -46,7 +46,7 @@ select 使用主题 brand focus 与右侧 chevron；不使用透明背景或浏�
 
 ## 分发与管理
 
-本包不作为独立安装项分发，而是 `@dsh-remote/dsh-plugin-model-enhancements`（模型增强 Bundle）的组件。
+本包不作为独立安装项分发，而是 `@dsh-station/dsh-plugin-model-enhancements`（模型增强 Bundle）的组件。
 模型目录与模型能力共同参与 `llm-pi-ai` 启动屏障，当前不支持在 Bundle 详情中单独关闭这两行；需要停用时应停用整个模型增强 Bundle。停用后，模型能力声明页消失；已写入的图片支持、推理档位与协议覆盖保留。
 安装、卸载和升级也以整个模型增强 Bundle 为单位。launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，并保留停用状态；卸载后不会自动补回。
 需要重装时，在 dsh「添加插件」中填写发行包 `plugins/model-enhancements` 或开发环境 `.dev/plugins/model-enhancements` 的绝对目录。

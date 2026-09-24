@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 
-/** dsh 自己的 home 覆盖；dsh-remote 共享标准 home（D14）。 */
+/** dsh 自己的 home 覆盖；dsh-station 共享标准 home（D14）。 */
 export const DSH_HOME_ENV = 'DSH_HOME'
 
 /** dsh home 下保存所有 profile 的目录。 */
@@ -13,7 +13,7 @@ export const DSH_BASE_BUNDLE = '@deepseek-ai/dsh-base'
 export const DSH_WEB_APP_BUNDLE = '@deepseek-ai/dsh-web-app'
 
 /** 默认 profile 只写 dsh 基础层；功能 Bundle 随后作为第三方依赖安装。 */
-export const DSH_REMOTE_PROFILE_BUNDLES = [
+export const DSH_STATION_PROFILE_BUNDLES = [
   DSH_BASE_BUNDLE,
   DSH_WEB_APP_BUNDLE,
 ] as const
@@ -76,7 +76,7 @@ function writeManifestAtomically(manifestPath: string, manifest: JsonObject): vo
 }
 
 /**
- * 创建 dsh-remote profile 的最小基础结构；已有 profile 完全由用户和官方插件管理器维护。
+ * 创建 dsh-station profile 的最小基础结构；已有 profile 完全由用户和官方插件管理器维护。
  * 功能插件的首次安装、配套升级和卸载记忆由 plugin-lifecycle.ts 负责。
  */
 export function ensureProfile(options: {
@@ -91,7 +91,7 @@ export function ensureProfile(options: {
     name: `dsh-profile-${basename(directory)}`,
     private: true,
     dependencies: {},
-    dsh: { profile: { bundles: [...options.bundles ?? DSH_REMOTE_PROFILE_BUNDLES] } },
+    dsh: { profile: { bundles: [...options.bundles ?? DSH_STATION_PROFILE_BUNDLES] } },
   }
   fs.mkdirSync(directory, { recursive: true })
   writeManifestAtomically(join(directory, 'package.json'), manifest)

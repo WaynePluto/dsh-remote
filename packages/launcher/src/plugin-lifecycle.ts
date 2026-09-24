@@ -10,10 +10,10 @@ import { PLUGIN_DISTRIBUTIONS } from './plugin-catalog.js'
 import { LauncherError } from './errors.js'
 import { DSH_BASE_BUNDLE, DSH_WEB_APP_BUNDLE, profileDirectory } from './profile.js'
 
-const STATE_FILE = 'dsh-remote-bundles-state.json'
-const PACKAGE_MANAGER_MIGRATION_DIRECTORY = '.dsh-remote-package-manager-migration'
-const PROFILE_MEDIA_DIRECTORY = '.dsh-remote-plugin-media'
-const LEGACY_FILES = '@dsh-remote/dsh-plugin-files'
+const STATE_FILE = 'dsh-station-bundles-state.json'
+const PACKAGE_MANAGER_MIGRATION_DIRECTORY = '.dsh-station-package-manager-migration'
+const PROFILE_MEDIA_DIRECTORY = '.dsh-station-plugin-media'
+const LEGACY_FILES = '@dsh-station/dsh-plugin-files'
 const SHARED_MODEL_CATALOG = '@earendil-works/pi-ai'
 const SHARED_HTTP_PROXY = '@deepseek-ai/dsh-http-proxy'
 
@@ -61,7 +61,7 @@ export function resolvePluginMediaDirectory(options: {
     .find(candidate => fs.existsSync(join(candidate, 'catalog.json')))
   if (found === undefined) {
     throw new LauncherError(
-      '找不到 dsh-remote 插件安装目录。',
+      '找不到 dsh-station 插件安装目录。',
       { hint: '开发模式请重新运行 pnpm run dev；发行包应包含 plugins/catalog.json。' },
     )
   }
@@ -144,7 +144,7 @@ function runtimeDependencyNames(media: readonly MediaEntry[]): ReadonlySet<strin
       for (const dependencies of [manifest.dependencies, manifest.optionalDependencies]) {
         if (!isObject(dependencies)) continue
         for (const name of Object.keys(dependencies)) {
-          if (!name.startsWith('@dsh-remote/dsh-plugin-')) names.add(name)
+          if (!name.startsWith('@dsh-station/dsh-plugin-')) names.add(name)
         }
       }
     }
@@ -428,7 +428,7 @@ export async function synchronizePluginDistributions(options: {
   const migration = needsPackageManagerMigration ? beginPackageManagerMigration(directory) : undefined
   if (migration !== undefined) {
     options.onOutput?.(
-      `[dsh-remote] Profile 由 ${existingPackageManager} 安装，正在用随包 pnpm@${packageManagerVersion} 重建依赖链接。\n`,
+      `[dsh-station] Profile 由 ${existingPackageManager} 安装，正在用随包 pnpm@${packageManagerVersion} 重建依赖链接。\n`,
       'stdout',
     )
   }

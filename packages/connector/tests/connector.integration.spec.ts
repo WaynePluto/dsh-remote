@@ -9,7 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import pino from 'pino'
 import { WebSocket, WebSocketServer } from 'ws'
 import { afterEach, describe, expect, it } from 'vitest'
-import { RECONNECT_BACKOFF } from '@dsh-remote/protocol'
+import { RECONNECT_BACKOFF } from '@dsh-station/protocol'
 import { ConnectorFatalError, createConnector, loadOrCreateDeviceKey, type Connector } from '../src/index.js'
 import { startFakeRelay, type FakeRelay } from './fake-relay.js'
 
@@ -113,7 +113,7 @@ const directories: string[] = []
 
 /** 每个测试使用新的设备身份，避免注册状态在测试之间泄漏。 */
 function newDeviceKeyPath(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'dsh-remote-connector-'))
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-station-connector-'))
   directories.push(directory)
   return join(directory, 'device.key')
 }

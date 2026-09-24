@@ -15,9 +15,9 @@ import {
   logDialogRule,
   logDialogWidth,
 } from '../src/client/log-dialog.js'
-import { dialogFullscreenGeometry } from '@dsh-remote/plugin-ui'
+import { dialogFullscreenGeometry } from '@dsh-station/plugin-ui'
 import { en, fill, zh } from '../src/client/locales.js'
-import { assertDialogGeometry } from '@dsh-remote/plugin-ui/test'
+import { assertDialogGeometry } from '@dsh-station/plugin-ui/test'
 /** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`node`、`ServicesDock.tsx`、`@deepseek-ai/dsh-client-ui-primitives`、`log-dialog.ts`） */
 describe('log dialog width', () => {
   it('takes 80% of the measured panel, which dsh builds to the message width', () => {

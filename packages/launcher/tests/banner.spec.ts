@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { MembershipHub } from '@dsh-remote/protocol'
+import type { MembershipHub } from '@dsh-station/protocol'
 import { displayWidth, renderBanner } from '../src/banner.js'
 
 const HUB: MembershipHub = {

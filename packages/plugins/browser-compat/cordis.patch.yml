@@ -1,4 +1,4 @@
-# dsh-remote 的受管 Bundle patch 层；package.json 的 dsh.bundle.patch 指向本文件，
+# dsh-station 的受管 Bundle patch 层；package.json 的 dsh.bundle.patch 指向本文件，
 # 由 profile 的 bundles 数组装载（层序：Bundle → profile patch → home patch → --patch）。
 #
 # profile 属于用户，launcher 只在 profile 不存在时写模板，因此插件不能改用户的

@@ -3,15 +3,18 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import { isIP } from 'node:net'
 import { z } from 'zod'
-import { machineSlugSchema } from '@dsh-remote/protocol'
+import { machineSlugSchema } from '@dsh-station/protocol'
 import { LauncherError } from './errors.js'
 import { defaultMachineSlug } from './relay.js'
 
 /** 在工作目录中查找的配置文件名。 */
-export const CONFIG_FILE_NAME = 'dsh-remote.config.json'
+export const CONFIG_FILE_NAME = 'dsh-station.config.json'
 
-/** dsh-remote 运行自己的 profile，从不运行官方的 `web` profile（D14）。 */
-export const DEFAULT_DSH_PROFILE = 'dsh-remote-web'
+/** 项目改名前的配置文件名；存在新名字时不再读取。 */
+export const LEGACY_CONFIG_FILE_NAME = 'dsh-remote.config.json'
+
+/** dsh-station 运行自己的 profile，从不运行官方的 `web` profile（D14）。 */
+export const DEFAULT_DSH_PROFILE = 'dsh-station-web'
 
 /** dsh 自己的默认 web 端口；保持它能让新包的行为可预期。 */
 export const DEFAULT_DSH_PORT = 3080
@@ -39,7 +42,7 @@ export function isLoopbackBindHost(host: string): boolean {
   return host === '::1' || host === '0:0:0:0:0:0:0:1' || host.startsWith('127.')
 }
 
-/** dsh-remote home 中的 relay 数据库文件名。 */
+/** dsh-station home 中的 relay 数据库文件名。 */
 export const RELAY_DATABASE_FILE_NAME = 'relay.db'
 
 /**
@@ -123,11 +126,11 @@ const launcherConfigSchema = z.strictObject({
     data: z.string().min(1).transform(expandHome).optional(),
   }).prefault({}),
   /**
-   * 保存 `device.key` 和 `membership.json` 的 dsh-remote home。默认值完全
+   * 保存 `device.key` 和 `membership.json` 的 dsh-station home。默认值完全
    * 与 connector 相同，使一台机器的两个进程都能对“这台
    * 机器”的位置达成一致，无需配置。
    */
-  home: z.string().min(1).transform(expandHome).default(() => join(homedir(), '.dsh-remote')),
+  home: z.string().min(1).transform(expandHome).default(() => join(homedir(), '.dsh-station')),
 }).transform(value => ({
   ...value,
   relay: {
@@ -221,7 +224,7 @@ export function parseLauncherConfig(raw: string, path: string): LauncherConfig {
 }
 
 /**
- * 加载 `dsh-remote.config.json`。
+ * 加载 `dsh-station.config.json`。
  * 文件缺失是正常的——刚解压的包必须能在没有配置时启动；但存在且损坏的文件会停止 launcher，
  * 因为静默回退会让 dsh 在用户没有要求的端口上启动。
  * @param options - 工作目录，以及给定时显式指定的 `--config` 路径。
@@ -240,7 +243,14 @@ export function loadLauncherConfig(options: {
   } catch (error) {
     const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : undefined
     if (code === 'ENOENT' && !explicit) {
-      return { config: launcherConfigSchema.parse({}), path: undefined }
+      // 改名前解压的旧包把配置写在旧文件名里；内容 schema 相同，直接沿用。
+      const legacyPath = join(options.cwd, LEGACY_CONFIG_FILE_NAME)
+      try {
+        raw = readFileSync(legacyPath, 'utf8')
+        return { config: parseLauncherConfig(raw, legacyPath), path: legacyPath }
+      } catch {
+        return { config: launcherConfigSchema.parse({}), path: undefined }
+      }
     }
     throw new LauncherError(
       `读不到配置文件 ${path}：${error instanceof Error ? error.message : String(error)}`,

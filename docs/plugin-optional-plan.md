@@ -1,7 +1,7 @@
 # 插件第三方化与组合分发
 
-功能插件不再是 launcher 反复“补回”的受管 Bundle。它们是 dsh-remote 随发行版提供、
-首次默认安装的第三方插件：继续由 dsh 官方插件管理器展示、停用和卸载，dsh-remote 只负责
+功能插件不再是 launcher 反复“补回”的受管 Bundle。它们是 dsh-station 随发行版提供、
+首次默认安装的第三方插件：继续由 dsh 官方插件管理器展示、停用和卸载，dsh-station 只负责
 首次提供、配套升级和安装介质。决策见 [01-decisions](01-decisions.md) D20。
 
 代码完成不等于验收完成；自动检查与实机项目分别列在文末。
@@ -24,7 +24,7 @@
 | `files` | 独立 | 文件浏览 |
 | `yolo-mode` | 独立 | 固定 YOLO |
 
-完整包名为 `@dsh-remote/dsh-plugin-<名称>`。组合包的 `cordis.patch.yml` 通过固定版本依赖
+完整包名为 `@dsh-station/dsh-plugin-<名称>`。组合包的 `cordis.patch.yml` 通过固定版本依赖
 装载组件，每个组件仍有稳定且全局唯一的行 ID。组合包是安装、卸载与配套升级单位；组件行
 保留单独停用能力，但有两个例外：models-catalog 与 model-capabilities 共同参与
 `llm-pi-ai` 启动屏障，当前不能只关闭其中一行。整个 model-enhancements 仍可停用或卸载。
@@ -35,9 +35,9 @@ directory-picker-browse 必须在 Bundle 层静态停用 dsh 原生目录选择�
 
 ## 生命周期
 
-1. `dsh-remote-web` profile 初始只包含 `dsh-base` 与 `dsh-web-app`。
+1. `dsh-station-web` profile 初始只包含 `dsh-base` 与 `dsh-web-app`。
 2. 某个分发包首次被提供时，launcher 通过 dsh 官方插件管理器安装并默认启用。
-3. 后续 dsh-remote 启动会把当前介质版本配套升级到所有仍在 profile dependencies 中的包，
+3. 后续 dsh-station 启动会把当前介质版本配套升级到所有仍在 profile dependencies 中的包，
    包括已停用的 Bundle；升级保持 `dsh.profile.bundles` 的选择及 profile patch 中组件行的
    `disabled` 状态。
 4. 用户卸载 Bundle 后，其 dependency 消失。状态文件会记住它已提供过，launcher 不再安装，
@@ -46,7 +46,7 @@ directory-picker-browse 必须在 Bundle 层静态停用 dsh 原生目录选择�
    - 绿色发行版：`<解压目录>/plugins/<包目录>`
    - 源码开发：`<仓库>/.dev/plugins/<包目录>`
 
-重新安装得到当前 dsh-remote 随附版本，而不是从旧 profile 或网络猜测版本。介质目录中的
+重新安装得到当前 dsh-station 随附版本，而不是从旧 profile 或网络猜测版本。介质目录中的
 `catalog.json` 记录 10 个包及组件；删除 profile 依赖不会删除介质文件。
 
 ## 旧 profile 迁移
@@ -57,14 +57,14 @@ directory-picker-browse 必须在 Bundle 层静态停用 dsh 原生目录选择�
 - 旧 Bundle 已停用的组件会在 profile patch 中写为同 ID 的 disabled 行，保持用户选择。
 - 旧版已经明确卸载的 files 保持卸载，不因迁移重新出现。
 - 当前清单之外的旧插件不会由 launcher 自动卸载，需要清理时应通过 dsh 官方插件管理器手动操作；不触碰项目外 DSH_HOME。
-- 迁移后 `dsh-remote-bundles-state.json` 使用新版状态记录已提供包及介质版本；它只辅助区分
+- 迁移后 `dsh-station-bundles-state.json` 使用新版状态记录已提供包及介质版本；它只辅助区分
   “首次提供”和“用户已卸载”，不代替 profile dependency 这一安装事实。
 
 ## 开发与发行介质
 
 `scripts/plugin-distributions.mjs` 按同一清单原子生成可搬移介质，检查 Bundle patch、宿主产物、
 浏览器产物与组合包组件闭包，并去除 `workspace:` 协议。组合包把组件复制进自己的
-`node_modules/@dsh-remote/`，无需在线获取本仓库私有包。
+`node_modules/@dsh-station/`，无需在线获取本仓库私有包。
 
 - `pnpm run dev` 先构建功能插件，再自动生成 `.dev/plugins/`，并在仓库同级准备按依赖指纹
   隔离的 dsh 运行时。隔离运行时没有工作区同名安装锚，避免源码 `node_modules` 遮蔽真正安装到
@@ -80,7 +80,7 @@ directory-picker-browse 必须在 Bundle 层静态停用 dsh 原生目录选择�
 
 ## 壳级运行时 overlay
 
-`@dsh-remote/dsh-plugin-remote-privileged` 由 launcher 以 `--patch` 常驻装载，不是功能插件，
+`@dsh-station/dsh-plugin-remote-privileged` 由 launcher 以 `--patch` 常驻装载，不是功能插件，
 不进入第三方安装、升级、停用或卸载生命周期。它保留 connection 的 webRuntime/webServer 注入，
 并固定 `llm-pi-ai` 的模型启动屏障；模型增强未随进程启动时提供占位屏障，已启动时由模型组件
 完成真实初始化后把屏障挂在 root fiber。这样运行中停用或重新启用模型 Bundle 不会热重启
@@ -102,5 +102,5 @@ directory-picker-browse 必须在 Bundle 层静态停用 dsh 原生目录选择�
 ## 后续发布边界
 
 当前安装介质随绿色包交付，不代表这些私有包已经发布到 npm。若以后公开发布，仍需先确定
-semver/changelog、`@dsh-remote` scope、dsh peer/dependency 策略和 CI；无需为了发布拆仓。
+semver/changelog、`@dsh-station` scope、dsh peer/dependency 策略和 CI；无需为了发布拆仓。
 connection overlay 始终留在壳内，不改成用户配置项。

@@ -1,7 +1,7 @@
 /**
  * browser half：shadow dsh user-message renderer，增加安全的“从这条消息 fork”操作。因为 dsh 只有 assistant-actions list slot，没有对应的 user-actions slot，所以必须 shadow renderer。
  *
- * @module @dsh-remote/dsh-plugin-user-message-fork/client
+ * @module @dsh-station/dsh-plugin-user-message-fork/client
  */
 
 import type { Context } from '@deepseek-ai/cordis'

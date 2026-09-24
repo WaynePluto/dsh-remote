@@ -1,7 +1,7 @@
 /**
  * 唯一 v1 管理员的账号名策略。
  *
- * 名称只在初始设置向导或 `dsh-remote-relay init` 中选择一次，
+ * 名称只在初始设置向导或 `dsh-station-relay init` 中选择一次，
  * 手机上的每次登录都要再次输入。因此它限制为
  * ASCII 字母、数字和 `._-`：包含空格、全角
  * 字符或不可见空白的名称，操作员无法可靠地在手机键盘上重新输入，
@@ -9,7 +9,7 @@
  * 相似变体会静默冲突，而不是成为独立账号。
  */
 
-/** 由设置向导和 `dsh-remote-relay init` 预填。 */
+/** 由设置向导和 `dsh-station-relay init` 预填。 */
 export const DEFAULT_ADMIN_USERNAME = 'admin'
 
 export const USERNAME_MIN_CHARACTERS = 2

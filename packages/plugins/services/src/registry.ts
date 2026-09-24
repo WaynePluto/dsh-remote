@@ -2,7 +2,7 @@
  * Node-only registry：保存服务记录并以原子方式读写磁盘 cache。
  * 记录本身不代表进程真实状态，身份核验由 `process-identity.ts` 负责。
  *
- * @module @dsh-remote/dsh-plugin-services/registry
+ * @module @dsh-station/dsh-plugin-services/registry
  */
 
 import fs from 'node:fs'

@@ -1,4 +1,4 @@
-// 由 packaging/make-icons.mjs 从 packaging/dsh-remote.svg 生成，不要手改。
+// 由 packaging/make-icons.mjs 从 packaging/dsh-station.svg 生成，不要手改。
 // 改图标请改那个 SVG，然后重跑：node packaging/make-icons.mjs
 //
 // 为什么内联而不是读文件：绿色包里的 relay 就地跑在 node_modules 里，

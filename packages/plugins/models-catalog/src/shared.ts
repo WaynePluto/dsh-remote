@@ -2,7 +2,7 @@
  * 本插件两半共享的 wire contract。
  * Host 与 panel 都从此文件构建，endpoint 名和 view field 不会在请求方与应答方之间漂移。
  *
- * @module @dsh-remote/dsh-plugin-models-catalog/shared
+ * @module @dsh-station/dsh-plugin-models-catalog/shared
  */
 
 /**

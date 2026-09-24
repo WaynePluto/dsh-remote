@@ -1,4 +1,4 @@
-# dsh-remote 的壳级常驻 overlay，由 launcher 以 `dsh --patch <这个文件>` 传给 dsh，
+# dsh-station 的壳级常驻 overlay，由 launcher 以 `dsh --patch <这个文件>` 传给 dsh，
 # 固定在 overlay 列表首位。它是全部插件 RPC 通道的地基，与远程无关，
 # 本机使用同样需要，因此不可停用；ownsHost 的远程设置部分在
 # remote-settings 受管 Bundle 里。
@@ -18,5 +18,5 @@
     - modelCapabilitiesBootstrap
 
 - insert:
-    - id: dsh-remote-model-bootstrap-fallback
+    - id: dsh-station-model-bootstrap-fallback
       name: './model-bootstrap.mjs'

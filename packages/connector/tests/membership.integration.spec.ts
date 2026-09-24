@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import pino, { type Logger } from 'pino'
 import { afterEach, describe, expect, it } from 'vitest'
-import { serializeMembership, type MembershipHub, type MembershipLastHub } from '@dsh-remote/protocol'
+import { serializeMembership, type MembershipHub, type MembershipLastHub } from '@dsh-station/protocol'
 import { createConnector, type Connector } from '../src/connector.js'
 import { loadOrCreateDeviceKey } from '../src/device-key.js'
 import { MembershipFileError, membershipFilePath, readMembershipFile, writeMembershipFile } from '../src/membership.js'
@@ -24,7 +24,7 @@ const TEST_TEMP_DIR = process.platform === 'win32'
   : tmpdir()
 
 function newHome(): string {
-  const home = mkdtempSync(join(TEST_TEMP_DIR, 'dsh-remote-join-'))
+  const home = mkdtempSync(join(TEST_TEMP_DIR, 'dsh-station-join-'))
   homes.push(home)
   return home
 }

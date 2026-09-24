@@ -18,7 +18,7 @@ import { defaultMachineSlug } from '../src/relay.js'
 const directories: string[] = []
 
 function newDirectory(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'dsh-remote-launcher-config-'))
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-station-launcher-config-'))
   directories.push(directory)
   return directory
 }
@@ -36,7 +36,7 @@ afterEach(() => {
 describe('launcher config', () => {
   it('starts a freshly unzipped package with no config file at all', () => {
     const loaded = loadLauncherConfig({ cwd: newDirectory() })
-    const home = join(homedir(), '.dsh-remote')
+    const home = join(homedir(), '.dsh-station')
     expect(loaded.path).toBeUndefined()
     expect(loaded.config).toEqual({
       dsh: { profile: DEFAULT_DSH_PROFILE, port: DEFAULT_DSH_PORT, extraArgs: [] },

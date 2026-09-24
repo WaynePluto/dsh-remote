@@ -3,7 +3,7 @@
  * 页面按 {@link POLL_MS} 轮询，Host 每次做 registry 与 OS reconciliation；uptime 以 Host snapshot 时钟为基准，再加页面本地经过时间。
  * 服务退出属于正常状态，panel 只展示当前存活服务；已停止服务的日志仍由 `service_logs` 读取。
  *
- * @module @dsh-remote/dsh-plugin-services/client/ServicesDock
+ * @module @dsh-station/dsh-plugin-services/client/ServicesDock
  */
 
 import { useCallback, useEffect } from 'react'

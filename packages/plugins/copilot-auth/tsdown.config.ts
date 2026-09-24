@@ -3,7 +3,7 @@ import { createPluginBuildConfig } from '../../plugin-build/index.mjs'
 
 export default defineConfig(
   createPluginBuildConfig({
-    id: '@dsh-remote/dsh-plugin-copilot-auth',
+    id: '@dsh-station/dsh-plugin-copilot-auth',
     entry: ['src/index.ts'],
     hostDeps: { neverBundle: [/^@earendil-works\//] },
     client: true,

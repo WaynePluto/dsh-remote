@@ -1,4 +1,4 @@
-# @dsh-remote/dsh-plugin-chat-scroll
+# @dsh-station/dsh-plugin-chat-scroll
 
 为 dsh 会话提供统一的滚动导航：每条正式 Agent 消息下方增加一个向上箭头，点击后回到**这条消息的开头**并在落点短暂闪过分界线；dsh 原生右下角的向下箭头返回底部时增加平滑滚动动效。
 
@@ -30,18 +30,18 @@
 ## 开发
 
 ```powershell
-pnpm --filter @dsh-remote/dsh-plugin-chat-scroll build
-pnpm --filter @dsh-remote/dsh-plugin-chat-scroll test
-pnpm --filter @dsh-remote/dsh-plugin-chat-scroll typecheck
+pnpm --filter @dsh-station/dsh-plugin-chat-scroll build
+pnpm --filter @dsh-station/dsh-plugin-chat-scroll test
+pnpm --filter @dsh-station/dsh-plugin-chat-scroll typecheck
 ```
 
 浏览器回归：首次打开仍有「加载更早」的历史会话，不滚动、不加载更多，直接点击最后一条回复的「回到消息开头」，确认其开头到达阅读线且有中间滚动位置；再检查短回复、其他回复各自的按钮、切换会话以及「减少动态效果」。手动上滚后点击右下角原生向下箭头，确认有中间滚动位置、最终回到底部，继续生成内容时仍自动跟随；深浅主题与中英文都需验收。
 
-插件改完后必须重启 dsh；当前 `dsh-remote-web` profile 没有 HMR，单纯刷新页面不会重新加载新的浏览器 bundle。
+插件改完后必须重启 dsh；当前 `dsh-station-web` profile 没有 HMR，单纯刷新页面不会重新加载新的浏览器 bundle。
 
 ## 分发与管理
 
-本包不作为独立安装项分发，而是 `@dsh-remote/dsh-plugin-conversation-enhancements`（会话增强 Bundle）的组件。停用后，消息开头定位与返回底部按钮消失，回到 dsh 原生滚动行为。
+本包不作为独立安装项分发，而是 `@dsh-station/dsh-plugin-conversation-enhancements`（会话增强 Bundle）的组件。停用后，消息开头定位与返回底部按钮消失，回到 dsh 原生滚动行为。
 可在该 Bundle 详情中单独停用或重新启用本组件；安装、卸载和升级以整个会话增强 Bundle 为单位。
 launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，并保留 Bundle 与组件的停用状态；卸载后不会自动补回。
 需要重装时，在 dsh「添加插件」中填写发行包 `plugins/conversation-enhancements` 或开发环境 `.dev/plugins/conversation-enhancements` 的绝对目录。

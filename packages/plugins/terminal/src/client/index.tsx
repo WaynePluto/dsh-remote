@@ -2,7 +2,7 @@
  * browser half：在 conversation input dock 注册 terminal panel，并通过本包 RPC channel 操作 Host PTY。
  * 不导入其他插件 runtime，只通过 `ctx.slots`、`ctx.locale`、`ctx.connection` 和冻结 module table 可用的 dsh service 协作；slot 是 LIST，因此与 todo、services、queue 并列而不替换它们。
  *
- * @module @dsh-remote/dsh-plugin-terminal/client
+ * @module @dsh-station/dsh-plugin-terminal/client
  */
 
 import type { Context } from '@deepseek-ai/cordis'

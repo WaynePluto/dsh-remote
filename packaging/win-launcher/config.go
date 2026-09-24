@@ -11,13 +11,13 @@ import (
 const (
 	// 与 packages/launcher/src/config.ts 一样读取：默认从
 	// 软件包根目录读取，除非 --config 指向其他位置。
-	configFileName = "dsh-remote.config.json"
+	configFileName = "dsh-station.config.json"
 
 	// 默认值复制自 packages/launcher/src/config.ts。刚解压的
 	// 软件包可能完全没有配置文件，而两个打开
 	// 浏览器的菜单项仍必须指向正确的端口。
 	defaultRelayPort = 30809
-	homeDirName      = ".dsh-remote"
+	homeDirName      = ".dsh-station"
 
 	// 两个 URL 都只使用 loopback：控制台也能从局域网访问，
 	// 但菜单运行在本机；按铁律 11，127.0.0.1 是唯一

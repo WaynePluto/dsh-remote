@@ -1,6 +1,6 @@
 # 常驻服务
 
-`@dsh-remote/dsh-plugin-services` 管理有名字的长期命令，例如前后端开发服务器。
+`@dsh-station/dsh-plugin-services` 管理有名字的长期命令，例如前后端开发服务器。
 服务独立于会话和 dsh 进程，注册表与日志保存在项目目录，便于重启后继续查看和停止。
 
 ## 使用
@@ -41,7 +41,7 @@ Windows 使用 L1/L2 两级 Node 启动器，注册表记录 L2；不能只靠 d
 PowerShell 使用 NoProfile、NonInteractive 和 UTF-8 前缀。详细契约见 [工具与进程](../../../docs/dsh/runtime.md)。
 
 ```powershell
-pnpm --filter @dsh-remote/dsh-plugin-services test
+pnpm --filter @dsh-station/dsh-plugin-services test
 node scripts/services-check.mjs
 ```
 
@@ -50,7 +50,7 @@ live 测试验证真实进程存活、日志和停止；仅 mock 测试不能证
 
 ## 分发与管理
 
-本包不作为独立安装项分发，而是 `@dsh-remote/dsh-plugin-development-tools`（开发工具 Bundle）的组件。停用后，常驻服务的模型工具与管理入口消失；已启动的服务进程不会被停止。
+本包不作为独立安装项分发，而是 `@dsh-station/dsh-plugin-development-tools`（开发工具 Bundle）的组件。停用后，常驻服务的模型工具与管理入口消失；已启动的服务进程不会被停止。
 可在该 Bundle 详情中单独停用或重新启用本组件；安装、卸载和升级以整个开发工具 Bundle 为单位。
 launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，并保留 Bundle 与组件的停用状态；卸载后不会自动补回。
 需要重装时，在 dsh「添加插件」中填写发行包 `plugins/development-tools` 或开发环境 `.dev/plugins/development-tools` 的绝对目录。

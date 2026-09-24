@@ -1,4 +1,4 @@
-# dsh-remote 的 Agent preset Profile Bundle。它只加入 dsh-remote-web 的 bundle 层，
+# dsh-station 的 Agent preset Profile Bundle。它只加入 dsh-station-web 的 bundle 层，
 # 不作为 launcher 最末 --patch overlay 使用。
 #
 # dsh 0.1.7 起预设不再走文件系统 preset root，而是一行 `@deepseek-ai/dsh-agent-preset`

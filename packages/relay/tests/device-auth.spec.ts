@@ -1,8 +1,8 @@
 import { generateKeyPairSync, randomBytes, sign } from 'node:crypto'
 import pino from 'pino'
 import { beforeEach, afterEach, describe, expect, it } from 'vitest'
-import { deviceChallengeMessage } from '@dsh-remote/protocol'
-import type { AuthCredential } from '@dsh-remote/protocol'
+import { deviceChallengeMessage } from '@dsh-station/protocol'
+import type { AuthCredential } from '@dsh-station/protocol'
 import {
   DeviceAuthenticator,
   hashOpaqueToken,

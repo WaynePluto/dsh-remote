@@ -6,7 +6,7 @@ import { favoritesFault } from './shared.js'
 import type { FavoriteModel, FavoriteModelsSettings } from './shared.js'
 
 /** Cordis 插件名。 */
-export const name = 'dsh-remote-favorite-models'
+export const name = 'dsh-station-favorite-models'
 
 /** 本插件行的 composition Config；唯一的用户可改字段 favorites 全量 volatile，面板保存后免重启热改。 */
 export interface Config {

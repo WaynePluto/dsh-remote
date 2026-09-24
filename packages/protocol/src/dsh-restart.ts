@@ -10,7 +10,7 @@
 
 import { z } from 'zod'
 
-/** dsh-remote home 目录下使用的文件名。 */
+/** dsh-station home 目录下使用的文件名。 */
 export const DSH_RESTART_STATUS_FILE_NAME = 'dsh-restart-status.json'
 
 /** 与 membership 的 browserAuthority 相同的形态：裸 `host` 或 `host:port`。 */

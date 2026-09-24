@@ -73,7 +73,7 @@ export function readPluginCatalog(root = SCRIPT_ROOT) {
 
 /**
  * 生成可由 dsh 原生管理器按绝对目录安装的插件介质。
- * 组合包把组件包复制到自己的 node_modules；运行时共享依赖继续由 dsh-remote 安装提供。
+ * 组合包把组件包复制到自己的 node_modules；运行时共享依赖继续由 dsh-station 安装提供。
  */
 export function materializePluginDistributions(options = {}) {
   const root = resolve(options.root ?? SCRIPT_ROOT)
@@ -104,7 +104,7 @@ export function materializePluginDistributions(options = {}) {
     }
     writeFileSync(join(temporary, 'catalog.json'), `${JSON.stringify({ schemaVersion: 1, plugins: generated }, undefined, 2)}\n`)
     writeFileSync(join(temporary, 'README.txt'), [
-      'dsh-remote 随附插件',
+      'dsh-station 随附插件',
       '',
       '在 dsh 的“添加插件”中输入目标插件目录的绝对路径即可重新安装。',
       '每个目录都是安装介质；删除 profile 中的插件不会删除这里的文件。',
@@ -121,5 +121,5 @@ export function materializePluginDistributions(options = {}) {
 
 if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const result = materializePluginDistributions({ output: process.argv[2] })
-  console.log(`[dsh-remote] 已生成 ${String(result.plugins.length)} 个插件安装目录：${result.output}`)
+  console.log(`[dsh-station] 已生成 ${String(result.plugins.length)} 个插件安装目录：${result.output}`)
 }

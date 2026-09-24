@@ -63,7 +63,7 @@ describe('supervisor', () => {
     const exits: ChildExit[] = []
     const supervisor = createSupervisor({ onUnexpectedExit: exit => exits.push(exit), write: () => undefined })
 
-    supervisor.start({ name: 'missing', command: 'dsh-remote-no-such-binary', args: [] })
+    supervisor.start({ name: 'missing', command: 'dsh-station-no-such-binary', args: [] })
     await waitFor(() => exits.length === 1)
 
     expect(exits[0]?.name).toBe('missing')

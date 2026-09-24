@@ -16,7 +16,7 @@ import {
   type ConnectorToRelayFrame,
   type ControlFrame,
   type ProtocolErrorCode,
-} from '@dsh-remote/protocol'
+} from '@dsh-station/protocol'
 import type { SessionConfig } from './config.js'
 import type { DeviceKey } from './device-key.js'
 import { WorkStreamPool } from './stream.js'
@@ -271,7 +271,7 @@ export function runControlSession(options: ControlSessionOptions): Promise<Sessi
           send({ type: 'dsh-auth', version: PROTOCOL_VERSION, token: config.dshToken })
         } else {
           logger.warn(
-            'no dsh web token was supplied (--dsh-token / DSH_REMOTE_DSH_TOKEN); '
+            'no dsh web token was supplied (--dsh-token / DSH_STATION_DSH_TOKEN); '
             + 'browsers reaching this machine through the relay will get dsh\'s own 401 until they log in to dsh directly',
           )
         }

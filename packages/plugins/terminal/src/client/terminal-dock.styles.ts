@@ -10,7 +10,7 @@ import {
   BORDER as DOCK_BORDER,
   MONO as DOCK_MONO,
   SECONDARY as DOCK_SECONDARY,
-} from '@dsh-remote/plugin-ui'
+} from '@dsh-station/plugin-ui'
 
 export {
   MONO,
@@ -21,7 +21,7 @@ export {
   summaryStyle,
   summaryTextStyle,
   titleStyle,
-} from '@dsh-remote/plugin-ui'
+} from '@dsh-station/plugin-ui'
 
 export const bodyStyle: CSSProperties = {
   display: 'flex',

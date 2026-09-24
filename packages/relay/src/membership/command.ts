@@ -50,7 +50,7 @@ const FLAGS = {
 } as const satisfies Record<string, keyof ParsedConnectorCommand>
 
 /**
- * 从粘贴的 `dsh-remote-connector …` 命令行中提取加入参数。
+ * 从粘贴的 `dsh-station-connector …` 命令行中提取加入参数。
  *
  * 只读取描述 hub membership 的四个 flag；程序名和其他 flag 都会忽略，因此带有额外本地选项
  * （`--dsh-port`、`--device-key` 等）的命令仍能工作。这里不做校验：调用方会对所有不可信输入

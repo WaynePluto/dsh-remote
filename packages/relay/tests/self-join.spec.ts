@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { parseMembership } from '@dsh-remote/protocol'
+import { parseMembership } from '@dsh-station/protocol'
 import { openRelayStore } from '../src/store/index.js'
 import type { RelayStore } from '../src/store/store.js'
 import {
@@ -77,7 +77,7 @@ describe('ensureSelfMembership', () => {
 
   it('指向别的机器时原样保留——即使它也在 loopback 上', () => {
     const { store, home, path } = openFixture()
-    // 同机双栈联调：加入另一套 dsh-remote，地址是 loopback、slug 也相同。
+    // 同机双栈联调：加入另一套 dsh-station，地址是 loopback、slug 也相同。
     const foreign = {
       version: 1,
       hub: {

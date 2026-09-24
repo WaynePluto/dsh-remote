@@ -22,7 +22,7 @@ export function buildWindowsExecutable(context) {
   })
   if (result.error?.code === 'ENOENT') {
     context.fail(
-      '找不到 go 命令，编不出 Windows 的双击入口 dsh-remote.exe。',
+      '找不到 go 命令，编不出 Windows 的双击入口 dsh-station.exe。',
       '装一个 Go（https://go.dev/dl/）再打包。确实要发一个没有 exe 的包，就显式加 --skip-exe。',
     )
   }

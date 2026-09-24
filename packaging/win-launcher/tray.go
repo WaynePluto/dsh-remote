@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	windowClassName = "DshRemoteTrayWindow"
+	windowClassName = "DshStationTrayWindow"
 
 	// 本程序监视的两行 launcher 输出都来自启动横幅
 	//（packages/launcher/src/banner.ts），而横幅只在 dsh 真正
@@ -203,7 +203,7 @@ func (a *application) baseIconData() notifyIconData {
 }
 
 func (a *application) tooltip() string {
-	return fmt.Sprintf("dsh-remote（%s）— dsh 界面 %s", stateLabel(a.stack.currentState()), a.settings.dshWebURL())
+	return fmt.Sprintf("DSH 工作站（%s）— dsh 界面 %s", stateLabel(a.stack.currentState()), a.settings.dshWebURL())
 }
 
 func (a *application) addIcon() {
@@ -239,7 +239,7 @@ func (a *application) showSetupBalloon() {
 	data := a.baseIconData()
 	data.uFlags = nifInfo
 	data.dwInfoFlags = niifInfo
-	setUTF16(data.szInfoTitle[:], "dsh-remote 还没有设置完成")
+	setUTF16(data.szInfoTitle[:], "DSH 工作站还没有设置完成")
 	setUTF16(data.szInfo[:], "还没有管理员账号，管理界面暂时不能登录。点这条通知，在本机浏览器里完成设置。")
 	procShellNotifyIconW.Call(uintptr(nimModify), uintptr(unsafe.Pointer(&data)))
 }
@@ -254,7 +254,7 @@ func (a *application) showStartedBalloon() {
 	data := a.baseIconData()
 	data.uFlags = nifInfo
 	data.dwInfoFlags = niifInfo
-	setUTF16(data.szInfoTitle[:], "dsh-remote 已启动")
+	setUTF16(data.szInfoTitle[:], "DSH 工作站已启动")
 	setUTF16(data.szInfo[:], "图标在任务栏右下角的通知区域（可能折叠在「^」里）。点这条通知打开 dsh 界面；右键图标可停止或退出。")
 	procShellNotifyIconW.Call(uintptr(nimModify), uintptr(unsafe.Pointer(&data)))
 }

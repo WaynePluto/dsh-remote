@@ -2,7 +2,7 @@
  * Host 侧原样展示给 panel 的句子，集中在此处。
  * Host 知道具体 refusal；browser 只负责自己的 label/button 文案（`src/client/locales.ts`）。
  *
- * @module @dsh-remote/dsh-plugin-terminal/notes
+ * @module @dsh-station/dsh-plugin-terminal/notes
  */
 
 /** 所有 Host 编写的句子集中在此处。 */

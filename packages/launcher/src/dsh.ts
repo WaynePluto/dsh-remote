@@ -18,7 +18,7 @@ export const DSH_READY_TIMEOUT_MS = 60_000
  * 使用环境变量而不是 argv：token 用于对 dsh 认证浏览器，
  * 而机器上的每个进程都能读取 argv。
  */
-export const DSH_TOKEN_ENV_NAME = 'DSH_REMOTE_DSH_TOKEN'
+export const DSH_TOKEN_ENV_NAME = 'DSH_STATION_DSH_TOKEN'
 
 /**
  * dsh 端口响应后继续等待 token 行的最长时间。
@@ -56,7 +56,7 @@ export function dshTokenFromLine(line: string): string | undefined {
  * dsh 0.1.7 起 Bundle 解析、清单或 patch 装载失败不再启动即败，而是把
  * `dsh: skipping profile bundle "<包名>": <原因>` 写到 stderr 后跳过该 Bundle
  * （上游 `packages/boot/app-boot/src/profile.ts`）。对依赖全部插件在位的
- * dsh-remote 来说这是静默降级，launcher 检测到该行时必须响亮提示。
+ * dsh-station 来说这是静默降级，launcher 检测到该行时必须响亮提示。
  * @param line - dsh 子进程写出的一行。
  * @returns 跳过诊断的说明文本；该行不是跳过诊断时为 undefined。
  */
@@ -149,7 +149,7 @@ function installDirectory(value) {
   if (!isAbsolute(value) || !existsSync(value) || !statSync(value).isDirectory()) return value
   if (parse(value).root.toLowerCase() === parse(process.cwd()).root.toLowerCase()) return value
   const name = packageName(value)
-  const media = join(process.cwd(), '.dsh-remote-plugin-media')
+  const media = join(process.cwd(), '.dsh-station-plugin-media')
   if (name === undefined || !existsSync(media)) return value
   for (const entry of readdirSync(media, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue
@@ -208,8 +208,8 @@ export function withBundledPnpmPath(
 /**
  * 构建 dsh 子进程的 argv。
  * Mode A（铁律 7）要求 dsh 只绑定 loopback，并信任浏览器可能使用的 authority，因为 relay 原样转发 Host。
- * dsh-remote 插件作为 `--patch` overlay 传入，位于 `--profile` 之后、web app 参数之前。
- * 不预加载 proxy：唯一来源是 `@dsh-remote/dsh-plugin-proxy` 的 Settings → Proxy 页面；否则关闭设置后仍走环境 proxy，页面却显示直连（docs/dsh/models.md）。
+ * dsh-station 插件作为 `--patch` overlay 传入，位于 `--profile` 之后、web app 参数之前。
+ * 不预加载 proxy：唯一来源是 `@dsh-station/dsh-plugin-proxy` 的 Settings → Proxy 页面；否则关闭设置后仍走环境 proxy，页面却显示直连（docs/dsh/models.md）。
  * @param options - dsh 入口点、profile、patch overlay、端口、trusted hosts 和额外参数。
  * @returns 要传给 `node` 的参数。
  */

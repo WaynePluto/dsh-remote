@@ -121,7 +121,7 @@ afterEach(async () => {
 })
 
 describe('first-run setup wizard', () => {
-  it('serves the wizard on loopback and steers every other page to it', async () => {
+  it('serves the wizard on loopback; business pages flow through, admin pages steer to it', async () => {
     const fixture = await startFixture()
 
     const { body } = await openWizard(fixture)
@@ -133,13 +133,41 @@ describe('first-run setup wizard', () => {
     // 没有登录表单：目前还没有能通过登录的账号。
     expect(body).not.toContain('/_auth/login')
 
+    // 首次免设置：本机业务请求不被向导拦截（没有机器可代理时它按
+    // 普通的 502 暴露，而不是被重定向去创建管理员）。
     const root = await httpRequest({
       port: fixture.port,
       path: '/',
       headers: { host: fixture.loopbackHost, accept: 'text/html' },
     })
-    expect(root.status).toBe(303)
-    expect(root.headers.location).toBe(SETUP_PATH_PREFIX)
+    expect(root.status).toBe(502)
+
+    // 管理页是远程能力的入口：未初始化时在本机打开它才被引导到向导。
+    const admin = await httpRequest({
+      port: fixture.port,
+      path: '/_admin',
+      headers: { host: fixture.loopbackHost, accept: 'text/html' },
+    })
+    expect(admin.status).toBe(303)
+    expect(admin.headers.location).toBe(SETUP_PATH_PREFIX)
+
+    // 登录页同样让位给向导：还没有能通过登录的账号。
+    const login = await httpRequest({
+      port: fixture.port,
+      path: '/_auth/login',
+      headers: { host: fixture.loopbackHost, accept: 'text/html' },
+    })
+    expect(login.status).toBe(303)
+    expect(login.headers.location).toBe(SETUP_PATH_PREFIX)
+
+    // 非 loopback 的业务请求保持拒绝：远程访问必须等设置完成后登录。
+    const lan = await httpRequest({
+      port: fixture.port,
+      path: '/',
+      headers: { host: fixture.lanHost, accept: 'text/html' },
+    })
+    expect(lan.status).toBe(503)
+    expect(lan.body).toContain('还没有创建管理员账号')
   })
 
   it('refuses to create the administrator from a non-loopback Host', async () => {

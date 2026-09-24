@@ -5,7 +5,7 @@
 ## 1. 目标与边界
 
 将 `packages/plugins/agent-message-start` 扩展并更名为 `packages/plugins/chat-scroll`，
-包名为 `@dsh-remote/dsh-plugin-chat-scroll`，中文功能名称为「会话滚动导航」。
+包名为 `@dsh-station/dsh-plugin-chat-scroll`，中文功能名称为「会话滚动导航」。
 仍是一个内置插件，不并行装载新旧两份实现。
 
 用户已明确要求两个显式导航动作都有滚动动效：

@@ -1,6 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises'
 import pino, { type Logger } from 'pino'
-import type { Membership, MembershipHub, MembershipLastHub } from '@dsh-remote/protocol'
+import type { Membership, MembershipHub, MembershipLastHub } from '@dsh-station/protocol'
 import { nextBackoffDelay } from './backoff.js'
 import {
   normalizeRelayUrl,

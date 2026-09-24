@@ -11,7 +11,7 @@ import { DSH_BIN, DSH_PROFILE, DEV_DIRECTORY, ROOT, dshPluginOverlays } from './
 import { createCheckContext, runLiveDshCheck } from './lib/check-context.mjs'
 
 
-const PACKAGE_ID = '@dsh-remote/dsh-plugin-turn-retry'
+const PACKAGE_ID = '@dsh-station/dsh-plugin-turn-retry'
 const portArgument = process.argv.indexOf('--port')
 const PORT = portArgument === -1 ? 3098 : Number(process.argv[portArgument + 1])
 const HOME = join(DEV_DIRECTORY, 'turn-retry-check-home')

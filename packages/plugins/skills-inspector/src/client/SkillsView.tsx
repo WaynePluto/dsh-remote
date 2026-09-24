@@ -11,7 +11,7 @@ import type { CSSProperties, ReactElement } from 'react'
 import {
   INSPECTOR_MONO, INSPECTOR_PRIMARY, INSPECTOR_SECONDARY, INSPECTOR_TERTIARY,
   inspectorGroupHeadingStyle, inspectorStyles, useInspectorPolling,
-} from '@dsh-remote/plugin-ui'
+} from '@dsh-station/plugin-ui'
 import { Button, Input, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
   filterEntries, groupBySource, sortLoaded,

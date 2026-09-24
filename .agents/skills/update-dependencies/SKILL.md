@@ -1,6 +1,6 @@
 ---
 name: update-dependencies
-description: 检查并更新本项目（dsh-remote）的依赖版本。优先检查 @deepseek-ai/dsh 是否有新版本；若 dsh 无新版本则跳过其余依赖检查。更新后运行项目验证，并评估 dsh 新版本对隧道 / 认证 / 插件的影响；原生完整覆盖且替代验证通过的功能插件直接彻底清理，部分重叠则提出建议由用户决定。当用户要求更新依赖、升级 dsh、或检查依赖新版本时使用。
+description: 检查并更新本项目（dsh-station）的依赖版本。优先检查 @deepseek-ai/dsh 是否有新版本；若 dsh 无新版本则跳过其余依赖检查。更新后运行项目验证，并评估 dsh 新版本对隧道 / 认证 / 插件的影响；原生完整覆盖且替代验证通过的功能插件直接彻底清理，部分重叠则提出建议由用户决定。当用户要求更新依赖、升级 dsh、或检查依赖新版本时使用。
 ---
 
 # update-dependencies
@@ -57,7 +57,7 @@ dsh 是 0.1.x developer preview，**每个 rc / alpha 都可能有破坏性变�
    - 浏览器认证的 token 输出格式、cookie 与认证范围是否变化，会不会让 relay 登录后仍吃 401
      （见 `docs/dsh/transport.md`；契约变化时同步改 launcher/relay）
    - 下行 WebSocket 路径与插件 combo 路由是否变化（现为 `/api/remote.mux`、`/plugins/??…`）
-   - 插件 / profile 机制（`dsh-remote-web` profile 的加载方式，铁律 10）
+   - 插件 / profile 机制（`dsh-station-web` profile 的加载方式，铁律 10）
 3. 将结论更新到 `docs/dsh/` 对应主题，标清目标版本与尚未验证项；升级完成后更新基线与路线图进度，不追加升级流水账。
 
 **不要因为升级去改 dsh 源码或 fork（铁律 1）**；不要基于本地源码构建 dsh。
@@ -111,7 +111,7 @@ Get-ChildItem node_modules\@deepseek-ai -Directory |
 2. **删掉 `pnpm-lock.yaml` 与 `node_modules` 重装**：只改 overrides 不删 lockfile 时 pnpm 会沿用旧解析
 3. 删 `node_modules` 后还要删 `packages/*/node_modules`，否则里面留着指向旧 `.pnpm` 的断链接
    （症状：`Cannot find module .../vitest/vitest.mjs`）
-4. 真正的验证是实际启动一次：`node node_modules\@deepseek-ai\dsh\lib\bin.js --profile dsh-remote-web --no-open --port 3099 --trusted-host 127.0.0.1`，
+4. 真正的验证是实际启动一次：`node node_modules\@deepseek-ai\dsh\lib\bin.js --profile dsh-station-web --no-open --port 3099 --trusted-host 127.0.0.1`，
    看到 `dsh web: http://127.0.0.1:3099/?token=…` 才算好（`--version` 能跑不说明任何问题）。
 
 `nodeLinker: hoisted` 是 dsh profile fallback 的前提（见 `pnpm-workspace.yaml` 注释），

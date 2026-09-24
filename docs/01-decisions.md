@@ -14,7 +14,7 @@
 | D2 | 不 fork、不改 dsh 源码 | 扩展通过插件完成，升级时核对依赖的上游契约 |
 | D3 | 反向隧道只搬运 HTTP/WebSocket 字节 | relay 不解析 dsh 业务协议；首页 token 重定向是唯一例外 |
 | D4 | 复用 dsh Web UI | 会话、模型、设置等界面由 dsh 与插件提供 |
-| D5 | 使用用户安装的 Node，不携带 Node 二进制 | Node 最低版本为 22.19.0 |
+| D5 | 轻量版与服务版 zip 使用用户安装的 Node，不携带 Node 二进制；仅桌面版完整版附带固定版本 Node 运行时 | Node 最低版本为 22.19.0；内置 Node 版本纳入固定版本清单 |
 | D6 | 提供双击启动器，不自动打开浏览器 | Windows 托盘菜单和终端输出提供访问入口 |
 | D7 | 每台机器独立 origin，域名部署使用子域名 | dsh 使用绝对 `/api`，不支持挂子路径 |
 | D8 | 浏览器流量经过 relay | 所有非 loopback 访问统一认证 |
@@ -23,13 +23,17 @@
 | D11 | 优先成熟第三方依赖 | 保持直接依赖版本固定 |
 | D12 | 声明 `trustedHosts`，relay 原样转发 Host/Origin | 使用官方 browser-trust fence；远程设置由插件提供 |
 | D13 | dsh 作为 launcher 的 npm 依赖分发 | 绿色包保留真实 node_modules，用户不必另装 dsh |
-| D14 | 共用标准 DSH_HOME，仅隔离 dsh-remote-web profile | 共享 settings、credentials、sessions 与用户全局 patch |
+| D14 | 共用标准 DSH_HOME，仅隔离 dsh-station-web profile | 共享 settings、credentials、sessions 与用户全局 patch |
 | D15 | 非 loopback 浏览器请求统一登录 | 仅 loopback socket 与 loopback Host 同时成立才免登录 |
 | D16 | 每台机器运行 dsh、relay、connector | 任意机器可作为远程入口，关系单向且每机最多一个入口 |
 | D17 | 扩展放在 `packages/plugins`，各包自行说明 | 功能组件通过 4 个组合 Bundle 与 6 个独立 Bundle 第三方分发；connection 注入和模型 HMR 启动屏障保留在同一个壳级 overlay |
-| D18 | Linux systemd 以个人普通用户运行整套 dsh-remote | 默认 `~/.dsh-remote` 保存 relay 运行数据，`~/.dsh` 保存官方 dsh 数据；普通操作使用用户权限，管理员操作由用户在交互终端输入 sudo，保留系统缓存；不主动建立 root shell |
+| D18 | Linux systemd 以个人普通用户运行整套 dsh-station | 默认 `~/.dsh-station` 保存 relay 运行数据，`~/.dsh` 保存官方 dsh 数据；普通操作使用用户权限，管理员操作由用户在交互终端输入 sudo，保留系统缓存；不主动建立 root shell |
 | D19 | 公网使用泛子域名，本机保留 loopback，裸域名只进管理入口 | `https://<机器名>.<域名>` 保持每台机器独立 origin；`http://127.0.0.1:<端口>` 始终是本机入口；域名模式默认关闭成员端口，新增机器不改 DNS、证书或 TLS 反代；域名模式的公网 Cookie 与本机 HTTP 的 host-only 辅助 Cookie 分开 |
 | D20 | 功能插件作为随发行版提供、首次默认安装的第三方插件分发 | 20 个功能组件组合为 4 个组合包与 6 个独立包；launcher 配套升级所有仍安装的包并保留 Bundle/组件停用状态，用户卸载后不自动补回，可从发行版 `plugins/` 或开发目录 `.dev/plugins/` 重装。网页目录选择独立分发；模型组两个启动屏障组件不可单独停用；connection 注入与稳定的模型启动屏障仍是壳级常驻 overlay。详见 [插件分发计划](plugin-optional-plan.md) |
+| D21 | 发行版本分为轻量版（lite）与完整版（full）：lite 不内置 Office 预览引擎，full 把引擎直接打进安装包，不做按需下载 | 两者是同一个程序的两个体积档；引擎压缩后每平台约多 58～121 MB，轻量版面向不需要 Office 预览的用户 |
+| D22 | 桌面版按平台实机验收通过后，win/mac 仅保留桌面版介质；Linux 保留桌面版与服务版 zip（现行绿色包即服务版，始终使用系统 Node） | 会解压绿色包的用户必有 Node 或能自装；需要开箱即用的用户走桌面版，其中完整版附带 Node |
+| D23 | 首次使用不强制创建管理员：本机 loopback 的 dsh 页面按免登录语义直接可用；只有首次打开管理控制台（远程能力入口）时才引导创建账号、密码与 TOTP。未初始化期间非 loopback 访问仍一律拒绝 | 远程只是工作站的一个能力，不使用远程就不该被设置向导挡住；认证边界不变（非 loopback 必须等设置完成且登录） |
+| D24 | 项目名 dsh-station（用户文案「DSH 工作站」）：数据目录默认 `~/.dsh-station`，dsh profile `dsh-station-web`；`remote` 一词只指远程能力（远程入口、remote-* 插件、/api/remote.mux） | 改名后的首次运行把旧 `~/.dsh-remote` 与旧 profile 整体复制迁移（数据不丢）；relay.db 迁移合并为单一 CREATE，旧库经 user_version 兼容继续使用；旧配置文件名 dsh-remote.config.json 仍可读取 |
 
 ## 2.05 术语
 
@@ -45,6 +49,8 @@
 | 入口机器取消目标资格 | 停止 X 并移除 |
 | DNS 标签，如 pc2 | 机器名 |
 | 页面中的当前机器 | 机器真名，如 pc1 |
+| 发行版本的两种配置 | 轻量版（lite）、完整版（full） |
+| Linux 绿色包 zip | 服务版 |
 
 `hub`、`MembershipHub`、`membership.json`、`slug`、`revoke` 等代码与 CLI 名称保持不变。
 “吊销”用于登录会话和令牌。对机器使用“停止并移除”，因为它会令目标 connector 致命退出，
@@ -90,7 +96,7 @@ dsh-restart-status.json 供「远程入口」页展示；不需要操作员重�
 
 ## 2.2 Profile 与插件装载
 
-`dsh-remote-web` profile 初始只写入 `dsh-base` 与 `dsh-web-app`。功能扩展随后通过 dsh
+`dsh-station-web` profile 初始只写入 `dsh-base` 与 `dsh-web-app`。功能扩展随后通过 dsh
 官方插件管理器安装为第三方 Bundle；`plugin-catalog.json` 是分发包名、组件、顺序和源码位置的
 唯一清单。发行版从根目录 `plugins/` 安装，开发栈从 `.dev/plugins/` 安装，安装逻辑相同。
 
@@ -100,7 +106,7 @@ dsh-restart-status.json 供「远程入口」页展示；不需要操作员重�
 models-catalog 与 model-capabilities 共同参与 `llm-pi-ai` 启动屏障、不可单独停用外，
 其他无硬启动耦合的组件可在插件详情中单独停用。网页目录选择必须静态覆盖原生服务，故独立分发。
 
-首次提供某个分发包时 launcher 默认安装并启用。以后每次 dsh-remote 配套升级都会升级所有仍在
+首次提供某个分发包时 launcher 默认安装并启用。以后每次 dsh-station 配套升级都会升级所有仍在
 profile dependencies 中的随附包，包括停用的 Bundle；Bundle 是否选中以及组件行的 disabled
 状态保持不变。用户在官方插件管理器卸载包后，launcher 只记录该选择，不自动补回；需要恢复时，
 在 dsh「添加插件」中选择当前发行版 `plugins/<目录>` 或源码开发环境 `.dev/plugins/<目录>` 的

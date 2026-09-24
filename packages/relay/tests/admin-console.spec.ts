@@ -212,7 +212,7 @@ describe('M2.5 admin console', () => {
       cookie: `${fixture.sessionCookie}; ${csrfPair}`,
     })
     expect(confirm.status, confirm.body).toBe(200)
-    expect(confirm.body).toContain(`停止 ${MACHINE_SLUG} 上的 dsh-remote`)
+    expect(confirm.body).toContain(`停止 ${MACHINE_SLUG} 上的 dsh-station`)
     expect(confirm.body).toContain('dsh 进程会被一起停掉')
     expect(confirm.body).toContain(`<a href="${ADMIN_PATH_PREFIX}">`)
     // 渲染页面不能触碰设备或其控制信道。
@@ -262,7 +262,7 @@ describe('M2.5 admin console', () => {
     // 令牌，以及 dsh 必须信任的 authority（模式 A 原样转发
     // 浏览器 Host；使用公网域名时它就是该机器的子域名）。
     expect(issued.body)
-      .toContain(`dsh-remote-connector --relay wss://dsh.test --slug pc9 --enroll-token ${token} --hub-authority pc9.dsh.test`)
+      .toContain(`dsh-station-connector --relay wss://dsh.test --slug pc9 --enroll-token ${token} --hub-authority pc9.dsh.test`)
 
     const tokenId = lastIssuedTokenId(fixture.store)
     if (tokenId === undefined) throw new Error('the console wrote no audit row for the token')
@@ -313,7 +313,7 @@ describe('M2.5 admin console', () => {
       fields: { csrf: localPage.csrf, slug: 'pc9', name: '' },
     })
     expect(issued.status, issued.body).toBe(200)
-    expect(issued.body).toContain('dsh-remote-connector --relay wss://dsh.test')
+    expect(issued.body).toContain('dsh-station-connector --relay wss://dsh.test')
   })
 
   it('rejects a malformed slug without issuing anything', async () => {

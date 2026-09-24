@@ -6,7 +6,7 @@ import { DSH_BIN, DSH_PROFILE, DEV_DIRECTORY, ROOT, dshPluginOverlays } from "./
 import { createCheckContext, runLiveDshCheck } from './lib/check-context.mjs'
 import { inspectClientBundle as inspectClientArtifact, inspectHostBundle as inspectHostArtifact } from './lib/check-client-bundle.mjs'
 
-const PACKAGE_ID = "@dsh-remote/dsh-plugin-files"
+const PACKAGE_ID = "@dsh-station/dsh-plugin-files"
 const CHANNEL = "files"
 const argument = process.argv.indexOf("--port")
 const PORT = argument === -1 ? 3096 : Number(process.argv[argument + 1])
@@ -75,7 +75,7 @@ function inspectClientBundle() {
       nativeFilesId: body.includes('@deepseek-ai/dsh-client-ui-sidebar-files'),
       documentPreviewId: body.includes('@deepseek-ai/dsh-client-ui-sidebar-documentpreview'),
       singleEntry: !body.includes('files-pro'),
-      nativeGuideUntouched: !body.includes('dsh-remote-files-initial-guide-sentinel') && !body.includes('dsh-files-directory-guide') && !body.includes('sidebar.right.tab.guide'),
+      nativeGuideUntouched: !body.includes('dsh-station-files-initial-guide-sentinel') && !body.includes('dsh-files-directory-guide') && !body.includes('sidebar.right.tab.guide'),
       temporaryPreview: body.includes('dsh-files-preview-tab-title-temporary') && body.includes('replaceTab'),
       imageZoom: body.includes('data-files-image-zoom') && body.includes('imageZoomFit'),
       imageZoomPortalGuards: body.includes('dsh-files-image-toolbar') && body.includes('onPointerDown') && body.includes('stopPropagation'),

@@ -10,7 +10,7 @@ import { DSH_BIN, DSH_PROFILE, DEV_DIRECTORY, ROOT, dshPluginOverlays } from './
 import { createCheckContext, runLiveDshCheck } from './lib/check-context.mjs'
 import { inspectClientBundle as inspectClientArtifact } from './lib/check-client-bundle.mjs'
 
-const PACKAGE_ID = '@dsh-remote/dsh-plugin-user-message-fork'
+const PACKAGE_ID = '@dsh-station/dsh-plugin-user-message-fork'
 const CLIENT_BUNDLE = join(ROOT, 'packages', 'plugins', 'user-message-fork', 'dist', 'client.js')
 const portArgument = process.argv.indexOf('--port')
 const PORT = portArgument === -1 ? 3098 : Number(process.argv[portArgument + 1])

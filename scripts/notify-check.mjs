@@ -11,7 +11,7 @@ import { DSH_BIN, DSH_PROFILE, DEV_DIRECTORY, ROOT, dshPluginOverlays } from './
 import { createCheckContext, runLiveDshCheck } from './lib/check-context.mjs'
 
 
-const PACKAGE_ID = '@dsh-remote/dsh-plugin-notify'
+const PACKAGE_ID = '@dsh-station/dsh-plugin-notify'
 const NAMESPACE = 'dsh-plugin-notify'
 // dsh 0.1.7 起设置表单按 profile 行 entry id 寻址，与文案命名空间解耦。
 const ENTRY_ID = 'notify'

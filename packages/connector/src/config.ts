@@ -1,8 +1,8 @@
 import { join } from 'node:path'
 import { z } from 'zod'
-import { dshWebTokenSchema, machineIdSchema, machineSlugSchema, PROBE_INTERVAL_MS } from '@dsh-remote/protocol'
+import { dshWebTokenSchema, machineIdSchema, machineSlugSchema, PROBE_INTERVAL_MS } from '@dsh-station/protocol'
 import { DEVICE_KEY_FILE_NAME } from './device-key.js'
-import { defaultDshRemoteHome } from './membership.js'
+import { defaultDshStationHome } from './membership.js'
 import { CONNECTOR_VERSION } from './version.js'
 
 /** Connector 无法拨号的 relay URL；消息会说明原因。 */
@@ -68,7 +68,7 @@ const connectorConfigShape = z.strictObject({
    */
   slug: machineSlugSchema.optional(),
   /** 保存 `device.key` 和 `membership.json` 的每用户状态目录。 */
-  home: z.string().min(1).default(() => defaultDshRemoteHome()),
+  home: z.string().min(1).default(() => defaultDshStationHome()),
   /** 这台机器的 Ed25519 身份所在位置；首次运行时创建。 */
   deviceKeyPath: z.string().min(1).optional(),
   /**

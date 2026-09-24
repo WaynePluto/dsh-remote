@@ -65,7 +65,7 @@ function isBarePackageSpecifier(id) {
  */
 export function createExternalDriftGuard(label, allowed, { allowNodeBuiltins = false } = {}) {
   return {
-    name: `dsh-remote-external-drift/${label}`,
+    name: `dsh-station-external-drift/${label}`,
     generateBundle() {
       const offenders = new Set()
       for (const id of this.getModuleIds()) {

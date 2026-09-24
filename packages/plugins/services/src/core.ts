@@ -2,7 +2,7 @@
  * `core.ts` 的稳定兼容入口。
  * 实现按 registry、日志、pid 身份、进程生命周期和 readiness 拆分；这里显式 re-export 原入口的全部 public API，避免调用方改变 import 路径。
  *
- * @module @dsh-remote/dsh-plugin-services/core
+ * @module @dsh-station/dsh-plugin-services/core
  */
 
 export {

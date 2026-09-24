@@ -66,6 +66,7 @@ const (
 	desktopTrayWMSetIcon     = 0x0080
 
 	desktopTrayNIMAdd     = 0
+	desktopTrayNIMModify  = 1
 	desktopTrayNIMDelete  = 2
 	desktopTrayNIFMessage = 1
 	desktopTrayNIFIcon    = 2
@@ -95,8 +96,22 @@ const (
 	desktopTrayShow = iota + 1
 	desktopTrayBrowser
 	desktopTrayAdmin
+	desktopTrayStartBackend
+	desktopTrayStopBackend
+	desktopTrayRestartBackend
 	desktopTrayQuit
 )
+
+// desktopTrayCallbacks 是托盘菜单触发的全部动作；S4.3 常驻托盘含后台控制。
+type desktopTrayCallbacks struct {
+	onShow    func()
+	onBrowser func()
+	onAdmin   func()
+	onStart   func()
+	onStop    func()
+	onRestart func()
+	onQuit    func()
+}
 
 type desktopTrayPoint struct {
 	x, y int32
@@ -158,9 +173,14 @@ type desktopTrayState struct {
 	closed         bool
 	running        bool
 	taskbarCreated uint32
+	mu             sync.Mutex
+	tipText        [128]uint16
 	onShow         func()
 	onBrowser      func()
 	onAdmin        func()
+	onStart        func()
+	onStop         func()
+	onRestart      func()
 	onQuit         func()
 }
 
@@ -176,11 +196,17 @@ func (tray *desktopTrayState) iconData() desktopTrayIconData {
 		hwnd: tray.hwnd, id: 1, callbackMessage: desktopTrayWMCallback, icon: tray.icon,
 	}
 	data.cbSize = uint32(unsafe.Sizeof(data))
-	copy(data.tip[:], syscall.StringToUTF16("dsh-remote 桌面预览版"))
+	copy(data.tip[:], tray.tipText[:])
 	return data
 }
 
 func (tray *desktopTrayState) addIcon() error {
+	tray.mu.Lock()
+	if tray.tipText[0] == 0 {
+		defaultTip, _ := syscall.UTF16FromString("DSH 工作站")
+		copy(tray.tipText[:], defaultTip)
+	}
+	tray.mu.Unlock()
 	data := tray.iconData()
 	data.flags = desktopTrayNIFMessage | desktopTrayNIFIcon | desktopTrayNIFTip
 	ok, _, callErr := desktopTrayNotifyIcon.Call(desktopTrayNIMAdd, uintptr(unsafe.Pointer(&data)))
@@ -245,7 +271,7 @@ func (tray *desktopTrayState) init() (err error) {
 		return desktopTrayError("GetModuleHandleW", callErr)
 	}
 	tray.instance = instance
-	name := fmt.Sprintf("DshRemoteDesktopTray_%d_%d", syscall.Getpid(), desktopTrayClassNumber.Add(1))
+	name := fmt.Sprintf("DshStationDesktopTray_%d_%d", syscall.Getpid(), desktopTrayClassNumber.Add(1))
 	tray.className, err = syscall.UTF16PtrFromString(name)
 	if err != nil {
 		return err
@@ -258,7 +284,7 @@ func (tray *desktopTrayState) init() (err error) {
 	}
 	tray.classReady = true
 
-	title, _ := syscall.UTF16PtrFromString("dsh-remote 桌面预览版")
+	title, _ := syscall.UTF16PtrFromString("dsh-station 桌面预览版")
 	hwnd, _, callErr := desktopTrayCreateWindow.Call(
 		0, uintptr(unsafe.Pointer(tray.className)), uintptr(unsafe.Pointer(title)),
 		0, 0, 0, 0, 0, 0, 0, instance, 0,
@@ -314,6 +340,18 @@ func (tray *desktopTrayState) init() (err error) {
 	if ok, _, callErr := desktopTrayAppendMenu.Call(tray.menu, desktopTrayMFSeparator, 0, 0); ok == 0 {
 		return desktopTrayError("AppendMenuW", callErr)
 	}
+	if err = appendDesktopTrayMenu(tray.menu, desktopTrayMFString, desktopTrayStartBackend, "启动后台"); err != nil {
+		return err
+	}
+	if err = appendDesktopTrayMenu(tray.menu, desktopTrayMFString, desktopTrayStopBackend, "停止后台"); err != nil {
+		return err
+	}
+	if err = appendDesktopTrayMenu(tray.menu, desktopTrayMFString, desktopTrayRestartBackend, "重启后台"); err != nil {
+		return err
+	}
+	if ok, _, callErr := desktopTrayAppendMenu.Call(tray.menu, desktopTrayMFSeparator, 0, 0); ok == 0 {
+		return desktopTrayError("AppendMenuW", callErr)
+	}
 	if err = appendDesktopTrayMenu(tray.menu, desktopTrayMFString, desktopTrayQuit, "退出"); err != nil {
 		return err
 	}
@@ -333,6 +371,12 @@ func (tray *desktopTrayState) invoke(id uintptr) {
 		callback = tray.onBrowser
 	case desktopTrayAdmin:
 		callback = tray.onAdmin
+	case desktopTrayStartBackend:
+		callback = tray.onStart
+	case desktopTrayStopBackend:
+		callback = tray.onStop
+	case desktopTrayRestartBackend:
+		callback = tray.onRestart
 	case desktopTrayQuit:
 		callback = tray.onQuit
 	}
@@ -467,11 +511,67 @@ func setWindowsTaskbarIcon() bool {
 	return big != 0 || small != 0
 }
 
+// desktopTrayHandle 暴露给调用方：Stop 拆除图标与窗口；SetTip 更新悬停提示。
+type desktopTrayHandle struct {
+	tray *desktopTrayState
+	done chan struct{}
+	once sync.Once
+}
+
+// Stop 只拆除图标和本窗口，不代表用户选择了菜单中的「退出」。
+func (handle *desktopTrayHandle) Stop() {
+	handle.once.Do(func() {
+		// PostMessageW 失败时重试；成功后由本线程处理 WM_CLOSE。
+		for {
+			handle.tray.closeMu.Lock()
+			if handle.tray.closed {
+				handle.tray.closeMu.Unlock()
+				break
+			}
+			posted, _, _ := desktopTrayPostMessage.Call(handle.tray.hwnd, desktopTrayWMClose, 0, 0)
+			handle.tray.closeMu.Unlock()
+			if posted != 0 {
+				break
+			}
+			select {
+			case <-handle.done:
+				return
+			case <-time.After(20 * time.Millisecond):
+			}
+		}
+	})
+	<-handle.done
+}
+
+// SetTip 更新托盘悬停提示（阶段与入口地址摘要）；Shell_NotifyIconW 可跨线程调用。
+func (handle *desktopTrayHandle) SetTip(text string) {
+	handle.tray.mu.Lock()
+	defer handle.tray.mu.Unlock()
+	if !handle.tray.iconAdded {
+		return
+	}
+	encoded, err := syscall.UTF16FromString(text)
+	if err != nil || len(encoded) > 128 {
+		// 提示过长时截断到 127 字符并补结尾零，避免破坏 NIM_MODIFY。
+		if len(encoded) > 128 {
+			encoded = encoded[:127]
+			encoded = append(encoded, 0)
+		}
+	}
+	tip := handle.tray.tipText
+	copy(tip[:], encoded)
+	for i := len(encoded); i < len(tip); i++ {
+		tip[i] = 0
+	}
+	handle.tray.tipText = tip
+	data := handle.tray.iconData()
+	data.flags = desktopTrayNIFTip
+	desktopTrayNotifyIcon.Call(desktopTrayNIMModify, uintptr(unsafe.Pointer(&data)))
+}
+
 // startWindowsTray 在专属 OS 线程创建隐藏窗口；调用方的 Wails 线程不运行消息循环。
-// stop 只拆除图标和本窗口，不代表用户选择了菜单中的「退出」。
-func startWindowsTray(onShow, onBrowser, onAdmin, onQuit func()) (stop func(), err error) {
+func startWindowsTray(callbacks desktopTrayCallbacks) (*desktopTrayHandle, error) {
 	type startup struct {
-		hwnd uintptr
 		tray *desktopTrayState
 		err  error
 	}
@@ -481,13 +581,17 @@ func startWindowsTray(onShow, onBrowser, onAdmin, onQuit func()) (stop func(), e
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 		defer close(done)
-		tray := &desktopTrayState{onShow: onShow, onBrowser: onBrowser, onAdmin: onAdmin, onQuit: onQuit}
+		tray := &desktopTrayState{
+			onShow: callbacks.onShow, onBrowser: callbacks.onBrowser, onAdmin: callbacks.onAdmin,
+			onStart: callbacks.onStart, onStop: callbacks.onStop, onRestart: callbacks.onRestart,
+			onQuit: callbacks.onQuit,
+		}
 		if err := tray.init(); err != nil {
 			ready <- startup{err: err}
 			return
 		}
 		tray.running = true
-		ready <- startup{hwnd: tray.hwnd, tray: tray}
+		ready <- startup{tray: tray}
 		tray.pump()
 	}()
 	started := <-ready
@@ -495,29 +599,5 @@ func startWindowsTray(onShow, onBrowser, onAdmin, onQuit func()) (stop func(), e
 		<-done
 		return nil, started.err
 	}
-
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			// PostMessageW 失败时重试；成功后由本线程处理 WM_CLOSE。
-			for {
-				started.tray.closeMu.Lock()
-				if started.tray.closed {
-					started.tray.closeMu.Unlock()
-					break
-				}
-				posted, _, _ := desktopTrayPostMessage.Call(started.hwnd, desktopTrayWMClose, 0, 0)
-				started.tray.closeMu.Unlock()
-				if posted != 0 {
-					break
-				}
-				select {
-				case <-done:
-					return
-				case <-time.After(20 * time.Millisecond):
-				}
-			}
-		})
-		<-done
-	}, nil
+	return &desktopTrayHandle{tray: started.tray, done: done}, nil
 }

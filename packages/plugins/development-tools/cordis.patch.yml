@@ -3,20 +3,20 @@
 # id 沿用组件的稳定全局身份；不要与相同组件的独立 Bundle 同时启用。
 - insert:
     - id: services
-      name: './node_modules/@dsh-remote/dsh-plugin-services/dist/index.js'
-      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-development-tools")'
+      name: './node_modules/@dsh-station/dsh-plugin-services/dist/index.js'
+      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-station/dsh-plugin-development-tools")'
 
 - insert:
     - id: terminal
-      name: './node_modules/@dsh-remote/dsh-plugin-terminal/dist/index.js'
-      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-development-tools")'
+      name: './node_modules/@dsh-station/dsh-plugin-terminal/dist/index.js'
+      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-station/dsh-plugin-development-tools")'
 
 - insert:
     - id: tools-inspector
-      name: './node_modules/@dsh-remote/dsh-plugin-tools-inspector/dist/index.js'
-      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-development-tools")'
+      name: './node_modules/@dsh-station/dsh-plugin-tools-inspector/dist/index.js'
+      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-station/dsh-plugin-development-tools")'
 
 - insert:
     - id: skills-inspector
-      name: './node_modules/@dsh-remote/dsh-plugin-skills-inspector/dist/index.js'
-      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-development-tools")'
+      name: './node_modules/@dsh-station/dsh-plugin-skills-inspector/dist/index.js'
+      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-station/dsh-plugin-development-tools")'

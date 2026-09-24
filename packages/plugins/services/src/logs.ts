@@ -2,7 +2,7 @@
  * Node-only 日志与文件读取辅助：日志归属拥有服务的项目目录，而不是命令的 cwd。
  * 读取失败统一按空内容处理，保证服务退出后仍能安全查看日志。
  *
- * @module @dsh-remote/dsh-plugin-services/logs
+ * @module @dsh-station/dsh-plugin-services/logs
  */
 
 import fs from 'node:fs'

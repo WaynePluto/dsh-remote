@@ -30,7 +30,7 @@ export {
 } from './loaded.js'
 
 /** Cordis 插件名，出现在 dsh 的插件树与诊断里。 */
-export const name = 'dsh-remote-skills-inspector'
+export const name = 'dsh-station-skills-inspector'
 
 /**
  * 必需服务。

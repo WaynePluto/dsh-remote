@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { serializeMembership, type MembershipHub } from '@dsh-remote/protocol'
+import { serializeMembership, type MembershipHub } from '@dsh-station/protocol'
 import { LauncherError } from '../src/errors.js'
 import { membershipFilePath, readMembership } from '../src/membership.js'
 import { isBareAuthority, trustChange, trustedHostsFor } from '../src/trusted-hosts.js'
@@ -17,7 +17,7 @@ const HUB: MembershipHub = {
 const homes: string[] = []
 
 function newHome(): string {
-  const home = mkdtempSync(join(tmpdir(), 'dsh-remote-launcher-hosts-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-station-launcher-hosts-'))
   homes.push(home)
   return home
 }

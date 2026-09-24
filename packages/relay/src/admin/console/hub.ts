@@ -3,7 +3,7 @@ import {
   type DshRestartStatus,
   type MembershipHub,
   type MembershipLastHub,
-} from '@dsh-remote/protocol'
+} from '@dsh-station/protocol'
 import { escapeHtml, type PageAppearance } from '../shared.js'
 import {
   ADMIN_HUB_PATH,
@@ -68,7 +68,7 @@ function entryCard(view: MembershipView, machine: string): string {
   if (view.kind === 'self') {
     return `<div class="hub">
 <h3>${name} 已挂在自己身上（系统维护）</h3>
-<p class="meta">这是 dsh-remote 自动维护的条目：没有它，本机和局域网地址就打不开 ${name} 的 dsh。<br>它在每次启动时自动重建，不需要也不能在这里取消。下面仍可粘贴别的机器的命令，把 ${name} 的远程入口改到那台机器上。</p>
+<p class="meta">这是 dsh-station 自动维护的条目：没有它，本机和局域网地址就打不开 ${name} 的 dsh。<br>它在每次启动时自动重建，不需要也不能在这里取消。下面仍可粘贴别的机器的命令，把 ${name} 的远程入口改到那台机器上。</p>
 </div>`
   }
   const { hub } = view
@@ -191,7 +191,7 @@ export function hubPage(options: {
     machine,
     title: '远程入口',
     heading: `${name} 的远程入口`,
-    intro: `「机器」那一页是<strong>别的机器挂在 ${name} 上</strong>，在那里停止并移除一台机器，停的是对方那台机器上的 dsh-remote；这一页是 <strong>${name} 挂在别人身上</strong>，取消只影响 ${name} 自己，那边的机器一台都不会掉线。${name} 同时只能有一个远程入口。`,
+    intro: `「机器」那一页是<strong>别的机器挂在 ${name} 上</strong>，在那里停止并移除一台机器，停的是对方那台机器上的 dsh-station；这一页是 <strong>${name} 挂在别人身上</strong>，取消只影响 ${name} 自己，那边的机器一台都不会掉线。${name} 同时只能有一个远程入口。`,
     username: options.username,
     appearance: options.appearance,
     body: `${notice}${alert}${entryCard(view, machine)}${reconnect}${restart}
@@ -199,7 +199,7 @@ export function hubPage(options: {
 <p class="hint">到你想用作入口的那台机器上，在它控制台的「机器」页签发一个注册令牌，它会给出一条完整命令；把那条命令整个粘到下面。地址、${name} 在那边的机器名、注册令牌都在命令里，不用再分开填。粘好后 dsh 会自动重启以信任新的地址，本页会显示重启进度。</p>
 <form method="post" action="${ADMIN_MEMBERSHIP_JOIN_PATH}">
 <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
-<div class="field"><label for="hubCommand">粘贴入口机器给出的 connector 命令</label><input class="paste" id="hubCommand" name="command" required maxlength="2048" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="off" placeholder="dsh-remote-connector --relay wss://… --slug … --enroll-token … --hub-authority …"></div>
+<div class="field"><label for="hubCommand">粘贴入口机器给出的 connector 命令</label><input class="paste" id="hubCommand" name="command" required maxlength="2048" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="off" placeholder="dsh-station-connector --relay wss://… --slug … --enroll-token … --hub-authority …"></div>
 <button type="submit">${view.kind === 'joined' ? '改用这个远程入口' : '设为远程入口'}</button></form>`,
   })
 }

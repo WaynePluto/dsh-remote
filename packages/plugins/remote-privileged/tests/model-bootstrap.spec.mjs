@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { apply, name } from '../model-bootstrap.mjs'
 
-const MODEL_BUNDLE = '@dsh-remote/dsh-plugin-model-enhancements'
+const MODEL_BUNDLE = '@dsh-station/dsh-plugin-model-enhancements'
 
 function context(startedBundles, existing = new Map()) {
   const provide = vi.fn((service, value) => existing.set(service, value))
@@ -20,7 +20,7 @@ describe('model bootstrap fallback', () => {
     const ctx = context([])
     apply(ctx)
 
-    expect(name).toBe('dsh-remote-model-bootstrap-fallback')
+    expect(name).toBe('dsh-station-model-bootstrap-fallback')
     expect(ctx.root.provide.mock.calls).toEqual([
       ['modelsCatalogBootstrap', true],
       ['modelCapabilitiesBootstrap', true],

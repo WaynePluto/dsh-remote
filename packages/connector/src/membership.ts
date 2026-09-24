@@ -9,7 +9,7 @@ import {
   type Membership,
   type MembershipHub,
   type MembershipLastHub,
-} from '@dsh-remote/protocol'
+} from '@dsh-station/protocol'
 
 /**
  * membership 文件存在但不可用。绝不能将其视为“尚未加入”：
@@ -39,13 +39,13 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-/** `~/.dsh-remote`；也保存 `device.key` 的每用户目录。 */
-export function defaultDshRemoteHome(): string {
-  return join(homedir(), '.dsh-remote')
+/** `~/.dsh-station`；也保存 `device.key` 的每用户目录。 */
+export function defaultDshStationHome(): string {
+  return join(homedir(), '.dsh-station')
 }
 
 /**
- * @param home - dsh-remote home 目录。
+ * @param home - dsh-station home 目录。
  * @returns 该 home 中 membership 文件的绝对路径。
  */
 export function membershipFilePath(home: string): string {
@@ -278,7 +278,7 @@ export function watchMembershipFile(options: WatchMembershipOptions): Membership
     mkdirSync(directory, { recursive: true, mode: 0o700 })
   } catch (error) {
     throw new MembershipFileError(
-      `could not create the dsh-remote home at ${directory}: ${errorMessage(error)}`,
+      `could not create the dsh-station home at ${directory}: ${errorMessage(error)}`,
       { cause: error },
     )
   }

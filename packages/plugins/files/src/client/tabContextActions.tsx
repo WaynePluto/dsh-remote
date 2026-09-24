@@ -5,7 +5,7 @@ import type { ISidebarRight, SidebarRightTabMenuOwnerProps, TabId } from '@deeps
 import type { Translate } from './locales.js'
 
 const SLOT = 'sidebar.right.tab.menu.item'
-const REGISTRATION_ID = 'dsh-remote-files-tab-context-actions'
+const REGISTRATION_ID = 'dsh-station-files-tab-context-actions'
 
 type MenuProps = PropsRuntime<typeof SLOT>
 

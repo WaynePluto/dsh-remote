@@ -1,11 +1,11 @@
 {
-  "name": "@dsh-remote/launcher",
+  "name": "@dsh-station/launcher",
   "version": "0.0.2-20260922",
   "license": "MIT",
   "private": true,
   "type": "module",
   "bin": {
-    "dsh-remote": "./dist/index.js"
+    "dsh-station": "./dist/index.js"
   },
   "scripts": {
     "build": "tsdown",
@@ -25,11 +25,11 @@
     "@deepseek-ai/dsh-tools": "0.1.7-rc.1",
     "@deepseek-ai/dsh-user-approval": "0.1.7-rc.1",
     "@deepseek-ai/schemastery": "3.18.4",
-    "@dsh-remote/connector": "workspace:*",
-    "@dsh-remote/dsh-plugin-remote-privileged": "workspace:*",
-    "@dsh-remote/plugin-ui": "workspace:*",
-    "@dsh-remote/protocol": "workspace:*",
-    "@dsh-remote/relay": "workspace:*",
+    "@dsh-station/connector": "workspace:*",
+    "@dsh-station/dsh-plugin-remote-privileged": "workspace:*",
+    "@dsh-station/plugin-ui": "workspace:*",
+    "@dsh-station/protocol": "workspace:*",
+    "@dsh-station/relay": "workspace:*",
     "@earendil-works/pi-ai": "0.85.1",
     "commander": "15.0.0",
     "immer": "10.2.0",

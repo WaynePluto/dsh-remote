@@ -75,7 +75,7 @@ export function lastHubFromHub(hub: MembershipHub): MembershipLastHub {
   }
 }
 
-/** dsh-remote home 目录下使用的文件名。 */
+/** dsh-station home 目录下使用的文件名。 */
 export const MEMBERSHIP_FILE_NAME = 'membership.json'
 
 /**

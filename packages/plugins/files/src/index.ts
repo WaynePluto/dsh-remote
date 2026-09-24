@@ -14,7 +14,7 @@ import {
 } from './shared.js'
 export * from './git.js'
 export * from './shared.js'
-export const name = 'dsh-remote-files'
+export const name = 'dsh-station-files'
 export const inject = ['connection', 'agents']
 
 export class FilesError extends Error {

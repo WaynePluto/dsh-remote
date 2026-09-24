@@ -18,7 +18,7 @@ export const BROWSE_PICKER_PACKAGES = [
 ] as const
 
 /** Cordis 插件名。 */
-export const name = 'dsh-remote-directory-picker-browse'
+export const name = 'dsh-station-directory-picker-browse'
 /** Loader 是替换该组合交互所需的唯一服务。 */
 export const inject = ['loader']
 
@@ -83,10 +83,10 @@ export async function apply(ctx: Context): Promise<void> {
           await restoreAdaptiveEntry(ctx, adaptiveEntryId, wasAdaptiveEnabled)
         }
       }
-    }, 'dsh-remote: browser directory picker')
+    }, 'dsh-station: browser directory picker')
   } catch (cause) {
     // 如果复制或自定义 profile 有启用的 adaptive 行，不要让它
-    // 在替换失败后保持停用。dsh-remote overlay 的静态
+    // 在替换失败后保持停用。dsh-station overlay 的静态
     // disable 仍然是有意的，失败启动会明确报告。
     await restoreAdaptiveEntry(ctx, adaptiveEntryId, wasAdaptiveEnabled)
     throw cause

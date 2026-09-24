@@ -1,7 +1,7 @@
 /** 浏览器兼容插件的浏览器内存诊断契约；不包含网络、持久化或 dsh 业务数据。 */
 
 /** 注入脚本在页面上提供的全局桥接名称。 */
-export const BROWSER_COMPAT_GLOBAL = '__DSH_REMOTE_BROWSER_COMPAT__'
+export const BROWSER_COMPAT_GLOBAL = '__DSH_STATION_BROWSER_COMPAT__'
 
 /** 一条浏览器侧诊断记录的来源。 */
 export type BrowserDiagnosticSource =

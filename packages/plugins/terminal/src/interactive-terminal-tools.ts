@@ -98,7 +98,7 @@ function isRecordWithSessionId(value: unknown): value is Record<string, unknown>
 
 /** 供 dsh loader 直接挂载的上游替换插件。 */
 export const interactiveTerminalTools = {
-  name: 'dsh-remote-tool-terminal',
+  name: 'dsh-station-tool-terminal',
   inject: toolTerminal.inject,
   Config: toolTerminal.Config,
   apply: applyInteractiveTerminalTools,

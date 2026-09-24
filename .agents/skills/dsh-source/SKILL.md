@@ -1,11 +1,11 @@
 ---
 name: dsh-source
-description: 定位并查证 DeepSeek Harness (dsh) 的本地源码与官方文档。当需要确认 dsh 的实际行为（Web 传输协议、/api 的 Host/Origin 校验、Cordis 插件机制、审批与权限、web server 配置、CLI 命令、官方 SDK）时先加载本 skill，它给出本地源码根路径和常用文件位置。不适用于 dsh-remote 自身的架构决策（那些在 docs/01、docs/03）。
+description: 定位并查证 DeepSeek Harness (dsh) 的本地源码与官方文档。当需要确认 dsh 的实际行为（Web 传输协议、/api 的 Host/Origin 校验、Cordis 插件机制、审批与权限、web server 配置、CLI 命令、官方 SDK）时先加载本 skill，它给出本地源码根路径和常用文件位置。不适用于 dsh-station 自身的架构决策（那些在 docs/01、docs/03）。
 ---
 
 # dsh 源码查证入口
 
-本仓库（dsh-remote）中**唯一**记录 dsh 本地源码路径的地方。其他文档、代码注释一律使用**相对于 dsh 仓库根**的路径（如 `packages/client/connection/src/api-request-trust.ts`），需要落到磁盘时来这里取根路径。
+本仓库（dsh-station）中**唯一**记录 dsh 本地源码路径的地方。其他文档、代码注释一律使用**相对于 dsh 仓库根**的路径（如 `packages/client/connection/src/api-request-trust.ts`），需要落到磁盘时来这里取根路径。
 
 ## 源码根路径
 

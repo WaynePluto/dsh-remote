@@ -1,6 +1,6 @@
 # 壳级运行时注入（remote-privileged）
 
-`@dsh-remote/dsh-plugin-remote-privileged` 由 launcher 作为唯一的壳级常驻 `--patch` overlay 传给 dsh，固定在首位且**不可停用**。它不属于第三方功能插件，承担两项运行时基础设施职责：
+`@dsh-station/dsh-plugin-remote-privileged` 由 launcher 作为唯一的壳级常驻 `--patch` overlay 传给 dsh，固定在首位且**不可停用**。它不属于第三方功能插件，承担两项运行时基础设施职责：
 
 1. 为 `connection` 行注入 `webRuntime` 与 `webServer`，让插件 RPC 使用与 dsh 相同的 WebServer context。
 2. 固定 `llm-pi-ai` 的模型启动屏障，并提供启动期占位服务，使模型增强 Bundle 在线停用或重新启用时无需热重启上游 `llm-pi-ai`。

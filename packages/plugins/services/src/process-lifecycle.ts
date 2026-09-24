@@ -2,7 +2,7 @@
  * Node-only 进程生命周期：构造 shell invocation、执行 Windows L1/L2 launcher、记录真实 pid，并负责终止进程树。
  * 这里不读取 registry；服务记录由 `registry.ts` 保存，日志路径由 `logs.ts` 提供。
  *
- * @module @dsh-remote/dsh-plugin-services/process-lifecycle
+ * @module @dsh-station/dsh-plugin-services/process-lifecycle
  */
 
 /* oxlint-disable no-await-in-loop -- Windows launcher 的 pid handoff 必须等待上一次 sidecar 写入结果。 */

@@ -1,6 +1,6 @@
 # 工具状态
 
-`@dsh-remote/dsh-plugin-tools-inspector` 在会话头部提供 **工具** tab。
+`@dsh-station/dsh-plugin-tools-inspector` 在会话头部提供 **工具** tab。
 查看当前 Agent 可见的工具、使用次数、失败次数，并可搜索、展开描述与参数。
 
 ## 数据口径
@@ -23,8 +23,8 @@
 tab、主题与表格规则见 [插件机制](../../../docs/dsh/plugins.md)。
 
 ```powershell
-pnpm --filter @dsh-remote/dsh-plugin-tools-inspector test
-pnpm --filter @dsh-remote/dsh-plugin-tools-inspector typecheck
+pnpm --filter @dsh-station/dsh-plugin-tools-inspector test
+pnpm --filter @dsh-station/dsh-plugin-tools-inspector typecheck
 node scripts/tools-inspector-check.mjs
 ```
 
@@ -32,7 +32,7 @@ node scripts/tools-inspector-check.mjs
 
 ## 分发与管理
 
-本包不作为独立安装项分发，而是 `@dsh-remote/dsh-plugin-development-tools`（开发工具 Bundle）的组件。停用后，会话里的「工具」页签消失。
+本包不作为独立安装项分发，而是 `@dsh-station/dsh-plugin-development-tools`（开发工具 Bundle）的组件。停用后，会话里的「工具」页签消失。
 可在该 Bundle 详情中单独停用或重新启用本组件；安装、卸载和升级以整个开发工具 Bundle 为单位。
 launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，并保留 Bundle 与组件的停用状态；卸载后不会自动补回。
 需要重装时，在 dsh「添加插件」中填写发行包 `plugins/development-tools` 或开发环境 `.dev/plugins/development-tools` 的绝对目录。

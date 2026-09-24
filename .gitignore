@@ -18,9 +18,9 @@ release/
 # 本地运行产物
 data/
 *.log
-dsh-remote.config.json
+dsh-station.config.json
 relay.config.json
-.dsh-remote/
+.dsh-station/
 
 # .agents：日志等本地产物不入库，只保留 skills
 !.agents/

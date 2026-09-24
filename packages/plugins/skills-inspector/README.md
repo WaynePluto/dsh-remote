@@ -1,6 +1,6 @@
 # 技能状态
 
-`@dsh-remote/dsh-plugin-skills-inspector` 在会话头部提供 **技能** tab。
+`@dsh-station/dsh-plugin-skills-inspector` 在会话头部提供 **技能** tab。
 查看当前会话技能目录、来源、加载历史，搜索并展开描述、文件路径。
 
 ## 数据口径
@@ -23,8 +23,8 @@
 源码契约见 [技能与文件](../../../docs/dsh/workspace.md)。
 
 ```powershell
-pnpm --filter @dsh-remote/dsh-plugin-skills-inspector test
-pnpm --filter @dsh-remote/dsh-plugin-skills-inspector typecheck
+pnpm --filter @dsh-station/dsh-plugin-skills-inspector test
+pnpm --filter @dsh-station/dsh-plugin-skills-inspector typecheck
 node scripts/skills-inspector-check.mjs
 ```
 
@@ -32,7 +32,7 @@ node scripts/skills-inspector-check.mjs
 
 ## 分发与管理
 
-本包不作为独立安装项分发，而是 `@dsh-remote/dsh-plugin-development-tools`（开发工具 Bundle）的组件。停用后，会话里的「技能」页签消失；技能本身不受影响。
+本包不作为独立安装项分发，而是 `@dsh-station/dsh-plugin-development-tools`（开发工具 Bundle）的组件。停用后，会话里的「技能」页签消失；技能本身不受影响。
 可在该 Bundle 详情中单独停用或重新启用本组件；安装、卸载和升级以整个开发工具 Bundle 为单位。
 launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，并保留 Bundle 与组件的停用状态；卸载后不会自动补回。
 需要重装时，在 dsh「添加插件」中填写发行包 `plugins/development-tools` 或开发环境 `.dev/plugins/development-tools` 的绝对目录。

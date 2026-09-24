@@ -2,7 +2,7 @@
  * Node-only readiness：按 port、日志 pattern 或有界等待判断服务是否已就绪。
  * readiness 不把退出码当成成功信号；等待过程中退出必须报告 `exited`。
  *
- * @module @dsh-remote/dsh-plugin-services/readiness
+ * @module @dsh-station/dsh-plugin-services/readiness
  */
 
 /* oxlint-disable no-await-in-loop -- 就绪探测必须逐轮检查存活、端口和日志，不能并发消耗探测窗口。 */

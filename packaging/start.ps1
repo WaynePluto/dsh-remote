@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-    dsh-remote 的 Windows 启动入口。
+    dsh-station 的 Windows 启动入口。
 
 .DESCRIPTION
     检查 PowerShell 与 Node.js 版本，然后从本脚本所在目录运行 dist\index.js。
-    多余的参数原样转交给 dsh-remote，例如：
+    多余的参数原样转交给 dsh-station，例如：
         pwsh -File .\start.ps1 --config D:\somewhere\my.config.json
 
 .NOTES
@@ -50,7 +50,7 @@ function Stop-Here {
 if ($PSVersionTable.PSVersion.Major -lt 7) {
   Write-Failure @(
     ''
-    "[dsh-remote] 这个脚本需要 PowerShell 7 或更高版本，当前是 $($PSVersionTable.PSVersion)。"
+    "[dsh-station] 这个脚本需要 PowerShell 7 或更高版本，当前是 $($PSVersionTable.PSVersion)。"
     "           请到 $PowerShellDownloadUrl 安装 PowerShell 7，然后用它重新运行："
     '               pwsh -File .\start.ps1'
     ''
@@ -62,8 +62,8 @@ $node = Get-Command node -CommandType Application -ErrorAction SilentlyContinue 
 if ($null -eq $node) {
   Write-Failure @(
     ''
-    '[dsh-remote] 没有找到 Node.js（命令 node 不存在）。'
-    "           dsh-remote 使用你本机的 Node.js 运行，请到 $NodeDownloadUrl 下载安装 LTS 版"
+    '[dsh-station] 没有找到 Node.js（命令 node 不存在）。'
+    "           dsh-station 使用你本机的 Node.js 运行，请到 $NodeDownloadUrl 下载安装 LTS 版"
     "           （$MinimumNode 或更高），装完重新打开一个终端窗口再运行本脚本。"
     ''
   )
@@ -77,7 +77,7 @@ $matched = [regex]::Match($rawVersion, '(\d+)\.(\d+)\.(\d+)')
 if (-not $matched.Success) {
   Write-Failure @(
     ''
-    "[dsh-remote] 认不出 Node.js 的版本号，node -v 输出的是：$rawVersion"
+    "[dsh-station] 认不出 Node.js 的版本号，node -v 输出的是：$rawVersion"
     "           请确认 $($node.Source) 确实是 Node.js，或到 $NodeDownloadUrl 重新安装。"
     ''
   )
@@ -92,7 +92,7 @@ $detected = [Version]::new(
 if ($detected -lt $MinimumNode) {
   Write-Failure @(
     ''
-    "[dsh-remote] Node.js 版本太低：这台机器上是 v$detected，dsh-remote 需要 $MinimumNode 或更高。"
+    "[dsh-station] Node.js 版本太低：这台机器上是 v$detected，dsh-station 需要 $MinimumNode 或更高。"
     "           请到 $NodeDownloadUrl 下载安装新版 Node.js（LTS 即可），"
     '           装完重新打开一个终端窗口再运行本脚本。'
     "           当前用的是： $($node.Source)"
@@ -101,14 +101,14 @@ if ($detected -lt $MinimumNode) {
   Stop-Here 1
 }
 
-# 以脚本自身所在目录当工作目录：dsh-remote.config.json 是按当前目录查找的，而用户从哪个
+# 以脚本自身所在目录当工作目录：dsh-station.config.json 是按当前目录查找的，而用户从哪个
 # 盘、哪个目录双击或调用这个脚本是无法预测的。
 $packageRoot = $PSScriptRoot
 $entry = Join-Path $packageRoot 'dist\index.js'
 if (-not (Test-Path -LiteralPath $entry -PathType Leaf)) {
   Write-Failure @(
     ''
-    "[dsh-remote] 找不到 $entry。"
+    "[dsh-station] 找不到 $entry。"
     '           这个压缩包没有完整解压，请把整个 zip 重新解压一次（不要只解压其中几个文件，'
     '           也不要直接在压缩软件的预览窗口里运行）。'
     ''
@@ -116,7 +116,7 @@ if (-not (Test-Path -LiteralPath $entry -PathType Leaf)) {
   Stop-Here 1
 }
 
-Write-Host "[dsh-remote] Node v$detected  ($($node.Source))" -ForegroundColor DarkGray
+Write-Host "[dsh-station] Node v$detected  ($($node.Source))" -ForegroundColor DarkGray
 
 Push-Location -LiteralPath $packageRoot
 try {

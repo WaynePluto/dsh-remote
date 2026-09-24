@@ -11,7 +11,7 @@ import { createCheckContext, runLiveDshCheck } from './lib/check-context.mjs'
 import { inspectClientBundle as inspectClientArtifact } from './lib/check-client-bundle.mjs'
 
 
-const PACKAGE_ID = '@dsh-remote/dsh-plugin-favorite-models'
+const PACKAGE_ID = '@dsh-station/dsh-plugin-favorite-models'
 const PACKAGE_DIR = join(ROOT, 'packages', 'plugins', 'favorite-models')
 const BUNDLE_PATCH = join(PACKAGE_DIR, 'cordis.patch.yml')
 const HOST_BUNDLE = join(PACKAGE_DIR, 'dist', 'index.js')

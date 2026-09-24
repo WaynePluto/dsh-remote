@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { DSH_BIN, DSH_PROFILE, DEV_DIRECTORY, ROOT, dshPluginOverlays } from './local-config.mjs'
 import { createCheckContext, runLiveDshCheck } from './lib/check-context.mjs'
 
-const PACKAGE_ID = '@dsh-remote/dsh-plugin-copilot-auth'
+const PACKAGE_ID = '@dsh-station/dsh-plugin-copilot-auth'
 const portArgument = process.argv.indexOf('--port')
 const PORT = portArgument === -1 ? 3099 : Number(process.argv[portArgument + 1])
 const HOME = join(DEV_DIRECTORY, 'copilot-auth-check-home')

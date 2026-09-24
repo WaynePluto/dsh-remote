@@ -1,6 +1,6 @@
-# @dsh-remote/plugin-ui
+# @dsh-station/plugin-ui
 
-仅供 dsh-remote 插件的浏览器构建期复用的纯 UI 辅助代码，不是 dsh 插件。
+仅供 dsh-station 插件的浏览器构建期复用的纯 UI 辅助代码，不是 dsh 插件。
 
 ## 边界
 
@@ -10,4 +10,4 @@
   turn-retry 原因弹窗共用；插件只提供自己的 dialog class、data 属性名与图标，几何通道与拖动 resize 同一组 custom properties。
   本包不依赖 dsh primitives，图标由调用方传入。
 - 消费插件的 client bundle 会把本包内联；React、`react/jsx-runtime`、Cordis、dsh store/slots/primitives 继续使用页面已有的 external 单例。
-- 改动后运行 `pnpm --filter @dsh-remote/plugin-ui typecheck`、`pnpm --filter @dsh-remote/plugin-ui build`，再构建使用它的插件。
+- 改动后运行 `pnpm --filter @dsh-station/plugin-ui typecheck`、`pnpm --filter @dsh-station/plugin-ui build`，再构建使用它的插件。

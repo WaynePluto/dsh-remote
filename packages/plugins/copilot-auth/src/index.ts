@@ -13,7 +13,7 @@ export { CHANNEL, CREDENTIAL_KEY, PROVIDER_ID } from './shared.js'
 export type { CopilotAttemptView, CopilotStatusView } from './shared.js'
 
 /** Host half：注册 credentials、settings、Copilot sign-in RPC 和 provider route。 */
-export const name = 'dsh-remote-copilot-auth'
+export const name = 'dsh-station-copilot-auth'
 
 /** 进程与运行时契约：此处说明生命周期、身份核验、轮询或终端边界。（涉及：`connection`、`credentials`） */
 export const inject = ['connection', 'credentials']

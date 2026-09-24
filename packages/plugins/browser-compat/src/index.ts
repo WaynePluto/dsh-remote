@@ -1,5 +1,5 @@
 /**
- * dsh-remote 插件：为缺少新 Web 平台 API 的浏览器垫平 dsh 前端运行所需的最低集合。
+ * dsh-station 插件：为缺少新 Web 平台 API 的浏览器垫平 dsh 前端运行所需的最低集合。
  *
  * 背景：dsh 前端官方 bundle（如 `@deepseek-ai/dsh-client-ui-sidebar-documentpreview`
  * 内联的 pdf.js）会在模块顶层引用 `Iterator` 全局（ES2025 Iterator helpers）。
@@ -8,10 +8,10 @@
  * 本插件通过 `webserver/index-inject` 的内联 script 行在页面启动前安装
  * 已确认的 Web API 垫片，并建立只存在于当前页面内存的诊断桥；原生实现已存在时不做任何事。
  *
- * 只在 dsh-remote-web profile 生效，不改官方 web profile，也不触碰 relay
+ * 只在 dsh-station-web profile 生效，不改官方 web profile，也不触碰 relay
  * 的字节转发（铁律 3、铁律 9）。
  *
- * @module @dsh-remote/dsh-plugin-browser-compat
+ * @module @dsh-station/dsh-plugin-browser-compat
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -20,7 +20,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { IndexInjection } from '@deepseek-ai/dsh-host-webserver'
 
 /** Cordis 插件名；它会出现在 dsh 插件树和诊断信息中。 */
-export const name = 'dsh-remote-browser-compat'
+export const name = 'dsh-station-browser-compat'
 
 /** 需要等待 web server：注入表在每次渲染 index.html 时重新收集。 */
 export const inject = ['webServer']
@@ -38,7 +38,7 @@ export const inject = ['webServer']
 export function iteratorPolyfill(): void {
   const globalObject = globalThis as {
     Iterator?: unknown
-    __DSH_REMOTE_ITERATOR_POLYFILLED__?: boolean
+    __DSH_STATION_ITERATOR_POLYFILLED__?: boolean
   }
   interface IteratorLike {
     next(...args: unknown[]): { done?: boolean, value?: unknown }
@@ -121,7 +121,7 @@ export function iteratorPolyfill(): void {
   }
 
   if (hasNativeHelpers && typeof existingIterator?.prototype?.join === 'function') {
-    if (patchedNativeJoin) globalObject.__DSH_REMOTE_ITERATOR_POLYFILLED__ = true
+    if (patchedNativeJoin) globalObject.__DSH_STATION_ITERATOR_POLYFILLED__ = true
     return
   }
 
@@ -332,7 +332,7 @@ export function iteratorPolyfill(): void {
   Object.defineProperty(iteratorPrototype, Symbol.toStringTag, { value: 'Iterator', writable: false, configurable: true })
   Object.defineProperty(Iterator, 'from', { value: iteratorFrom, writable: true, configurable: true })
   globalObject.Iterator = Iterator
-  globalObject.__DSH_REMOTE_ITERATOR_POLYFILLED__ = true
+  globalObject.__DSH_STATION_ITERATOR_POLYFILLED__ = true
 }
 
 /**
@@ -359,11 +359,11 @@ export function browserRuntimeBootstrap(): void {
     setTimeout?: (handler: () => void, timeout?: number) => unknown
     clearTimeout?: (handle: unknown) => void
     addEventListener?: (type: string, listener: (event: unknown) => void, options?: unknown) => void
-    __DSH_REMOTE_BROWSER_COMPAT__?: unknown
-    __DSH_REMOTE_ITERATOR_POLYFILLED__?: boolean
+    __DSH_STATION_BROWSER_COMPAT__?: unknown
+    __DSH_STATION_ITERATOR_POLYFILLED__?: boolean
   }
 
-  const existing = globalObject.__DSH_REMOTE_BROWSER_COMPAT__
+  const existing = globalObject.__DSH_STATION_BROWSER_COMPAT__
   if (existing !== null && typeof existing === 'object'
     && (existing as { version?: unknown }).version === 1) return
 
@@ -675,7 +675,7 @@ export function browserRuntimeBootstrap(): void {
     }
   }
 
-  if (globalObject.__DSH_REMOTE_ITERATOR_POLYFILLED__ === true) patched.add('Iterator helpers')
+  if (globalObject.__DSH_STATION_ITERATOR_POLYFILLED__ === true) patched.add('Iterator helpers')
 
   const capabilityRows: CapabilityLike[] = [
     capability('AbortSignal.any', 'js', true, () => typeof signalConstructor?.any === 'function'),
@@ -754,7 +754,7 @@ export function browserRuntimeBootstrap(): void {
     recordError,
     recordMessage,
   }
-  globalObject.__DSH_REMOTE_BROWSER_COMPAT__ = bridge
+  globalObject.__DSH_STATION_BROWSER_COMPAT__ = bridge
 
   for (const item of capabilityRows) {
     if (item.required && item.status === 'missing') {

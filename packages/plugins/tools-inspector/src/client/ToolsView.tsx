@@ -10,7 +10,7 @@ import type { CSSProperties, ReactElement } from 'react'
 import {
   INSPECTOR_MONO, INSPECTOR_PRIMARY, INSPECTOR_SECONDARY, INSPECTOR_TERTIARY,
   inspectorGroupHeadingStyle, inspectorStyles, useInspectorPolling,
-} from '@dsh-remote/plugin-ui'
+} from '@dsh-station/plugin-ui'
 import { Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { filterEntries, type ToolEntry, type ToolStatus, type ToolsSnapshot } from '../shared.js'
 import type { ToolsKey } from './locales.js'

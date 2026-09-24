@@ -20,7 +20,7 @@ import {
   ProtocolDecodeError,
   type ErrorFrame,
   type HelloFrame,
-} from '@dsh-remote/protocol'
+} from '@dsh-station/protocol'
 import type { DeviceVerifier } from '../auth/device.js'
 import { MachineRegistry, TunnelError } from './registry.js'
 

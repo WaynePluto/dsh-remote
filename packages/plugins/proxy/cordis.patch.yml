@@ -1,4 +1,4 @@
-# dsh-remote 的独立 Bundle patch；行 id 是 volatile Config 表单的入口。
+# dsh-station 的独立 Bundle patch；行 id 是 volatile Config 表单的入口。
 # 模式缺省时沿用旧 enabled/url 字段，跟随环境模式沿用 dsh 启动时安装的官方代理。
 # 宿主和浏览器产物都必须随包提供；客户端通过 package.json 的 dsh.client 装载。
 - insert:

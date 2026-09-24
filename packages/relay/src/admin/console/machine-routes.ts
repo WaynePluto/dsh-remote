@@ -1,6 +1,6 @@
 import type { HttpBindings } from '@hono/node-server'
 import type { Hono } from 'hono'
-import { machineSlugSchema } from '@dsh-remote/protocol'
+import { machineSlugSchema } from '@dsh-station/protocol'
 import { issueDeviceEnrollToken } from '../../store/enroll-token.js'
 import type { PageAppearance } from '../shared.js'
 import {
@@ -101,22 +101,22 @@ export function registerMachineRoutes(
     // 只作废它在入口的设备身份；文案必须如实说明。
     const online = registry.getBySlug(device.slug) !== undefined
     const heading = online
-      ? `停止 ${device.slug} 上的 dsh-remote，并把它从 ${machine} 移除？`
+      ? `停止 ${device.slug} 上的 dsh-station，并把它从 ${machine} 移除？`
       : `把 ${device.slug} 从 ${machine} 移除？（当前离线）`
     const intro = online
-      ? `停的是 ${device.slug} 上的 dsh-remote 和它的设备身份，不是它上面的对话记录。在 ${machine} 上无法撤销。`
+      ? `停的是 ${device.slug} 上的 dsh-station 和它的设备身份，不是它上面的对话记录。在 ${machine} 上无法撤销。`
       : `${device.slug} 现在离线，这个操作送达不了那台机器，只在这里作废它的设备身份；它上面运行的服务不会被停掉。`
     const consequences = online
       ? [
-          `${device.slug} 上的 connector 会致命退出；用 dsh-remote 启动器跑的话，它的 dsh 进程会被一起停掉。`,
+          `${device.slug} 上的 connector 会致命退出；用 dsh-station 启动器跑的话，它的 dsh 进程会被一起停掉。`,
           `与 ${device.slug} 的隧道立即断开，正在用它的浏览器当场失效。`,
           '它未使用的注册令牌一并作废，旧令牌再也挂不上来。',
           '分配给它的浏览器端口会关闭。',
-          `要重新挂回来，得在「机器」页再签一个注册令牌，并由人到 ${device.slug} 跟前重新启动 dsh-remote。`,
+          `要重新挂回来，得在「机器」页再签一个注册令牌，并由人到 ${device.slug} 跟前重新启动 dsh-station。`,
         ]
       : [
           `${device.slug} 的设备记录被作废，未使用的注册令牌一并失效，分配给它的浏览器端口关闭。`,
-          `它下次连上来（或唤醒探测）会被拒绝，回到「没有远程入口」的状态；它上面运行的 dsh-remote 不会被停掉。`,
+          `它下次连上来（或唤醒探测）会被拒绝，回到「没有远程入口」的状态；它上面运行的 dsh-station 不会被停掉。`,
           `要重新挂回来，得在「机器」页再签一个注册令牌，并由人到 ${device.slug} 跟前重新粘一次。`,
         ]
     return new Response(confirmPage({
@@ -215,7 +215,7 @@ export function registerMachineRoutes(
     const machineId = textField(body.machineId)
     const device = machineId === '' ? undefined : store.getDeviceByMachineId(machineId)
     if (device === undefined) return emptyResponse(404, session.setCookieHeaders)
-    // 防御列表页之外的直接提交：停掉本机会当场杀死运行这个控制台的 dsh-remote。
+    // 防御列表页之外的直接提交：停掉本机会当场杀死运行这个控制台的 dsh-station。
     if (device.slug === config.directSlug) {
       return redirectResponse(ADMIN_PATH_PREFIX, session.setCookieHeaders)
     }

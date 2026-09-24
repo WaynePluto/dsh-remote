@@ -2,7 +2,7 @@
  * dialog 的全屏（最大化）能力：几何、custom property 读写、按钮样式规则与状态 hook。
  * services 与 turn-retry 的日志/原因弹窗共用同一套实现，插件只提供自己的 class 名和 data 属性。
  *
- * @module @dsh-remote/plugin-ui/dialog-fullscreen
+ * @module @dsh-station/plugin-ui/dialog-fullscreen
  */
 
 import { createElement, useCallback, useEffect, useRef, useState } from 'react'

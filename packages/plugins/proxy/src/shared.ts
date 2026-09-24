@@ -1,6 +1,6 @@
 /** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。 */
 
-/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。（涉及：`config`、`Config`、`@dsh-remote/dsh-plugin-proxy`、`settings.yaml`、`dsh-plugin-`） */
+/** 设置写入契约：此处说明命名空间、校验、回读确认和草稿保留。（涉及：`config`、`Config`、`@dsh-station/dsh-plugin-proxy`、`settings.yaml`、`dsh-plugin-`） */
 export const NAMESPACE = 'dsh-plugin-proxy'
 
 /**

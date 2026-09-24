@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { afterEach, describe, expect, it } from 'vitest'
-import { MEMBERSHIP_FILE_NAME, parseMembership, type MembershipHub } from '@dsh-remote/protocol'
+import { MEMBERSHIP_FILE_NAME, parseMembership, type MembershipHub } from '@dsh-station/protocol'
 import {
   ADMIN_MEMBERSHIP_JOIN_PATH,
   ADMIN_MEMBERSHIP_LEAVE_PATH,
@@ -29,7 +29,7 @@ const HUB_AUTHORITY = '10.1.2.87:30810'
 /** 对 `membershipSchema` 来说足够长，也足够独特，便于在页面中 grep。 */
 const ENROLL_TOKEN = 'jointoken-4f2b9c7e1a5d8306'
 /** 与入口机器控制台打印的形状完全一致。 */
-const HUB_COMMAND = `dsh-remote-connector --relay ${HUB_URL} --slug ${HUB_SLUG} --enroll-token ${ENROLL_TOKEN} --hub-authority ${HUB_AUTHORITY}`
+const HUB_COMMAND = `dsh-station-connector --relay ${HUB_URL} --slug ${HUB_SLUG} --enroll-token ${ENROLL_TOKEN} --hub-authority ${HUB_AUTHORITY}`
 
 interface Fixture extends AuthenticatedRelayTestFixture {
   readonly home: string
@@ -39,7 +39,7 @@ interface Fixture extends AuthenticatedRelayTestFixture {
 const fixtures: Fixture[] = []
 
 async function startFixture(): Promise<Fixture> {
-  const home = mkdtempSync(join(tmpdir(), 'dsh-remote-membership-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-station-membership-'))
   const base = await startAuthenticatedRelayFixture({
     jwtSecret: JWT_SECRET,
     account: {
@@ -178,8 +178,8 @@ describe('D16 membership: this machine joining a hub', () => {
     const { csrf, csrfPair } = await openConsole(fixture)
 
     const commands = [
-      `dsh-remote-connector --relay https://hub.dsh.test --slug ${HUB_SLUG} --enroll-token ${ENROLL_TOKEN}`,
-      `dsh-remote-connector --relay hub.dsh.test:30809 --slug ${HUB_SLUG} --enroll-token ${ENROLL_TOKEN}`,
+      `dsh-station-connector --relay https://hub.dsh.test --slug ${HUB_SLUG} --enroll-token ${ENROLL_TOKEN}`,
+      `dsh-station-connector --relay hub.dsh.test:30809 --slug ${HUB_SLUG} --enroll-token ${ENROLL_TOKEN}`,
       // 根本不是 connector 命令：没有可读取的 relay。
       'rm -rf /',
     ]
@@ -200,7 +200,7 @@ describe('D16 membership: this machine joining a hub', () => {
       csrf,
       csrfPair,
       fields: {
-        command: `dsh-remote-connector --relay ${HUB_URL} --slug "Not A Slug" --enroll-token ${ENROLL_TOKEN}`,
+        command: `dsh-station-connector --relay ${HUB_URL} --slug "Not A Slug" --enroll-token ${ENROLL_TOKEN}`,
       },
     })
     expect(rejected.status).toBe(400)
@@ -222,7 +222,7 @@ describe('D16 membership: this machine joining a hub', () => {
       csrf,
       csrfPair,
       fields: {
-        command: `dsh-remote-connector --relay="${HUB_URL}" --slug='${HUB_SLUG}' --enroll-token=${ENROLL_TOKEN} --hub-authority=${HUB_AUTHORITY} --dsh-port 3080`,
+        command: `dsh-station-connector --relay="${HUB_URL}" --slug='${HUB_SLUG}' --enroll-token=${ENROLL_TOKEN} --hub-authority=${HUB_AUTHORITY} --dsh-port 3080`,
       },
     })
     expect(quoted.status, quoted.body).toBe(303)
@@ -244,7 +244,7 @@ describe('D16 membership: this machine joining a hub', () => {
       csrf,
       csrfPair,
       fields: {
-        command: `dsh-remote-connector --relay ${HUB_URL} --slug ${HUB_SLUG} --enroll-token ${ENROLL_TOKEN}`,
+        command: `dsh-station-connector --relay ${HUB_URL} --slug ${HUB_SLUG} --enroll-token ${ENROLL_TOKEN}`,
       },
     })
     expect(response.status, response.body).toBe(303)

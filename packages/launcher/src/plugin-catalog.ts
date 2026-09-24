@@ -1,6 +1,6 @@
 import catalog from '../../../plugin-catalog.json' with { type: 'json' }
 
-/** 随 dsh-remote 发行、由 profile 安装和升级的一个 Bundle。 */
+/** 随 dsh-station 发行、由 profile 安装和升级的一个 Bundle。 */
 export interface PluginComponent {
   readonly name: string
   readonly rowId: string

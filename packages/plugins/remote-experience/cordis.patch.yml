@@ -2,10 +2,10 @@
 # 组件路径固定到本 Bundle 内嵌的依赖目录，避免停用 Bundle 时 HMR 重新解析已移除的裸包作用域。
 - insert:
     - id: remote-settings
-      name: './node_modules/@dsh-remote/dsh-plugin-remote-settings/dist/index.js'
-      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-remote-experience")'
+      name: './node_modules/@dsh-station/dsh-plugin-remote-settings/dist/index.js'
+      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-station/dsh-plugin-remote-experience")'
 
 - insert:
     - id: browser-compat
-      name: './node_modules/@dsh-remote/dsh-plugin-browser-compat/dist/index.js'
-      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-remote/dsh-plugin-remote-experience")'
+      name: './node_modules/@dsh-station/dsh-plugin-browser-compat/dist/index.js'
+      disabled: !!js '!JSON.parse(process.getBuiltinModule("node:fs").readFileSync(new URL("package.json", baseUrl), "utf8")).dsh?.profile?.bundles?.includes("@dsh-station/dsh-plugin-remote-experience")'

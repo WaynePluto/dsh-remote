@@ -4,7 +4,7 @@ import { CHANNEL } from './shared.js'
 import { dispatchWorkspaceDirectory } from './workspace-directory.js'
 
 // 保留拆分前的插件身份；Windows 目录打开兼容不改变目标机语义。
-export const name = 'dsh-remote-remote-privileged'
+export const name = 'dsh-station-remote-privileged'
 export const inject = ['webServer', 'connection']
 export const TRANSPORT_GLOBAL = '__DSH_TRANSPORT__'
 

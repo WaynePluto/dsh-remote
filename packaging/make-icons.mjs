@@ -1,6 +1,6 @@
-// 由 packaging/dsh-remote.svg 生成所有图标产物。
-// packaging/dsh-remote.ico：图标文件（不进发行包，供外部使用与预览）。
-// packaging/win-launcher/rsrc_windows_amd64.syso：链进 dsh-remote.exe 的托盘/资源图标和高 DPI 清单。
+// 由 packaging/dsh-station.svg 生成所有图标产物。
+// packaging/dsh-station.ico：图标文件（不进发行包，供外部使用与预览）。
+// packaging/win-launcher/rsrc_windows_amd64.syso：链进 dsh-station.exe 的托盘/资源图标和高 DPI 清单。
 // packages/relay/src/icons.ts：relay 控制台 favicon（生成代码）。
 // 命令：node packaging/make-icons.mjs [--keep]。
 // 三个是源码资产，生成一次后提交；go build 自动链入 *.syso，不需 Go 模块（不用 rsrc/goversioninfo）。
@@ -16,8 +16,8 @@ import { fileURLToPath } from 'node:url'
 import { inflateSync } from 'node:zlib'
 
 const packagingDir = dirname(fileURLToPath(import.meta.url))
-const sourcePath = join(packagingDir, 'dsh-remote.svg')
-const outputPath = join(packagingDir, 'dsh-remote.ico')
+const sourcePath = join(packagingDir, 'dsh-station.svg')
+const outputPath = join(packagingDir, 'dsh-station.ico')
 // 名字里的 _windows_amd64 是 Go 的构建约束：只在 GOOS=windows GOARCH=amd64 时链入。
 const resourcePath = join(packagingDir, 'win-launcher', 'rsrc_windows_amd64.syso')
 // relay 页面的 favicon：生成代码，不要手改。
@@ -44,8 +44,8 @@ const webPngSize = 256
 function applicationManifest(version) {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
-  <assemblyIdentity type="win32" name="dsh-remote" version="${version}" processorArchitecture="amd64"/>
-  <description>dsh-remote</description>
+  <assemblyIdentity type="win32" name="dsh-station" version="${version}" processorArchitecture="amd64"/>
+  <description>dsh-station</description>
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
       <requestedPrivileges>
@@ -455,7 +455,7 @@ function buildResourceObject(entries, manifestXml) {
  */
 function relayIconsModule({ svg, ico, png, pngSize }) {
   return [
-    '// 由 packaging/make-icons.mjs 从 packaging/dsh-remote.svg 生成，不要手改。',
+    '// 由 packaging/make-icons.mjs 从 packaging/dsh-station.svg 生成，不要手改。',
     '// 改图标请改那个 SVG，然后重跑：node packaging/make-icons.mjs',
     '//',
     '// 为什么内联而不是读文件：绿色包里的 relay 就地跑在 node_modules 里，',
@@ -479,7 +479,7 @@ function relayIconsModule({ svg, ico, png, pngSize }) {
 
 const keepWorkDir = process.argv.includes('--keep')
 const chrome = findChrome()
-const workDir = mkdtempSync(join(tmpdir(), 'dsh-remote-icon-'))
+const workDir = mkdtempSync(join(tmpdir(), 'dsh-station-icon-'))
 try {
   const svg = readFileSync(sourcePath, 'utf8')
   const wanted = [...new Set([...sizes, ...webIcoSizes, webPngSize])].toSorted((a, b) => a - b)

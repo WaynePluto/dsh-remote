@@ -17,13 +17,13 @@ import {
   serializeDshRestartStatus,
   type DshRestartStatus,
   type Membership,
-} from '@dsh-remote/protocol'
+} from '@dsh-station/protocol'
 import { LauncherError } from './errors.js'
 import { readMembership } from './membership.js'
 import { trustChange } from './trusted-hosts.js'
 
 /**
- * @param home - dsh-remote home 目录。
+ * @param home - dsh-station home 目录。
  * @returns dsh 重启状态文件的绝对路径。
  */
 export function dshRestartStatusFilePath(home: string): string {
@@ -127,7 +127,7 @@ export function watchMembershipTrust(options: TrustWatcherOptions): TrustWatcher
     mkdirSync(directory, { recursive: true, mode: 0o700 })
   } catch (error) {
     throw new LauncherError(
-      `无法创建 dsh-remote home 目录 ${directory}：${error instanceof Error ? error.message : String(error)}`,
+      `无法创建 dsh-station home 目录 ${directory}：${error instanceof Error ? error.message : String(error)}`,
       { cause: error },
     )
   }

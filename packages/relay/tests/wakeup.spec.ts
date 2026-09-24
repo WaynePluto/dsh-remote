@@ -143,7 +143,7 @@ describe('wakeup state on the machines page', () => {
     expect(body).toContain('<span class="badge off">离线</span>')
     // 两台都不在线：按钮对两种断开状态都提供，徽标说明区别。
     expect(body).toContain('请求 silent 上线')
-    expect(body).toContain('已断开 · 可唤醒」表示那台机器的 dsh-remote 还在运行')
+    expect(body).toContain('已断开 · 可唤醒」表示那台机器的 dsh-station 还在运行')
   })
 
   it('offers no wakeup button for online machines and labels removal differently', async () => {

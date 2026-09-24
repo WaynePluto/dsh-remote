@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { parseDshRestartStatus, parseMembership, serializeMembership, type MembershipHub } from '@dsh-remote/protocol'
+import { parseDshRestartStatus, parseMembership, serializeMembership, type MembershipHub } from '@dsh-station/protocol'
 import {
   dshRestartStatusFilePath,
   watchMembershipTrust,
@@ -16,7 +16,7 @@ import { trustedHostsFor } from '../src/trusted-hosts.js'
 const homes: string[] = []
 
 function newHome(): string {
-  const home = mkdtempSync(join(tmpdir(), 'dsh-remote-launcher-restart-'))
+  const home = mkdtempSync(join(tmpdir(), 'dsh-station-launcher-restart-'))
   homes.push(home)
   return home
 }

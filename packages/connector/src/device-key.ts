@@ -9,7 +9,7 @@ import {
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { userInfo } from 'node:os'
 import { dirname, join } from 'node:path'
-import { defaultDshRemoteHome } from './membership.js'
+import { defaultDshStationHome } from './membership.js'
 
 /** 设备密钥文件不可用，必须由操作者处理，重试无法修复。 */
 export class DeviceKeyError extends Error {
@@ -37,12 +37,12 @@ export interface DeviceKey {
   sign(message: Uint8Array): string
 }
 
-/** dsh-remote home 中 Ed25519 身份的文件名。 */
+/** dsh-station home 中 Ed25519 身份的文件名。 */
 export const DEVICE_KEY_FILE_NAME = 'device.key'
 
-/** `~/.dsh-remote/device.key`；每个 OS 用户一个身份，而不是每个 checkout 一个。 */
+/** `~/.dsh-station/device.key`；每个 OS 用户一个身份，而不是每个 checkout 一个。 */
 export function defaultDeviceKeyPath(): string {
-  return join(defaultDshRemoteHome(), DEVICE_KEY_FILE_NAME)
+  return join(defaultDshStationHome(), DEVICE_KEY_FILE_NAME)
 }
 
 function errorCode(error: unknown): string | undefined {

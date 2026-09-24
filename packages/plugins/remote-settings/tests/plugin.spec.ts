@@ -7,7 +7,7 @@ import { CHANNEL } from '../src/shared.js'
 
 const packageRoot = fileURLToPath(new URL('..', import.meta.url))
 
-describe('dsh-remote-remote-settings', () => {
+describe('dsh-station-remote-settings', () => {
   it('contributes exactly the ownsHost global and no transport override', () => {
     const row = transportInjection()
     expect(row).toEqual({ kind: 'global', name: TRANSPORT_GLOBAL, value: { ownsHost: true } })
@@ -47,7 +47,7 @@ describe('dsh-remote-remote-settings', () => {
   })
 
   it('只依赖 webServer 与 connection 服务', () => {
-    expect(name).toBe('dsh-remote-remote-privileged')
+    expect(name).toBe('dsh-station-remote-privileged')
     expect(inject).toEqual(['webServer', 'connection'])
   })
 

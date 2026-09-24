@@ -1,6 +1,6 @@
 # 会话增强 Bundle
 
-`@dsh-remote/dsh-plugin-conversation-enhancements` 是会话增强的整体安装、卸载和升级单位，按固定顺序组合：
+`@dsh-station/dsh-plugin-conversation-enhancements` 是会话增强的整体安装、卸载和升级单位，按固定顺序组合：
 
 1. 失败重试（turn-retry）
 2. 聊天滚动（chat-scroll）

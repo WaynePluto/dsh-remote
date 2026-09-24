@@ -1,6 +1,6 @@
 # 出网代理
 
-`@dsh-remote/dsh-plugin-proxy` 在 **设置 → 代理** 中配置本进程的原生 fetch 与官方网页抓取出口。
+`@dsh-station/dsh-plugin-proxy` 在 **设置 → 代理** 中配置本进程的原生 fetch 与官方网页抓取出口。
 
 | 出网方式 | 效果 |
 |---|---|
@@ -19,8 +19,8 @@
 插件作为独立 Bundle 分发，停用后页面消失、dsh 恢复环境策略，保存的字段仍在。重装可通过 dsh「添加插件」选择发行 `plugins/proxy` 或开发 `.dev/plugins/proxy` 的绝对目录。代码修改后需构建并重启 dsh（配置热更新不需要重启）。
 
 ```powershell
-pnpm --filter @dsh-remote/dsh-plugin-proxy typecheck
-pnpm --filter @dsh-remote/dsh-plugin-proxy test
-pnpm --filter @dsh-remote/dsh-plugin-proxy build
+pnpm --filter @dsh-station/dsh-plugin-proxy typecheck
+pnpm --filter @dsh-station/dsh-plugin-proxy test
+pnpm --filter @dsh-station/dsh-plugin-proxy build
 node scripts/proxy-check.mjs
 ```

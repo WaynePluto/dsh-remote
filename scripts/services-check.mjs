@@ -17,7 +17,7 @@ import {
 } from './lib/check-client-bundle.mjs'
 
 
-const PACKAGE_ID = '@dsh-remote/dsh-plugin-services'
+const PACKAGE_ID = '@dsh-station/dsh-plugin-services'
 const portArgument = process.argv.indexOf('--port')
 const PORT = portArgument === -1 ? 3099 : Number(process.argv[portArgument + 1])
 const HOME = join(DEV_DIRECTORY, 'services-check-home')

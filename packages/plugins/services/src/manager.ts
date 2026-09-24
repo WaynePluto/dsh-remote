@@ -2,7 +2,7 @@
  * services 的操作层：registry reconciliation、启动/停止/重启和日志读取都在此实现一次。
  * tools 与浏览器 panel 只是这些函数的两种入口；每次入口都先把 registry 与 OS 状态对齐。
  *
- * @module @dsh-remote/dsh-plugin-services/manager
+ * @module @dsh-station/dsh-plugin-services/manager
  */
 
 import {

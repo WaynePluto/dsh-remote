@@ -1,10 +1,10 @@
-# dsh-remote
+# DSH 工作站（dsh-station）
 
 **简体中文** | [English](README.en.md)
 
 通过浏览器远程指挥 **DeepSeek Harness (dsh)**：在电脑上让 dsh 干活，出门掏出手机接着指挥，回家换笔记本打开还是同一个会话。
 
-- **自带 dsh**：安装 dsh-remote 即可，**不需要再单独安装 dsh**——dsh 已作为依赖打包在内，升级 dsh 就是升级 dsh-remote
+- **自带 dsh**：安装 dsh-station 即可，**不需要再单独安装 dsh**——dsh 已作为依赖打包在内，升级 dsh 就是升级 dsh-station
 - **不改 dsh、不 fork**，始终跟官方版本
 - 被控机**不监听公网端口**，由它主动拨出，路由器不用做端口映射
 - 界面就是 dsh 自带的（40 个官方 UI 插件原样可用）
@@ -12,7 +12,7 @@
 
 ## 它是怎么连起来的
 
-每台装了 dsh-remote 的机器都**完全一样**：本机跑 dsh、一个控制台、一个拨号器。区别只在于你**把哪台当作入口机器**——入口机器就是浏览器实际打开的那台。
+每台装了 dsh-station 的机器都**完全一样**：本机跑 dsh、一个控制台、一个拨号器。区别只在于你**把哪台当作入口机器**——入口机器就是浏览器实际打开的那台。
 
 > **每台机器都跑着自己的 dsh，AI 读写文件、执行命令都发生在那台机器本地。**
 > 打开 pc2 的页面，就是指挥 pc2 上的 dsh 动 pc2 的代码；pc1 只负责转发。「把 pc2 挂到 pc1 上」= 以后从 pc1 的地址就能打开 pc2 的 dsh，反过来不行。**选机器 = 选代码在哪台机器上。**
@@ -54,28 +54,28 @@
 
 ## 安装
 
-从 [Releases](../../releases) 下载**对应平台**的 zip 解压即可（dsh 已随包携带）。每个平台分 **core / full** 两种包，按需选择：
+从 [Releases](../../releases) 下载**对应平台**的 zip 解压即可（dsh 已随包携带）。每个平台分**轻量版（lite）/ 完整版（full）**两种包，按需选择：
 
-| 功能 | core 版本 | full 版本 |
+| 功能 | 轻量版（lite） | 完整版（full） |
 |---|---|---|
 | dsh 核心功能 | ✅ | ✅ |
 | Office 文档预览 | ❌ | ✅ |
 
-- **Windows**：双击 `dsh-remote.exe`。exe 没有代码签名，SmartScreen 提示时选「更多信息 → 仍要运行」；也可以 `pwsh -File .\start.ps1`
+- **Windows**：双击 `dsh-station.exe`。exe 没有代码签名，SmartScreen 提示时选「更多信息 → 仍要运行」；也可以 `pwsh -File .\start.ps1`
 - **Linux / macOS**：`./start.sh`
 
-> 包分平台是因为 dsh 的依赖带预编译平台二进制；dsh-remote 自己的代码零原生模块。
+> 包分平台是因为 dsh 的依赖带预编译平台二进制；dsh-station 自己的代码零原生模块。
 
 ### 随附功能插件
 
-首次启动 `dsh-remote-web` profile 时，会通过 dsh 官方插件管理器默认安装并启用 10 个随附
+首次启动 `dsh-station-web` profile 时，会通过 dsh 官方插件管理器默认安装并启用 10 个随附
 第三方 Bundle，共含 20 个功能组件：4 个组合包（远程体验、模型增强、会话增强、开发工具）
 和 6 个独立包（网页目录选择、出网代理、简洁模式、全局提示词、文件浏览、固定 YOLO）。
 
 - 组合包可整体停用或卸载；通常也可在详情页单独停用组件。模型增强中的「模型目录更新」与
   「模型能力与协议」共同参与启动屏障，当前不要单独关闭其中一个。
 - 网页目录选择因需静态覆盖 dsh 原生目录选择器而独立分发。
-- 升级 dsh-remote 会配套升级所有仍安装的随附包，包括已停用的 Bundle，同时保留 Bundle 与
+- 升级 dsh-station 会配套升级所有仍安装的随附包，包括已停用的 Bundle，同时保留 Bundle 与
   组件的停用状态。
 - 卸载表示用户不再需要：launcher 和托盘不会自动补回。需要恢复时，在 dsh「添加插件」中输入
   `<解压目录>/plugins/<包目录>` 的绝对路径，再启用该 Bundle；这里安装的是当前发行版随附版本。
@@ -87,17 +87,17 @@
 也可以自己从源码打包，产物与 Releases 下载的完全一致：
 
 ```bash
-git clone <本仓库地址> dsh-remote
-cd dsh-remote
+git clone <本仓库地址> dsh-station
+cd dsh-station
 pnpm install
 pnpm release
 ```
 
-`pnpm release` 自带构建（`--skip-build` 可跳过），默认只打本机平台，`--target=all` 打全部平台，每个平台各打 core 与 full 两种变体（`--variant=core` 可筛选），zip 输出在 `release/` 下，解压后按上面方式启动。打包要求 pnpm >=10（项目不固定本地 pnpm 版本，直接使用你已安装的版本；CI 为保持可复现性固定使用 pnpm 10.17.0）；Windows 包的 `dsh-remote.exe` 需要 [Go](https://go.dev/dl/) 编译，没装就加 `--skip-exe`，打出的包只能用 `start.ps1` 启动。
+`pnpm release` 自带构建（`--skip-build` 可跳过），默认只打本机平台，`--target=all` 打全部平台，每个平台各打轻量版（lite）与完整版（full）两种变体（`--variant=lite` 可筛选），zip 输出在 `release/` 下，解压后按上面方式启动。打包要求 pnpm >=10（项目不固定本地 pnpm 版本，直接使用你已安装的版本；CI 为保持可复现性固定使用 pnpm 10.17.0）；Windows 包的 `dsh-station.exe` 需要 [Go](https://go.dev/dl/) 编译，没装就加 `--skip-exe`，打出的包只能用 `start.ps1` 启动。
 
 ## 第一次启动
 
-在**你想当入口机器的那台机器**上解压并启动（Windows 双击 `dsh-remote.exe`，Linux / macOS 跑 `./start.sh`）。第一次还没有管理员账号，程序会把设置页地址给你：
+在**你想当入口机器的那台机器**上解压并启动（Windows 双击 `dsh-station.exe`，Linux / macOS 跑 `./start.sh`）。第一次还没有管理员账号，程序会把设置页地址给你：
 
 - **Windows**：托盘弹出「还没有设置完成」的通知，点它就直接打开设置页；用 `start.ps1` 启动的，终端里打印同一个地址
 - **Linux / macOS**：`./start.sh` 的终端里打印形如 `http://127.0.0.1:30809` 的地址
@@ -130,10 +130,10 @@ pnpm release
 
 ## 把第二台机器挂上来
 
-1. 在 **pc2** 上同样启动 dsh-remote，它会提示「没有远程入口」，正常，先挂着
+1. 在 **pc2** 上同样启动 dsh-station，它会提示「没有远程入口」，正常，先挂着
 2. 在 **pc1** 打开 `http://127.0.0.1:30809/_admin`，在「让另一台机器通过 pc1 开放」里填 pc2 的机器名，点签发，页面会给出一条可直接复制的命令。配置公网域名时，这条命令使用 `wss://dsh.example.com`，即使签发者是在本机 `127.0.0.1` 页面上操作，也不会把 loopback 地址发给 pc2：
    ```
-   dsh-remote-connector --relay ws://192.168.1.10:30809 --slug pc2 --enroll-token xxxxx --hub-authority 192.168.1.10
+   dsh-station-connector --relay ws://192.168.1.10:30809 --slug pc2 --enroll-token xxxxx --hub-authority 192.168.1.10
    ```
 3. 到 **pc2 的控制台 → 「远程入口」页**（`http://127.0.0.1:30809/_admin/hub`）把整条命令粘进唯一的输入框，提交
 
@@ -160,7 +160,7 @@ pc2 **立刻连上，不用重启**，并在 pc1 上分到固定端口，之后�
 | 看能打开哪些机器 | 「机器」 |
 | 多开放一台机器 | 「机器」→「让另一台机器通过…开放」 |
 | 把一台停掉的机器叫回来 | 「机器」→ 断开的机器点「请求上线」，约一分钟内连回 |
-| 把一台机器停掉并摘出去 | 「机器」→ 在线机器「停止…并移除」，**对方机器上的 dsh-remote 会整个退出**；离线机器只能「移除」，停不到它上面运行的服务 |
+| 把一台机器停掉并摘出去 | 「机器」→ 在线机器「停止…并移除」，**对方机器上的 dsh-station 会整个退出**；离线机器只能「移除」，停不到它上面运行的服务 |
 | 设置 / 取消本机的远程入口 | 「远程入口」 |
 | 挂回上次取消的远程入口 | 「远程入口」→「重新连接」，不需要新令牌；对方已「停止并移除」过本机时才要重新签发 |
 | 改管理员密码 / 验证器换手机 | 「账号」 |
@@ -195,8 +195,8 @@ ssh -L 30809:127.0.0.1:30809 user@服务器地址
 - **不要在没有 HTTPS 的情况下暴露到公网。** 局域网 HTTP 是权衡后可接受的（启动时会打印高危警告）；公网必须套 HTTPS（Caddy 之类自动证书）。
 - dsh 自己没有任何认证，只听 `127.0.0.1`；所有门都在控制台这层——**控制台账号被突破等于机器沦陷**（能开会话就能跑命令）。
 - 登录连错 5 次锁 15 分钟。
-- **默认是固定 YOLO 模式**：`dsh-remote-web` 隐藏权限选择器，`bash` / `pwsh` / `write` / `edit` 直接按 dsh 进程用户权限执行，合法的权限请求自动允许；停用 `yolo-mode` 插件并重启 dsh 才能恢复 dsh 原生权限保护。`ask_user_question` 仍会向你提问。
-- Linux systemd 部署以个人普通用户运行，默认访问该用户的家目录；管理员操作通过交互终端里的明确 sudo 命令完成，保留系统 sudo 缓存，但不主动建立 root shell。运行数据在 `~/.dsh-remote`，官方 dsh 数据在 `~/.dsh`，详见[部署说明](deploy/README.md)。
+- **默认是固定 YOLO 模式**：`dsh-station-web` 隐藏权限选择器，`bash` / `pwsh` / `write` / `edit` 直接按 dsh 进程用户权限执行，合法的权限请求自动允许；停用 `yolo-mode` 插件并重启 dsh 才能恢复 dsh 原生权限保护。`ask_user_question` 仍会向你提问。
+- Linux systemd 部署以个人普通用户运行，默认访问该用户的家目录；管理员操作通过交互终端里的明确 sudo 命令完成，保留系统 sudo 缓存，但不主动建立 root shell。运行数据在 `~/.dsh-station`，官方 dsh 数据在 `~/.dsh`，详见[部署说明](deploy/README.md)。
 - **安全记录不在网页里**：登录成败、机器挂载/移除、改密码/重置验证器等事件同时写 relay 日志（JSON 行，`"audit":true`）和 `relay.db` 的 `audit_log` 表，永不自动过期；要查就在跑 relay 的机器上查。
 - 威胁模型与已知取舍见 [docs/04-security.md](docs/04-security.md)。
 
@@ -205,9 +205,9 @@ ssh -L 30809:127.0.0.1:30809 user@服务器地址
 | 现象 | 原因 |
 |---|---|
 | 提示 Node 版本太低 | 装 22.19 以上 |
-| 局域网打不开，本机能开 | 防火墙没放行。Windows：`New-NetFirewallRule -DisplayName "dsh-remote" -Direction Inbound -LocalPort 30809 -Protocol TCP -Action Allow` |
+| 局域网打不开，本机能开 | 防火墙没放行。Windows：`New-NetFirewallRule -DisplayName "dsh-station" -Direction Inbound -LocalPort 30809 -Protocol TCP -Action Allow` |
 | 密码明明是对的却登不上 | 看启动日志有没有「pre-scrypt password hash」告警，有就在本机管理页重设一次密码 |
-| 被开放机器的界面报 403 | 那台机器的 dsh 不信任入口机器地址。粘完命令后 dsh 会自动重启并信任新地址；若它的「远程入口」页显示自动重启失败，按页面提示手动重启那台机器的 dsh-remote |
+| 被开放机器的界面报 403 | 那台机器的 dsh 不信任入口机器地址。粘完命令后 dsh 会自动重启并信任新地址；若它的「远程入口」页显示自动重启失败，按页面提示手动重启那台机器的 dsh-station |
 
 ## 本地开发与调试（开发者向）
 
@@ -216,7 +216,7 @@ ssh -L 30809:127.0.0.1:30809 user@服务器地址
 同名插件安装锚，确保实际加载的是安装到 profile 的第三方 Bundle。之后开发栈执行与发行版相同的
 首次安装、升级、停用和卸载记忆逻辑，并打印可用于重装的 `.dev/plugins/` 路径。
 
-relay 数据库、设备密钥、membership 和 JWT 密钥仍复用发行版默认的 `~/.dsh-remote`，dsh 设置、
+relay 数据库、设备密钥、membership 和 JWT 密钥仍复用发行版默认的 `~/.dsh-station`，dsh 设置、
 profile 与会话仍使用标准 `~/.dsh`。不要让开发栈和已安装的发行版实例同时运行：它们会争用端口并
 共享设备身份。`pnpm start` 只运行已有构建产物，不会替代 `pnpm run dev` 的插件构建、介质生成与
 隔离运行时准备。
@@ -252,9 +252,9 @@ pnpm start     # 运行已有 dist 产物；先确保上述开发介质和运行
 |---|---|
 | dsh 版本 | `0.1.7-rc.1`（next 通道，developer preview，**会有破坏性变更**） |
 | dsh 要求 Node | `^22.19.0 \|\| >=24.0.0` |
-| 运行时策略 | 使用用户本机 Node，不携带 Node 二进制 |
+| 运行时策略 | 当前 zip 均使用用户本机 Node，不携带 Node 二进制；桌面版完整版（规划中）将附带固定版本 Node |
 | 原生模块 | 自身零原生模块（口令哈希用 Node 内置 scrypt）；dsh 自带按平台安装的二进制，所以发行包分平台 |
 
 ## 许可
 
-[MIT](LICENSE) © dsh-remote contributors
+[MIT](LICENSE) © dsh-station contributors

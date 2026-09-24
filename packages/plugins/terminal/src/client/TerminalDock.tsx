@@ -3,7 +3,7 @@
  *
  * TerminalPanel 保留 dock 的 DOM 结构；状态、轮询和样式分别位于同目录的职责模块。
  *
- * @module @dsh-remote/dsh-plugin-terminal/client/TerminalDock
+ * @module @dsh-station/dsh-plugin-terminal/client/TerminalDock
  */
 
 import {

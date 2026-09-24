@@ -1,14 +1,17 @@
-# Release：推 v* 标签时打出三平台 × core/full 六个绿色包并附到 GitHub Release。
+# Release：推 v* 标签时打出全部发行介质并附到 GitHub Release。
 #
 #   示例：git tag v0.0.1 && git push origin v0.0.1
 #
-# pack.mjs 在一台机器上就能交叉打全平台（Go 交叉编译 + supportedArchitectures），
-# 所以只需要一个 ubuntu runner。core/full 的区别只在于是否携带 LibreOffice 引擎
-# （Office 预览），见 scripts/pack/manifest.mjs 的 VARIANTS。也支持
-# workflow_dispatch 手动触发（只上传 artifact、不创建 Release），用来调试打包流程。
+# 介质矩阵（D21/D22）：
+#   - 绿色包（服务版 zip）：pack.mjs 在一台 ubuntu runner 上交叉打三平台 × lite/full。
+#   - 桌面版安装包：桌面壳依赖系统 WebView/CGO，不支持交叉编译，
+#     由三个原生 runner 分别跑 pack-desktop.mjs（win 用 NSIS、linux 出 deb、
+#     mac 出 .app zip），各打 lite/full 两个变体。
+# 也支持 workflow_dispatch 手动触发（只上传 artifact、不创建 Release），
+# 用来调试打包流程。
 #
 # 前置条件：tag 必须与 packages/launcher/package.json 的 version 一致
-# （zip 文件名里的版本号取自那里，不一致等于发错货）。
+# （产物文件名里的版本号取自那里，不一致等于发错货）。
 # 还要有 docs/changelog/<版本>.md（Release 正文取自它，见 CHANGELOG.md）。
 
 name: Release
@@ -21,7 +24,11 @@ on:
 permissions:
   contents: write
 
+env:
+  GOFLAGS: '-buildvcs=false'
+
 jobs:
+  # 校验 + 绿色包（服务版介质）：一台机器交叉打全平台。
   pack:
     runs-on: ubuntu-latest
     steps:
@@ -62,19 +69,112 @@ jobs:
       - run: pnpm build
       - run: pnpm release
 
-      - name: 生成校验和
-        run: cd release && sha256sum *.zip > checksums.txt && cat checksums.txt
-
       - uses: actions/upload-artifact@v4
         with:
-          name: release-zips
+          name: server-zips
           path: |
             release/*.zip
-            release/checksums.txt
           if-no-files-found: error
 
+  # 桌面版：Windows（NSIS 安装包 + 便携 zip，lite/full）。
+  desktop-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/desktop/go.mod
+      # NSIS 用于出安装包；没有它只会产出便携 zip 并响亮提示。
+      - run: choco install nsis -y --no-progress
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: node scripts/pack-desktop.mjs --target=win32-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows
+          path: |
+            release/dsh-station-*desktop*
+          if-no-files-found: error
+
+  # 桌面版：macOS（.app zip，lite/full）。未签名/未公证，实机验收见计划 S10。
+  desktop-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/desktop/go.mod
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: node scripts/pack-desktop.mjs --target=darwin-arm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos
+          path: |
+            release/dsh-station-*desktop*
+          if-no-files-found: error
+
+  # 桌面版：Linux（deb + 便携 zip，lite/full）。
+  # Wails v2 在 Linux 依赖 WebKitGTK 4.0 开发文件；runner 固定 22.04 保住 4.0。
+  desktop-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/desktop/go.mod
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-dev libwebkit2gtk-4.0-dev pkg-config
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: node scripts/pack-desktop.mjs --target=linux-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux
+          path: |
+            release/dsh-station-*desktop*
+          if-no-files-found: error
+
+  # 汇总发布：合并四路 artifact、生成校验和并创建 Release。
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [pack, desktop-windows, desktop-macos, desktop-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: 汇集介质并生成校验和
+        shell: bash
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name '*.zip' -o -name '*.exe' -o -name '*.deb' \) -exec cp {} release/ \;
+          cd release && sha256sum * > checksums.txt && cat checksums.txt
       - name: 准备 Release 说明
-        if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
           tag="${GITHUB_REF_NAME#v}"
@@ -88,13 +188,10 @@ jobs:
             printf '\n---\n完整更新历史: https://github.com/%s/blob/%s/CHANGELOG.md\n' \
               "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
           } > release-notes.md
-
       - uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
         with:
           body_path: release-notes.md
           # 版本号带 '-'（如 0.1.0-rc.1）自动标记为预发布
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
-            release/*.zip
-            release/checksums.txt
+            release/*

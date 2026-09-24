@@ -1,5 +1,5 @@
 import type { Logger } from 'pino'
-import type { MembershipLastHub, MembershipHub } from '@dsh-remote/protocol'
+import type { MembershipLastHub, MembershipHub } from '@dsh-station/protocol'
 import { issueDeviceEnrollToken } from '../store/index.js'
 import type { RelayStore } from '../store/store.js'
 import { readMembershipFile, writeMembershipFile } from './file.js'
@@ -16,9 +16,9 @@ export interface SelfHubOptions {
  * membership 中的 hub 是否是 relay 维护的本机自挂条目。
  *
  * 以 `selfManaged` 标记而不是地址推断：同一台机器上可以合法地跑两套
- * dsh-remote 做联调（一套加入另一套时 relayUrl 也是 loopback、slug 也
+ * dsh-station 做联调（一套加入另一套时 relayUrl 也是 loopback、slug 也
  * 相同），只有 relay 自己写入的标记才能无歧义地区分（见
- * `@dsh-remote/protocol` 的 membership schema）。
+ * `@dsh-station/protocol` 的 membership schema）。
  * @param hub membership 记录的 hub。
  * @returns 是自挂条目时为 true。
  */
@@ -54,7 +54,7 @@ export type SelfJoinOutcome
  * 供 {@link ensureSelfMembership} 与「取消远程入口」使用：取消后机器必须
  * 回到“只能从自己的地址打开”的状态，而这正需要自挂条目支撑。已存在的
  * lastHub 原样保留——它属于操作员的「重新连接」历史，不属于自挂条目。
- * @param options relay 的 store、dsh-remote home、本机 slug、主端口和 logger。
+ * @param options relay 的 store、dsh-station home、本机 slug、主端口和 logger。
  * @returns 写入的时间戳；写入失败时抛出 `MembershipFileError`。
  */
 export function writeSelfMembership(options: {
@@ -100,7 +100,7 @@ export function writeSelfMembership(options: {
  *
  * connector 消费掉令牌后会自行把它从文件中清除；relay 重启会再签发
  * 一个新令牌，未使用的旧令牌到期后由存储清理。
- * @param options relay 的 store、dsh-remote home、本机 slug、主端口和 logger。
+ * @param options relay 的 store、dsh-station home、本机 slug、主端口和 logger。
  * @returns 做了什么；写入失败时抛出 `MembershipFileError`。
  */
 export function ensureSelfMembership(options: {

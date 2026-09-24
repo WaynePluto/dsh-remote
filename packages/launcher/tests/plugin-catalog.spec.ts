@@ -7,10 +7,10 @@ import { PLUGIN_CATALOG, PLUGIN_DISTRIBUTIONS } from '../src/plugin-catalog.js'
 
 const root = join(import.meta.dirname, '..', '..', '..')
 const grouped = new Set([
-  '@dsh-remote/dsh-plugin-remote-experience',
-  '@dsh-remote/dsh-plugin-model-enhancements',
-  '@dsh-remote/dsh-plugin-conversation-enhancements',
-  '@dsh-remote/dsh-plugin-development-tools',
+  '@dsh-station/dsh-plugin-remote-experience',
+  '@dsh-station/dsh-plugin-model-enhancements',
+  '@dsh-station/dsh-plugin-conversation-enhancements',
+  '@dsh-station/dsh-plugin-development-tools',
 ])
 
 function jsExpression(value: unknown): string | undefined {
@@ -27,7 +27,7 @@ describe('plugin distribution catalog', () => {
     expect(components).toHaveLength(20)
     expect(new Set(components).size).toBe(components.length)
     expect(PLUGIN_CATALOG.shell.map(item => item.name)).toEqual([
-      '@dsh-remote/dsh-plugin-remote-privileged',
+      '@dsh-station/dsh-plugin-remote-privileged',
     ])
   })
 
@@ -92,6 +92,6 @@ describe('plugin distribution catalog', () => {
       insert?: Array<{ id?: string, disabled?: unknown }>
     }>
     const row = parsed.flatMap(item => item.insert ?? []).find(item => item.id === 'yolo-mode')
-    expect(jsExpression(row?.disabled)).toContain('@dsh-remote/dsh-plugin-yolo-mode')
+    expect(jsExpression(row?.disabled)).toContain('@dsh-station/dsh-plugin-yolo-mode')
   })
 })

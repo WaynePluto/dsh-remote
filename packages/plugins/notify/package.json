@@ -1,5 +1,5 @@
 {
-  "name": "@dsh-remote/dsh-plugin-notify",
+  "name": "@dsh-station/dsh-plugin-notify",
   "version": "0.0.2-20260922",
   "description": "在 Windows 桌面通知任务完成或等待用户输入。",
   "license": "MIT",
@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "3.18.4",
-    "@dsh-remote/plugin-ui": "workspace:0.0.2-20260922"
+    "@dsh-station/plugin-ui": "workspace:0.0.2-20260922"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",
@@ -44,6 +44,7 @@
     "@deepseek-ai/dsh-client-ui-renderer": "0.1.7-rc.1",
     "@deepseek-ai/dsh-client-ui-settings": "0.1.7-rc.1",
     "@deepseek-ai/dsh-client-ui-slots": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-client-ui-workspace": "0.1.7-rc.1",
     "@deepseek-ai/dsh-session": "0.1.7-rc.1",
     "@deepseek-ai/dsh-session-projection": "0.1.7-rc.1",
     "@deepseek-ai/dsh-session-title": "0.1.7-rc.1",

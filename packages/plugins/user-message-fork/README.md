@@ -1,4 +1,4 @@
-# @dsh-remote/dsh-plugin-user-message-fork
+# @dsh-station/dsh-plugin-user-message-fork
 
 在普通用户消息的操作栏中增加「从此消息重新开始」按钮。
 
@@ -18,17 +18,17 @@
 ## 开发
 
 ```powershell
-pnpm --filter @dsh-remote/dsh-plugin-user-message-fork build
-pnpm --filter @dsh-remote/dsh-plugin-user-message-fork test
-pnpm --filter @dsh-remote/dsh-plugin-user-message-fork typecheck
+pnpm --filter @dsh-station/dsh-plugin-user-message-fork build
+pnpm --filter @dsh-station/dsh-plugin-user-message-fork test
+pnpm --filter @dsh-station/dsh-plugin-user-message-fork typecheck
 node scripts/user-message-fork-check.mjs
 ```
 
-插件改完后必须重启 dsh；`dsh-remote-web` profile 没有 HMR，刷新页面不会重新加载新的浏览器 bundle。
+插件改完后必须重启 dsh；`dsh-station-web` profile 没有 HMR，刷新页面不会重新加载新的浏览器 bundle。
 
 ## 分发与管理
 
-本包不作为独立安装项分发，而是 `@dsh-remote/dsh-plugin-conversation-enhancements`（会话增强 Bundle）的组件。停用后，用户消息的「分叉」按钮消失；已创建的子会话不受影响。
+本包不作为独立安装项分发，而是 `@dsh-station/dsh-plugin-conversation-enhancements`（会话增强 Bundle）的组件。停用后，用户消息的「分叉」按钮消失；已创建的子会话不受影响。
 可在该 Bundle 详情中单独停用或重新启用本组件；安装、卸载和升级以整个会话增强 Bundle 为单位。
 launcher 首次默认安装该 Bundle；后续只升级仍已安装的 Bundle，并保留 Bundle 与组件的停用状态；卸载后不会自动补回。
 需要重装时，在 dsh「添加插件」中填写发行包 `plugins/conversation-enhancements` 或开发环境 `.dev/plugins/conversation-enhancements` 的绝对目录。

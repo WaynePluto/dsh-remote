@@ -10,7 +10,7 @@ const (
 	// 按用户设置开机自启动。HKCU 无需提权；stack 也是按用户隔离的
 	// 它服务于该用户、运行在该用户 home 目录中的 dsh。
 	runKeyPath   = `Software\Microsoft\Windows\CurrentVersion\Run`
-	runValueName = "dsh-remote"
+	runValueName = "dsh-station"
 	// 自启动条目用这个参数标记“这次运行是登录时拉起的”，
 	// 托盘据此不弹「已启动」通知。launcher 不认识这个参数，
 	// 转发前已由 main.go 去掉。

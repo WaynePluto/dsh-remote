@@ -1,5 +1,5 @@
 import { IconListPenOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
-import { installNavigationGlyph, navigationGlyphStylesheet } from '@dsh-remote/plugin-ui'
+import { installNavigationGlyph, navigationGlyphStylesheet } from '@dsh-station/plugin-ui'
 import { en, zh } from './locales.js'
 
 /** 设置导航图标的 marker 和页面节点选择器。 */

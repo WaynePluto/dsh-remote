@@ -22,7 +22,7 @@ import {
 } from './log-dialog.js'
 import type { LogDialogResizeDirection } from './log-dialog.js'
 import { useLogDialogResize } from './dialog-resize.js'
-import { useDialogFullscreen } from '@dsh-remote/plugin-ui'
+import { useDialogFullscreen } from '@dsh-station/plugin-ui'
 import { publishWidth } from './styles.js'
 import type { Busy, ServicesDockInjected } from './types.js'
 
