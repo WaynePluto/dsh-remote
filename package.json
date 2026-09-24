@@ -12,7 +12,7 @@
   "scripts": {
     "prepare": "husky",
     "build": "pnpm -r build",
-    "plugins:build": "pnpm --filter \"./packages/plugins/**\" --if-present build",
+    "plugins:build": "pnpm --filter \"./packages/plugin-ui\" --filter \"./packages/plugins/**\" --if-present build",
     "plugins:prepare": "node scripts/plugin-distributions.mjs .dev/plugins",
     "dev:runtime": "node scripts/dev-runtime.mjs",
     "desktop:prepare": "node scripts/prepare-desktop.mjs",

@@ -41,11 +41,17 @@ var (
 	desktopTraySetForegroundWindow   = desktopTrayUser32.NewProc("SetForegroundWindow")
 	desktopTrayGetCursorPos          = desktopTrayUser32.NewProc("GetCursorPos")
 	desktopTrayTrackPopupMenu        = desktopTrayUser32.NewProc("TrackPopupMenu")
+	desktopTrayEnumWindows           = desktopTrayUser32.NewProc("EnumWindows")
+	desktopTraySendMessage           = desktopTrayUser32.NewProc("SendMessageW")
+	desktopTrayIsWindowVisible       = desktopTrayUser32.NewProc("IsWindowVisible")
+	desktopTrayGetWindowThreadPID    = desktopTrayUser32.NewProc("GetWindowThreadProcessId")
+	desktopTraySetClassLongPtr       = desktopTrayUser32.NewProc("SetClassLongPtrW")
 	desktopTrayNotifyIcon            = desktopTrayShell32.NewProc("Shell_NotifyIconW")
 
 	desktopTrayClassNumber atomic.Uint64
 	desktopTrayWindows     sync.Map
 	desktopTrayCallback    = syscall.NewCallback(desktopTrayWndProc)
+	desktopTrayEnumProc    = syscall.NewCallback(desktopTrayIconEnumProc)
 )
 
 const (
@@ -57,6 +63,7 @@ const (
 	desktopTrayWMLButtonDbl  = 0x0203
 	desktopTrayWMRButtonUp   = 0x0205
 	desktopTrayWMCallback    = 0x8001
+	desktopTrayWMSetIcon     = 0x0080
 
 	desktopTrayNIMAdd     = 0
 	desktopTrayNIMDelete  = 2
@@ -76,6 +83,12 @@ const (
 	desktopTraySmallIconWidth  = 49
 	desktopTraySmallIconHeight = 50
 	desktopTrayAppIconResource = 1
+	desktopTrayIconBig         = 1
+	desktopTrayIconSmall       = 0
+	desktopTrayLargeIconWidth  = 11
+	desktopTrayLargeIconHeight = 12
+	desktopTrayClassIconBig    = ^uintptr(13) // GCLP_HICON = -14
+	desktopTrayClassIconSmall  = ^uintptr(33) // GCLP_HICONSM = -34
 )
 
 const (
@@ -401,6 +414,57 @@ func (tray *desktopTrayState) pump() {
 		desktopTrayTranslateMessage.Call(uintptr(unsafe.Pointer(&message)))
 		desktopTrayDispatchMessage.Call(uintptr(unsafe.Pointer(&message)))
 	}
+}
+
+// desktopTrayFoundWindow 收取 desktopTrayIconEnumProc 的枚举结果；
+// EnumWindows 同步回调，不经 lParam 传指针（vet 禁止uintptr 反解引用）。
+var desktopTrayFoundWindow uintptr
+
+// desktopTrayIconEnumProc 找到本进程第一个可见顶层窗口（即 Wails 主窗口），
+// 找到后记录并返回 0 停止枚举；托盘的隐藏窗口会被可见性过滤掉。
+func desktopTrayIconEnumProc(hwnd uintptr, lparam uintptr) uintptr {
+	var pid uint32
+	desktopTrayGetWindowThreadPID.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
+	if pid != uint32(syscall.Getpid()) {
+		return 1
+	}
+	if visible, _, _ := desktopTrayIsWindowVisible.Call(hwnd); visible == 0 {
+		return 1
+	}
+	desktopTrayFoundWindow = hwnd
+	return 0
+}
+
+// setWindowsTaskbarIcon 把 exe 资源图标设为主窗口的大/小图标与窗口类图标。
+// 无边框窗口没有标题栏图标可看，但任务栏按钮、hover 预览左上角和 Alt+Tab
+// 都取自窗口/类图标；不设置时会退回系统默认程序图标。
+// OnDomReady 时窗口可能尚未显示（枚举不到），返回是否找到窗口，由调用方重试。
+func setWindowsTaskbarIcon() bool {
+	desktopTrayFoundWindow = 0
+	desktopTrayEnumWindows.Call(desktopTrayEnumProc, 0)
+	hwnd := desktopTrayFoundWindow
+	if hwnd == 0 {
+		return false
+	}
+	instance, _, _ := desktopTrayGetModuleHandle.Call(0)
+	if instance == 0 {
+		return false
+	}
+	bigWidth, _, _ := desktopTrayGetSystemMetrics.Call(desktopTrayLargeIconWidth)
+	bigHeight, _, _ := desktopTrayGetSystemMetrics.Call(desktopTrayLargeIconHeight)
+	smallWidth, _, _ := desktopTrayGetSystemMetrics.Call(desktopTraySmallIconWidth)
+	smallHeight, _, _ := desktopTrayGetSystemMetrics.Call(desktopTraySmallIconHeight)
+	big, _, _ := desktopTrayLoadImage.Call(instance, desktopTrayAppIconResource, desktopTrayImageIcon, bigWidth, bigHeight, 0)
+	small, _, _ := desktopTrayLoadImage.Call(instance, desktopTrayAppIconResource, desktopTrayImageIcon, smallWidth, smallHeight, 0)
+	if big != 0 {
+		desktopTraySendMessage.Call(hwnd, desktopTrayWMSetIcon, desktopTrayIconBig, big)
+		desktopTraySetClassLongPtr.Call(hwnd, desktopTrayClassIconBig, big)
+	}
+	if small != 0 {
+		desktopTraySendMessage.Call(hwnd, desktopTrayWMSetIcon, desktopTrayIconSmall, small)
+		desktopTraySetClassLongPtr.Call(hwnd, desktopTrayClassIconSmall, small)
+	}
+	return big != 0 || small != 0
 }
 
 // startWindowsTray 在专属 OS 线程创建隐藏窗口；调用方的 Wails 线程不运行消息循环。

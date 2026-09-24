@@ -1,0 +1,59 @@
+package main
+
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// logo.svg 是 packaging/dsh-remote.svg 的提交镜像（go:embed 不能引用模块外文件）。
+// 源文件更新后必须同步镜像，否则注入标题栏与 exe/托盘图标会各自为政。
+func TestLogoMirrorMatchesPackaging(t *testing.T) {
+	source, err := os.ReadFile(filepath.Join("..", "..", "packaging", "dsh-remote.svg"))
+	if err != nil {
+		t.Fatalf("读取 logo 源文件失败: %v", err)
+	}
+	mirror, err := os.ReadFile("logo.svg")
+	if err != nil {
+		t.Fatalf("读取 logo 镜像失败: %v", err)
+	}
+	if !bytes.Equal(source, mirror) {
+		t.Fatal("packages/desktop/logo.svg 与 packaging/dsh-remote.svg 不一致；请重新复制镜像")
+	}
+	if !strings.Contains(chromebarLogoSVG, "#4D6BFE") || !strings.Contains(chromebarLogoSVG, "<path") {
+		t.Fatal("嵌入的 logo 缺少官方蓝色鲸鱼 path，注入标题栏会是空白图标")
+	}
+}
+
+func TestBindingOrigin(t *testing.T) {
+	origin, err := bindingOrigin("http://127.0.0.1:30809/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if origin != "http://127.0.0.1:30809" {
+		t.Fatalf("绑定来源错误: %q", origin)
+	}
+	if _, err := bindingOrigin("https://127.0.0.1:30809/"); err == nil {
+		t.Fatal("https 来源应被拒绝")
+	}
+	if _, err := bindingOrigin("http://localhost:30809/"); err == nil {
+		t.Fatal("非 127.0.0.1 主机应被拒绝")
+	}
+}
+
+func TestBuildChromeBarScript(t *testing.T) {
+	script := buildChromeBarScript("http://127.0.0.1:30809/", "http://127.0.0.1:30809/_admin")
+	for _, placeholder := range []string{"__RELAY_URL__", "__ADMIN_URL__", "__LOGO_SVG__"} {
+		if strings.Contains(script, placeholder) {
+			t.Fatalf("脚本仍含未替换占位符 %s", placeholder)
+		}
+	}
+	if !strings.Contains(script, `'http://127.0.0.1:30809/'`) || !strings.Contains(script, `'http://127.0.0.1:30809/_admin'`) {
+		t.Fatal("脚本未包含主页/管理地址")
+	}
+	if !strings.Contains(script, `dsh-remote-chromebar`) {
+		t.Fatal("脚本缺少自绘标题栏元素 ID")
+	}
+}
