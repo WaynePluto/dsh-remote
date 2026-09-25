@@ -2,6 +2,7 @@
 
 每个版本的详细说明一版一份，链接指向打 tag 时刻的文件：
 
+- [0.0.2-20260925](https://github.com/WaynePluto/dsh-station/blob/v0.0.2-20260925/docs/changelog/0.0.2-20260925.md) —— 预发布：桌面版与四发布端发行介质（lite/full × setup/portable）、更名 dsh-station、升级 dsh 0.1.7-rc.1
 - [0.0.2-20260922](https://github.com/WaynePluto/dsh-station/blob/v0.0.2-20260922/docs/changelog/0.0.2-20260922.md) —— 预发布：发行包分 core/full、功能插件第三方化、升级 dsh 0.1.6-alpha.2
 - [0.0.1](https://github.com/WaynePluto/dsh-station/blob/v0.0.1/docs/changelog/0.0.1.md) —— 首个发布
 

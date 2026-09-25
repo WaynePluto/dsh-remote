@@ -25,8 +25,8 @@
 | 工作区与工具插件（5） | `packages/plugins/{services,terminal,tools-inspector,skills-inspector,files}` | 常驻服务、交互终端、工具/技能历史、右侧 Sidebar 只读文件浏览 | dsh live Agent、工具、PTY、RPC、Sidebar slots；services 自有 Node 进程管理引擎 |
 | 环境与预设（6） | `packages/plugins/{remote-settings,remote-privileged,browser-compat,directory-picker-browse,yolo-mode,concise-mode}` | 远程设置（ownsHost、顶部 Open In… Explorer 立即返回与置前增强）、旧 WebKit API 垫片与临时浏览器诊断、网页目录选择、固定 YOLO、精简预设；remote-privileged 携带壳级 connection 注入和模型 HMR 启动屏障 | 功能组件进入第三方分发 Bundle；remote-privileged 由壳常驻加载 |
 | 开发与验证脚本 | `scripts/dev-stack.mjs`、`dev-runtime.mjs`、`plugin-distributions.mjs`、`prepare-desktop.mjs`、`local-config.mjs`、`*-check.mjs` | 本地全链路、隔离 dsh 运行时、开发插件介质、插件契约冒烟与依赖检查 | launcher/relay 源码模块、Node；脚本各自声明环境前提 |
-| 发行打包 | `scripts/pack.mjs`、`packaging/`、`.github/workflows/` | 分平台 deploy/归档、产物检查、启动脚本、图标、CI | archiver、pnpm、Go 工具链；不带 Node 二进制 |
-| Windows 托盘 | `packaging/win-launcher/*.go` | 菜单、单实例、自启动、日志轮转、Node launcher 生命周期 | Go 标准库、Win32 API；同一 `package main`，无第三方 Go 包 |
+| 发行打包 | `scripts/release.mjs`（统一入口）、`scripts/pack.mjs`（服务版 zip，仅 linux-x64）、`scripts/pack-desktop.mjs`（桌面 setup/portable）、`packaging/`、`.github/workflows/` | 四个发布端介质（D22：win/mac/linux 桌面版 + Linux 服务版，各 lite/full；桌面再分 setup/portable）、构建一次串行打包、产物检查、启动脚本、图标、CI | archiver、pnpm、Go 工具链；服务版不带 Node 二进制 |
+| Windows 托盘（已退役） | `packaging/win-launcher/*.go` | 菜单、单实例、自启动、日志轮转、Node launcher 生命周期；win 服务版退役（D22）后不再随介质构建，syso 资源仍供桌面壳，去留见路线图 | Go 标准库、Win32 API；同一 `package main`，无第三方 Go 包 |
 | 桌面应用 | `packages/desktop/{main,config,bootstrap,statuspage,backend,discover,notifypipe}.go`、`tray_windows.go` | Wails v2 单窗口：独立模式托管自有 launcher 后台（`--desktop` 状态行契约 + 实例锁 + 随包/系统 Node 发现），attach 模式附着开发栈；AssetServer 持有 webview 初始导航直到后台就绪再 302 进真实 origin；Win32 托盘含后台启停与自重启恢复；通知管道带共享令牌 | 独立 Go module `github.com/wailsapp/wails/v2@v2.16.0`；原生网络/权限隔离（S1.3）仍未实现，mac/Linux 托盘与实机验收待 S10 |
 
 20 个功能组件按 `plugin-catalog.json` 分发为 4 个组合包与 6 个独立第三方 Bundle；首次默认安装，仍安装项随 dsh-station 配套升级，卸载后不自动补回。唯一随 `--patch` 传入的是 remote-privileged 的壳级 overlay，包含 connection 注入和模型 HMR 启动屏障，不属于第三方插件生命周期。`@dsh-station/plugin-ui` 是构建期辅助，也不进入分发清单。
@@ -52,7 +52,7 @@ graph TD
   Relay --> Zod
   Connector --> Zod
   Protocol --> Zod
-  Pack[scripts/pack.mjs] --> Archiver[archiver]
+  Pack[scripts/pack·pack-desktop] --> Archiver[archiver]
   DesktopPreview[desktop 预览壳] --> Wails[Wails v2]
 ```
 
@@ -70,7 +70,7 @@ graph TD
 | plugin-ui → React | `packages/plugin-ui/src/dialog-pointer.tsx`、`navigation-glyph.ts`、`inspector.tsx`、`dock-styles.ts` |
 | plugins → undici | `packages/plugins/proxy/src/dispatcher.ts:22` |
 | launcher/relay/connector/protocol → zod | 各包的 `src/config.ts`（protocol 为 `src/frames.ts`） |
-| pack → archiver | `scripts/pack.mjs:76` |
+| pack → archiver | `scripts/pack.mjs:42`（经 `pack/archive.mjs`）、`scripts/pack-desktop.mjs:34` |
 | desktop → Wails | `packages/desktop/main.go`：Wails app、托盘回调与模式选择；`bootstrap.go`（attach 引导 302）/`statuspage.go`（独立模式持有初始导航）；`backend.go` 托管 launcher 子进程并解析 `@@DSH_STATION` 状态行 |
 
 这些核心包级生产 import 边未形成环；未发现插件相互 import/re-export。
@@ -102,7 +102,7 @@ graph TD
 ### 桌面预览与后台所有权
 
 - `packages/desktop/` 有两种模式：默认独立模式托管自有后台（发现随包载荷与 Node、`--desktop` 拉起 launcher、实例锁防双开、Job Object 崩溃回收），`--attach` 开发模式附着已运行栈。托盘「启动/重启后台」通过壳自重启恢复（webview 初始导航一生一次，页面发起的跳转进不了 relay——见 statuspage.go 注释）。
-- Wails AssetServer 在 attach 模式对 `/` 发一次 302；独立模式持有初始导航直到后台就绪再 302。HTTP/WS、认证和插件资源均从真实 relay origin 加载，不对业务页提供除窗口控制外的 Go Bindings。桌面安装包由 `scripts/pack-desktop.mjs` 在对应平台产出（win NSIS/zip、mac .app zip、linux deb/zip），随包 Node 清单在 `packaging/desktop-node.json`。**没有原生网络/系统权限隔离（S1.3）**；参数校验只限定初始地址，风险及构建方式见 `packages/desktop/README.md`。
+- Wails AssetServer 在 attach 模式对 `/` 发一次 302；独立模式持有初始导航直到后台就绪再 302。HTTP/WS、认证和插件资源均从真实 relay origin 加载，不对业务页提供除窗口控制外的 Go Bindings。桌面介质由 `scripts/pack-desktop.mjs` 在对应平台产出（win NSIS setup + 便携 zip、mac DMG + .app 便携 zip、linux deb + 便携 zip，统一入口 `scripts/release.mjs`），随包 Node 清单在 `packaging/desktop-node.json`。**没有原生网络/系统权限隔离（S1.3）**；参数校验只限定初始地址，风险及构建方式见 `packages/desktop/README.md`。
 
 ### 插件双端与运行期协作
 
@@ -140,7 +140,7 @@ graph TD
   （`~/.dsh-station-dev` + `~/.dsh-dev`）与错开的端口（relay 31809 / dsh 3180），可与已安装
   发行版实例同时运行；profile 名仍为 `dsh-station-web`，生命周期与发行版共用。
   `pnpm relay:init/passwd/totp-reset` 因此作用于开发 home。
-- 绿色打包通过 `scripts/pack.mjs` 在包根生成 `plugins/` 并归档；launcher production
+- 服务版打包通过 `scripts/pack.mjs`（仅 linux-x64，D22）在包根生成 `plugins/` 并归档；launcher production
   dependencies 只保留运行时和壳级 overlay，不再承担功能插件安装锚。打包检查覆盖介质目录、
   依赖闭包、宿主/浏览器产物、离线内容和可搬移路径。
 - 唯一 CLI overlay 是 remote-privileged；它由 launcher 强制解析并传给 dsh，不可停用或卸载。

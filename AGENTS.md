@@ -39,7 +39,8 @@ TypeScript + ESM + pnpm workspace，构建 tsdown，开发 tsx，测试 Vitest�
 项目模块架构见 [ARCHITECTURE.md](ARCHITECTURE.md)；修改模块结构后请更新该文件。
 
 常用检查：pnpm check:dependencies、pnpm lint、pnpm typecheck、pnpm build、pnpm test。
-依赖更新加载 update-dependencies skill；提交前钩子检查固定版本并清理 lockfile 内部镜像 tarball 地址。
+依赖更新加载 update-dependencies skill；版本发布（预发布/正式、清理旧预发布）加载 release-version skill；
+提交前钩子检查固定版本并清理 lockfile 内部镜像 tarball 地址。
 
 ## 按任务阅读
 

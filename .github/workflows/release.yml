@@ -2,11 +2,12 @@
 #
 #   示例：git tag v0.0.1 && git push origin v0.0.1
 #
-# 介质矩阵（D21/D22）：
-#   - 绿色包（服务版 zip）：pack.mjs 在一台 ubuntu runner 上交叉打三平台 × lite/full。
-#   - 桌面版安装包：桌面壳依赖系统 WebView/CGO，不支持交叉编译，
-#     由三个原生 runner 分别跑 pack-desktop.mjs（win 用 NSIS、linux 出 deb、
-#     mac 出 .app zip），各打 lite/full 两个变体。
+# 介质矩阵（D21/D22，四个发布端 × lite/full）：
+#   - win / mac / linux 桌面版：setup（win NSIS setup.exe / mac DMG / linux deb）
+#     加 portable 便携 zip。桌面壳依赖系统 WebView/CGO，不支持交叉编译，
+#     由三个原生 runner 分别执行 node scripts/release.mjs --target=<平台>
+#     （一次构建出 lite/full 双变体；本地只需单变体时用 release:<平台>:<lite|full> 命令）。
+#   - Linux 服务版 zip：随 linux 作业一起产出，始终用系统 Node。
 # 也支持 workflow_dispatch 手动触发（只上传 artifact、不创建 Release），
 # 用来调试打包流程。
 #
@@ -24,60 +25,9 @@ on:
 permissions:
   contents: write
 
-env:
-  GOFLAGS: '-buildvcs=false'
-
 jobs:
-  # 校验 + 绿色包（服务版介质）：一台机器交叉打全平台。
-  pack:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      # 与 ci.yml 一致固定版本：项目刻意不在 package.json 写 packageManager，
-      # action-setup 没有这个输入就不知道装哪个 pnpm
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.17.0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      # 打 Windows 托盘 exe 用；版本取自 go.mod（当前 1.21，runner 自带的也满足，
-      # 显式声明是为了 runner 预装版本漂移时不炸）
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: packaging/win-launcher/go.mod
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: 校验 tag 与版本一致
-        if: startsWith(github.ref, 'refs/tags/')
-        shell: bash
-        run: |
-          tag="${GITHUB_REF_NAME#v}"
-          pkg="$(node -p "require('./packages/launcher/package.json').version")"
-          if [ "$tag" != "$pkg" ]; then
-            echo "::error::tag v$tag 与 packages/launcher/package.json 的 version $pkg 不一致"
-            exit 1
-          fi
-
-      # pack.mjs 自带构建（--skip-build 可跳过）；先显式构建一次，
-      # 让构建失败和打包失败在日志里分开
-      - run: pnpm build
-      - run: pnpm release
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: server-zips
-          path: |
-            release/*.zip
-          if-no-files-found: error
-
-  # 桌面版：Windows（NSIS 安装包 + 便携 zip，lite/full）。
-  desktop-windows:
+  # 发布端 1/4：Windows 桌面版（NSIS setup.exe + 便携 zip，lite/full）。
+  win:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -94,17 +44,16 @@ jobs:
       # NSIS 用于出安装包；没有它只会产出便携 zip 并响亮提示。
       - run: choco install nsis -y --no-progress
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - run: node scripts/pack-desktop.mjs --target=win32-x64
+      - run: node scripts/release.mjs --target=win32-x64
       - uses: actions/upload-artifact@v4
         with:
-          name: desktop-windows
-          path: |
-            release/dsh-station-*desktop*
+          name: release-win
+          path: release/dsh-station-*
           if-no-files-found: error
 
-  # 桌面版：macOS（.app zip，lite/full）。未签名/未公证，实机验收见计划 S10。
-  desktop-macos:
+  # 发布端 2/4：macOS 桌面版（.app 便携 zip + DMG，lite/full）。
+  # 未签名/未公证，实机验收见计划 S10。
+  macos:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -119,18 +68,17 @@ jobs:
         with:
           go-version-file: packages/desktop/go.mod
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - run: node scripts/pack-desktop.mjs --target=darwin-arm64
+      - run: node scripts/release.mjs --target=darwin-arm64
       - uses: actions/upload-artifact@v4
         with:
-          name: desktop-macos
-          path: |
-            release/dsh-station-*desktop*
+          name: release-macos
+          path: release/dsh-station-*
           if-no-files-found: error
 
-  # 桌面版：Linux（deb + 便携 zip，lite/full）。
+  # 发布端 3/4 + 4/4：Linux 桌面版（deb + 便携 zip）与服务版 zip，均 lite/full。
   # Wails v2 在 Linux 依赖 WebKitGTK 4.0 开发文件；runner 固定 22.04 保住 4.0。
-  desktop-linux:
+  # tag 与版本一致性校验也在这条作业里做。
+  linux:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -149,19 +97,27 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libgtk-3-dev libwebkit2gtk-4.0-dev pkg-config
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - run: node scripts/pack-desktop.mjs --target=linux-x64
+      - name: 校验 tag 与版本一致
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./packages/launcher/package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag v$tag 与 packages/launcher/package.json 的 version $pkg 不一致"
+            exit 1
+          fi
+      - run: node scripts/release.mjs --target=linux-x64
       - uses: actions/upload-artifact@v4
         with:
-          name: desktop-linux
-          path: |
-            release/dsh-station-*desktop*
+          name: release-linux
+          path: release/dsh-station-*
           if-no-files-found: error
 
-  # 汇总发布：合并四路 artifact、生成校验和并创建 Release。
+  # 汇总发布：合并三路 artifact、生成校验和并创建 Release。
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [pack, desktop-windows, desktop-macos, desktop-linux]
+    needs: [win, macos, linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -172,7 +128,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          find artifacts -type f \( -name '*.zip' -o -name '*.exe' -o -name '*.deb' \) -exec cp {} release/ \;
+          find artifacts -type f \( -name '*.zip' -o -name '*.exe' -o -name '*.deb' -o -name '*.dmg' \) -exec cp {} release/ \;
           cd release && sha256sum * > checksums.txt && cat checksums.txt
       - name: 准备 Release 说明
         shell: bash

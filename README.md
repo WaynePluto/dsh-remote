@@ -48,21 +48,31 @@
 | | 要求 |
 |---|---|
 | 操作系统 | Windows / Linux / macOS |
-| Node.js | **22.19+**（[nodejs.org](https://nodejs.org) 装 LTS；`node -v` 可查版本） |
+| Node.js | **轻量版（lite）与服务版需要 22.19+**（[nodejs.org](https://nodejs.org) 装 LTS；`node -v` 可查版本）；**桌面完整版（full）自带 Node，无需安装** |
 | 网络 | 被开放的机器能连到入口机器；入口机器在公网时需要能被访问到 |
 | dsh | **不需要安装**，已随包内置 |
 
 ## 安装
 
-从 [Releases](../../releases) 下载**对应平台**的 zip 解压即可（dsh 已随包携带）。每个平台分**轻量版（lite）/ 完整版（full）**两种包，按需选择：
+从 [Releases](../../releases) 下载**对应平台**的介质（dsh 已随包携带）。共有四个发布端：Windows / macOS / Linux 桌面版与 Linux 服务版 zip。每个介质都分**轻量版（lite）/ 完整版（full）**两种，桌面版再分 **setup（安装包）**与 **portable（便携 zip）**两种形态，按需选择：
 
 | 功能 | 轻量版（lite） | 完整版（full） |
 |---|---|---|
 | dsh 核心功能 | ✅ | ✅ |
 | Office 文档预览 | ❌ | ✅ |
+| Node 运行时 | **不内置**，要求系统 Node ≥ 22.19.0 | 随包附带固定版本 Node |
 
-- **Windows**：双击 `dsh-station.exe`。exe 没有代码签名，SmartScreen 提示时选「更多信息 → 仍要运行」；也可以 `pwsh -File .\start.ps1`
-- **Linux / macOS**：`./start.sh`
+| 发布端 | setup（安装包） | portable（便携 zip） |
+|---|---|---|
+| Windows 桌面版 | `…-desktop-<变体>-setup.exe` | `…-desktop-<变体>.zip` |
+| macOS 桌面版 | `…-desktop-<变体>.dmg`（拖入 Applications） | `…-desktop-<变体>.zip`（内含 .app） |
+| Linux 桌面版 | `…-desktop-<变体>.deb` | `…-desktop-<变体>.zip` |
+
+第四个发布端是 **Linux 服务版 zip**（`…-linux-x64-server-<变体>.zip`）：面向无桌面服务器，解压后跑 `./start.sh`，始终要求系统 Node ≥ 22.19.0，不携带 Node 二进制。
+
+- **轻量版（lite）不内置 Node.js**：先自行安装 Node ≥ 22.19.0 再启动；完整版（full）自带固定版本 Node，装好即用。
+- 安装包与可执行文件未签名，SmartScreen / Gatekeeper 可能提示未知发布者。
+- macOS 桌面版未公证，首次打开需在「系统设置 → 隐私与安全性」里放行。
 
 > 包分平台是因为 dsh 的依赖带预编译平台二进制；dsh-station 自己的代码零原生模块。
 
@@ -93,16 +103,18 @@ pnpm install
 pnpm release
 ```
 
-`pnpm release` 自带构建（`--skip-build` 可跳过），默认只打本机平台，`--target=all` 打全部平台，每个平台各打轻量版（lite）与完整版（full）两种变体（`--variant=lite` 可筛选），zip 输出在 `release/` 下，解压后按上面方式启动。打包要求 pnpm >=10（项目不固定本地 pnpm 版本，直接使用你已安装的版本；CI 为保持可复现性固定使用 pnpm 10.17.0）；Windows 包的 `dsh-station.exe` 需要 [Go](https://go.dev/dl/) 编译，没装就加 `--skip-exe`，打出的包只能用 `start.ps1` 启动。
+发布命令按平台 × 变体拆分：`pnpm release:win:lite` / `pnpm release:win:full`（mac/linux 同理，`release:linux:<变体>` 同时产出对应变体的服务版 zip），`pnpm release` 一次打本机能产的全部（本机桌面版双变体 + Linux 服务版）。统一入口是 `scripts/release.mjs`：构建一次后串起两个打包脚本，`--skip-build` 复用现有 dist。完整版首次打包会下载随包 Node（约 30 MB/平台，之后缓存在 `.dev/desktop-toolchain` 不再重复下载；国内可设 `DSH_STATION_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node` 走镜像），只要轻量版时用 `:lite` 命令即可完全跳过下载。桌面壳依赖系统 WebView/CGO，只能在对应平台构建，其余平台由 release 工作流的原生 runner 打包。打包要求 pnpm >=10（项目不固定本地 pnpm 版本，直接使用你已安装的版本；CI 为保持可复现性固定使用 pnpm 10.17.0）。
 
 ## 第一次启动
 
-在**你想当入口机器的那台机器**上解压并启动（Windows 双击 `dsh-station.exe`，Linux / macOS 跑 `./start.sh`）。第一次还没有管理员账号，程序会把设置页地址给你：
+**桌面版**：安装或解压后双击启动即可。本机即 dsh 工作台，首次打开不需要创建管理员账号；
+需要远程能力（远程入口）时，首次打开管理界面会引导创建管理员、密码与 TOTP。
 
-- **Windows**：托盘弹出「还没有设置完成」的通知，点它就直接打开设置页；用 `start.ps1` 启动的，终端里打印同一个地址
-- **Linux / macOS**：`./start.sh` 的终端里打印形如 `http://127.0.0.1:30809` 的地址
+**Linux 服务版**：在**你想当入口机器的那台机器**上解压并运行 `./start.sh`。第一次还没有
+管理员账号，终端里会打印形如 `http://127.0.0.1:30809` 的设置页地址，浏览器打开后完成初始化；
+无桌面服务器也可用 [CLI 初始化](deploy/README.md)。
 
-**在这台机器上**用浏览器打开这个地址：
+首次打开管理界面（或上面服务版打印的设置页地址）后，在这台机器上完成三步：
 
 1. 填账号名（默认 `admin`，可以改成别的，字母数字和 `. _ -`）并设管理员密码（至少 6 个字符，且用上大写字母、小写字母、数字、符号里的至少 3 类）
 2. 用验证器 App（Microsoft / Google Authenticator、1Password 均可）**扫页面二维码**
@@ -112,7 +124,7 @@ pnpm release
 
 > 🔒 设置向导**只对 `127.0.0.1` 开放**，局域网里的其他人只会看到「请到那台机器上完成设置」，抢注不了管理员。无桌面的服务器够不着向导，见下方「救急」一节。
 
-设好后重启一次，全部访问地址就打出来了——终端启动看终端，托盘启动在托盘菜单「查看日志」里：
+设好后重启一次，全部访问地址就打出来了——服务版看终端输出，桌面版在「远程管理」页查看：
 
 ```
   ✓ Node v22.19.0
@@ -242,17 +254,17 @@ pnpm start     # 运行已有 dist 产物；先确保上述开发介质和运行
 | [docs/03-architecture.md](docs/03-architecture.md) | 组件划分、隧道协议、请求流程 |
 | [docs/04-security.md](docs/04-security.md) | 认证方案、威胁模型、显式接受的风险 |
 | [docs/05-roadmap.md](docs/05-roadmap.md) | 里程碑与验收标准（开发主线） |
-| [docs/06-packaging.md](docs/06-packaging.md) | 绿色包结构、启动器、依赖选型 |
+| [docs/06-packaging.md](docs/06-packaging.md) | 发行介质、启动器、依赖选型 |
 
 ## 当前进度
 
-隧道、认证、绿色包与 20 个功能组件已实现；插件第三方分发及其他实机验收见 [docs/05-roadmap.md](docs/05-roadmap.md)。
+隧道、认证、发行介质（四发布端桌面版 + Linux 服务版）与 20 个功能组件已实现；插件第三方分发及其他实机验收见 [docs/05-roadmap.md](docs/05-roadmap.md)。
 
 | 项 | 值 |
 |---|---|
 | dsh 版本 | `0.1.7-rc.1`（next 通道，developer preview，**会有破坏性变更**） |
 | dsh 要求 Node | `^22.19.0 \|\| >=24.0.0` |
-| 运行时策略 | 当前 zip 均使用用户本机 Node，不携带 Node 二进制；桌面版完整版（规划中）将附带固定版本 Node |
+| 运行时策略 | Linux 服务版 zip 与桌面轻量版（lite）使用系统 Node；桌面完整版（full）随包附带固定版本 Node（含官方 SHA-256 校验） |
 | 原生模块 | 自身零原生模块（口令哈希用 Node 内置 scrypt）；dsh 自带按平台安装的二进制，所以发行包分平台 |
 
 ## 许可

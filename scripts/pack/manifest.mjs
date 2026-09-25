@@ -2,11 +2,7 @@ import { join } from 'node:path'
 
 /** 打包脚本的清单、路径和平台常量；仓库根目录由入口显式传入。 */
 export const STAGING_RELATIVE = 'release/.staging'
-export const WIN_EXECUTABLE = 'dsh-station.exe'
-export const WIN_ICON_RESOURCE = 'rsrc_windows_amd64.syso'
 export const PREBUILD_DIRECTORIES = ['node_modules/node-pty/prebuilds']
-export const WIN_EXECUTABLE_MIN_BYTES = 1024 * 1024
-export const WIN_SUBSYSTEM_GUI = 2
 
 export const COMMON_PACKAGING_FILES = [
   { name: 'README.txt', mode: 0o644 },
@@ -55,6 +51,11 @@ export const TARGETS = {
     sentinel: '@img/sharp-darwin-arm64',
   },
 }
+
+/** 服务版 zip（原绿色包）的发行目标：D22 收敛后只剩 Linux x64，
+ *  win/mac 只发布桌面版介质（scripts/pack-desktop.mjs）。TARGETS 仍是全平台
+ *  清单，桌面版打包复用它做平台裁剪与二进制预检。 */
+export const SERVER_TARGETS = ['linux-x64']
 
 /** 引擎类重组件：optionalDependencies 平台包、惰性加载、缺失时只在对应功能里报错，
  * 是 lite 变体唯一值得剔除的东西。只匹配引擎包本身，不带 `-` 后缀的 JS 壳
@@ -166,18 +167,14 @@ export function createManifest(root, { platform = process.platform, arch = proce
     staging,
     packageDir: join(staging, 'package'),
     allPackagingFiles: ALL_PACKAGING_FILES,
-    winLauncherDir: join(packaging, 'win-launcher'),
-    winExecutable: WIN_EXECUTABLE,
-    winIconResource: WIN_ICON_RESOURCE,
     targets: TARGETS,
+    serverTargets: SERVER_TARGETS,
     variants: VARIANTS,
     heavyEnginePackages: HEAVY_ENGINE_PACKAGES,
     hostTarget: `${platform}-${arch}`,
     platform,
     arch,
     prebuildDirectories: PREBUILD_DIRECTORIES,
-    winExecutableMinBytes: WIN_EXECUTABLE_MIN_BYTES,
-    winSubsystemGui: WIN_SUBSYSTEM_GUI,
     keepAtPackageRoot: KEEP_AT_PACKAGE_ROOT,
     pnpmBookkeeping: PNPM_BOOKKEEPING,
     binScript: BIN_SCRIPT,

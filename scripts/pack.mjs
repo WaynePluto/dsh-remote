@@ -1,7 +1,8 @@
-/** 打绿色包，输出 release/dsh-station-<version>-<zipTag>-<variant>.zip；条目直接放在 zip 根目录，没有版本目录层。
+/** 打服务版 zip（原绿色包），输出 release/dsh-station-<version>-<zipTag>-server-<variant>.zip；条目直接放在 zip 根目录，没有版本目录层。
  *
- * 支持 --target=<目标>（可重复或逗号分隔）、all、--variant=<lite|full>（可重复或逗号分隔，默认全打）、
- * --skip-build 和 --skip-exe。变体没有无后缀的默认包：full 带引擎类重组件（Office 预览），
+ * D22 收敛后服务版只发 Linux x64；win/mac 只有桌面版介质（scripts/pack-desktop.mjs）。
+ * 支持 --target=<目标>（可重复或逗号分隔）、all、--variant=<lite|full>（可重复或逗号分隔，默认全打）
+ * 和 --skip-build。变体没有无后缀的默认包：full 带引擎类重组件（Office 预览），
  * lite 裁掉它们。目标共用 staging，按命令顺序串行部署；同一目标先打 full 再打 lite
  * （lite 的裁剪是破坏性的）；跨平台目标在裁剪前、本机目标在裁剪后冒烟。
  */
@@ -35,9 +36,7 @@ import {
   storeHasTarget,
 } from './pack/platform.mjs'
 import {
-  buildWindowsExecutable,
   smokeTestPackage,
-  smokeTestWindowsExecutable,
   verifyPluginDistributions,
 } from './pack/verify.mjs'
 import {
@@ -48,7 +47,6 @@ import {
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const skipBuild = process.argv.includes('--skip-build')
-const skipExe = process.argv.includes('--skip-exe')
 
 function fail(message, hint) {
   console.error(`\n[pack] ${message}`)
@@ -76,7 +74,7 @@ const prefix = `dsh-station-${version}`
 
 /** 解析 target 参数；all 宽松跳过缺少二进制的目标，显式目标硬失败。 */
 function resolveRequestedTargets() {
-  const known = Object.keys(context.targets)
+  const known = context.serverTargets
   const values = process.argv
     .filter(argument => argument.startsWith('--target='))
     .flatMap(argument => argument.slice('--target='.length).split(','))
@@ -84,19 +82,22 @@ function resolveRequestedTargets() {
     .filter(value => value !== '')
 
   if (values.length === 0) {
-    if (!(context.hostTarget in context.targets)) {
+    if (!known.includes(context.hostTarget)) {
       fail(
-        `本机是 ${context.hostTarget}，不在支持的发行目标里（${known.join('、')}）。`,
-        '用 --target=<triple> 显式指定一个。',
+        `本机是 ${context.hostTarget}，不在服务版发行目标里（${known.join('、')}）。`,
+        '服务版 zip 只发 Linux x64（D22）；win/mac 用户请用桌面版安装介质。确需在本机交叉打包时用 --target=linux-x64。',
       )
     }
     return { keys: [context.hostTarget], lenient: false }
   }
   if (values.includes('all')) return { keys: known, lenient: true }
 
-  const unknown = values.filter(value => !(value in context.targets))
+  const unknown = values.filter(value => !known.includes(value))
   if (unknown.length !== 0) {
-    fail(`不认识的目标：${unknown.join('、')}`, `可选：${known.join('、')}，或者 all。`)
+    fail(
+      `不认识的服务版目标：${unknown.join('、')}`,
+      `可选：${known.join('、')}，或者 all。win/mac 不再提供服务版 zip（D22），桌面介质由 scripts/pack-desktop.mjs 打。`,
+    )
   }
   return { keys: [...new Set(values)], lenient: false }
 }
@@ -127,17 +128,6 @@ for (const file of context.allPackagingFiles) {
   fail(`缺少 packaging/${file.name}。`, '这个仓库不完整，或者文件被误删了。')
 }
 
-const needsExecutable = requestedTargets.some(key => context.targets[key].platform === 'win32') && !skipExe
-if (needsExecutable && !existsSync(join(context.winLauncherDir, 'main.go'))) {
-  fail('缺少 packaging/win-launcher/main.go。', '这个仓库不完整，或者文件被误删了。')
-}
-if (needsExecutable && !existsSync(join(context.winLauncherDir, context.winIconResource))) {
-  fail(
-    `缺少 packaging/win-launcher/${context.winIconResource}（exe 的内嵌图标与高 DPI 清单）。`,
-    '跑 node packaging/make-icons.mjs 重新生成它；缺了只会得到一个默认图标、高分屏上发糊的 exe，从产物上看不出来。',
-  )
-}
-
 if (skipBuild) say('跳过构建（--skip-build），直接用现有的 dist/。')
 else run(context, 'build', pnpmInvocation(context.platform), ['-r', 'build'])
 
@@ -153,7 +143,6 @@ mkdirSync(context.release, { recursive: true })
 async function buildTarget(key) {
   const target = context.targets[key]
   const isHost = target.platform === context.platform && target.arch === context.arch
-  const withExecutable = target.platform === 'win32' && !skipExe
 
   console.log('')
   say(`=== 目标 ${key}（${target.label}）===`)
@@ -217,11 +206,6 @@ async function buildTarget(key) {
   }
   writeRootManifest(context.packageDir, launcherManifest)
 
-  if (target.platform === 'win32') {
-    if (skipExe) say('跳过编译 dsh-station.exe（--skip-exe）；这个包在 Windows 上只能用 start.ps1 启动。')
-    else buildWindowsExecutable(context)
-  }
-
   if (!isHost) smokeTestPackage(context)
 
   say(`裁剪 node_modules 到 ${key}`)
@@ -233,11 +217,7 @@ async function buildTarget(key) {
   if (isHost) smokeTestPackage(context)
   else say(`跳过裁剪后的入口自检：${key} 的包在本机（${context.hostTarget}）跑不了。`)
 
-  if (target.platform === 'win32' && withExecutable) smokeTestWindowsExecutable(context)
-
-  const entryHint = target.platform === 'win32'
-    ? (withExecutable ? `双击 ${context.winExecutable}（常驻通知区域）或 pwsh -File .\\start.ps1` : '用 pwsh -File .\\start.ps1（本次没有打进 dsh-station.exe）')
-    : '跑 ./start.sh'
+  const entryHint = '跑 ./start.sh'
 
   const results = []
   for (const variantKey of requestedVariants) {
@@ -256,10 +236,11 @@ async function buildTarget(key) {
     const treeBytes = directorySize(context.packageDir)
     say(`打包前目录大小 ${formatSize(treeBytes)}`)
 
-    const output = join(context.release, `${prefix}-${target.zipTag}-${variant.zipTag}.zip`)
+    // 文件名带 server 段：桌面介质有 desktop 段，四类介质在文件名上自描述。
+    const output = join(context.release, `${prefix}-${target.zipTag}-server-${variant.zipTag}.zip`)
     rmSync(output, { force: true })
     say(`写入 ${output}`)
-    const zipBytes = await createZip(context, output, target.files, withExecutable)
+    const zipBytes = await createZip(context, output, target.files)
     results.push({ key, variant: variantKey, label: `${target.label}（${variant.label}）`, output, zipBytes, entryHint })
   }
 

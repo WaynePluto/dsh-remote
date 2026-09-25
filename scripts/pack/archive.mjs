@@ -27,7 +27,7 @@ export function formatSize(bytes) {
 }
 
 /** 按清单写 zip，条目直接放在压缩包根目录；过滤 pnpm 账本并保留 POSIX 与 bin 脚本的执行位。 */
-export async function createZip(context, output, files, withExecutable) {
+export async function createZip(context, output, files) {
   const archive = new ZipArchive({ zlib: { level: 6 } })
   const stream = createWriteStream(output)
   const finished = new Promise((settle, reject) => {
@@ -41,12 +41,6 @@ export async function createZip(context, output, files, withExecutable) {
     archive.file(join(context.packageDir, file.name), { name: file.name, mode: file.mode })
   }
   archive.file(join(context.packageDir, 'package.json'), { name: 'package.json', mode: 0o644 })
-  if (withExecutable) {
-    archive.file(join(context.packageDir, context.winExecutable), {
-      name: context.winExecutable,
-      mode: 0o755,
-    })
-  }
   archive.directory(join(context.packageDir, 'dist'), 'dist')
   archive.directory(join(context.packageDir, 'plugins'), 'plugins')
   archive.directory(join(context.packageDir, 'node_modules'), 'node_modules', (entry) => {

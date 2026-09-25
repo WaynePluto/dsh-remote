@@ -2,32 +2,46 @@
 
 ## 1. 分发目标
 
-发行介质分两类（D21/D22）：
+发行介质共四个发布端（D21/D22），每个都分 lite/full 两档：
 
-- **桌面版**（packages/desktop，Wails）：安装包 + 便携 zip，分 lite/full 两档。
-  完整版附带固定版本 Node（清单见 `packaging/desktop-node.json`，SHA-256 校验）与
-  Office 预览引擎；轻量版要求系统 Node ≥ 22.19.0，不带引擎。
-  win 用 NSIS（`packaging/desktop-installer.nsi`），mac 出 `.app` zip（未签名），
-  linux 出 deb（纯 Node 构建，含 `.desktop` 与图标）。桌面壳依赖系统 WebView/CGO，
-  只能在对应平台上构建（`scripts/pack-desktop.mjs` 强制 target = 本机平台），
-  mac/linux 介质由 CI 原生 runner 产出。
-- **服务版 zip（本节所述绿色包）**：目录形态 zip，使用用户安装的 Node ≥ 22.19.0，
-  不携带 Node 二进制。launcher、relay、connector 使用纯 JS 与 Node 内置模块；
-  dsh 的依赖包含平台二进制，因此按平台打包。
+- **桌面版**（packages/desktop，Wails）：win / mac / linux 三个发布端，每端再分
+  **setup（安装包）**与 **portable（便携 zip）**两种形态。
+  - setup：win 为 NSIS `setup.exe`（`packaging/desktop-installer.nsi`），mac 为 DMG
+    （hdiutil，拖入 Applications），linux 为 deb（纯 Node 构建，含 `.desktop` 与图标）。
+  - portable：全平台都是解压即用的目录 zip（mac 为 `.app` zip）。
+  - 完整版附带固定版本 Node（清单见 `packaging/desktop-node.json`，SHA-256 校验）与
+    Office 预览引擎；轻量版要求系统 Node ≥ 22.19.0，不带引擎。
+  - 桌面壳依赖系统 WebView/CGO，只能在对应平台上构建（`scripts/pack-desktop.mjs`
+    强制 target = 本机平台），介质由 CI 原生 runner 产出。
+- **服务版 zip（本节所述绿色包）**：仅 Linux x64 一个发布端。目录形态 zip，使用用户
+  安装的 Node ≥ 22.19.0，不携带 Node 二进制。launcher、relay、connector 使用纯 JS 与
+  Node 内置模块；dsh 的依赖包含平台二进制，因此按平台打包。win/mac 不再提供服务版介质。
 
-| 介质 | 命令 | 产物 |
+| 发布端（产物名模式） | lite | full |
 |---|---|---|
-| 服务版 zip（全平台） | pnpm release | release/dsh-station-<version>-<平台>-<变体>.zip |
-| 桌面版 Windows | pnpm release:desktop:win | …-win-x64-desktop-<变体>.zip / -setup.exe |
-| 桌面版 Linux | pnpm release:desktop:linux | …-linux-x64-desktop-<变体>.deb / .zip |
-| 桌面版 macOS | pnpm release:desktop:mac | …-darwin-arm64-desktop-<变体>.zip（.app） |
+| Windows 桌面版（`…-win-x64-desktop-<变体>-setup.exe` / `.zip`） | pnpm release:win:lite | pnpm release:win:full |
+| macOS 桌面版（`…-darwin-arm64-desktop-<变体>.dmg` / `.zip`） | pnpm release:mac:lite | pnpm release:mac:full |
+| Linux 桌面版（`…-linux-x64-desktop-<变体>.deb` / `.zip`） | pnpm release:linux:lite | pnpm release:linux:full |
 
-推 `v*` 标签时 release 工作流在四路 runner（ubuntu 交叉打包 + 三个原生桌面）构建全部介质，
-汇总校验和并附到 GitHub Release。
+Linux 服务版 zip（`…-linux-x64-server-<变体>.zip`）随 `release:linux:<变体>` 一并产出
+（`release:linux:lite` 出 lite 服务版，`:full` 出 full 服务版）。
+
+`pnpm release`（`scripts/release.mjs`，= `--target=all`）是聚合入口：构建一次后按目标
+串起两个打包脚本，打本机桌面版 + Linux 服务版的 lite/full 全部介质；显式目标在非本机
+平台上提前报错，不白跑构建。按变体拆分的六个 `release:<平台>:<变体>` 命令方便只要
+lite 时跳过随包 Node 下载（full 首次下载后缓存在 `.dev/desktop-toolchain`，不再重复下载）。
+推 `v*` 标签时 release 工作流在三个原生 runner 各跑一条
+`node scripts/release.mjs --target=<平台>`（一次构建出双变体），汇总校验和并附到 GitHub Release。
+
+桌面完整版的随包 Node 由 `pack-desktop.mjs` 按 `packaging/desktop-node.json` 的固定 URL 与
+官方 SHA-256 下载验收（当前 v24 LTS，缓存在 `.dev/desktop-toolchain/desktop-node/`，重复打包
+不重新下载；随包只提取 node 二进制与 LICENSE）。默认从 nodejs.org 官方下载，GitHub CI 即如此；
+国内本地打包设 `DSH_STATION_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node` 走镜像，
+镜像沿用官方目录结构，哈希校验不变。
 
 ### 发行变体
 
-每个平台打 lite / full 两个 zip（用户文案：轻量版 / 完整版），文件名带变体后缀，
+每个发布端打 lite / full 两个介质（用户文案：轻量版 / 完整版），文件名带变体后缀，
 没有无后缀的默认包。两者是同一个程序：lite 只剔除引擎类重组件，目前只有 LibreOffice
 引擎（dsh 0.1.6 起 Office 文档转 PDF 预览使用，压缩后每平台约多 58～121 MB）。
 
@@ -41,10 +55,12 @@
 
 ### 介质规划（D22）
 
-win/mac 在桌面版完成该平台实机验收后仅保留桌面版安装包；Linux 保留桌面版与服务版 zip。
-服务版 zip 始终使用系统 Node；桌面版完整版附带固定版本 Node，轻量版仍要求系统 Node。
-完整版的 Office 引擎直接打进安装包，不做按需下载。zip 退役按平台实机验收分别推进，
-不设全局时间点。桌面版打包详见 `packages/desktop/README.md`。
+介质矩阵已收敛为四个发布端：win/mac/linux 桌面版（各 setup + portable × lite/full）
+加 Linux 服务版 zip；win/mac 绿色包退役（2026-09-25 用户决定提前执行，不再等
+mac/linux 桌面版实机验收）。服务版 zip 始终使用系统 Node；桌面版完整版附带固定版本
+Node，轻量版仍要求系统 Node。完整版的 Office 引擎直接打进安装包，不做按需下载。
+桌面版打包详见 `packages/desktop/README.md`；mac/linux 桌面版的实机验收仍按计划 S10
+推进，未验收平台不得宣传为已通过。
 
 ### 跨平台依赖
 
@@ -53,9 +69,10 @@ win/mac 在桌面版完成该平台实机验收后仅保留桌面版安装包；
 supportedArchitectures 是 os × cpu × libc 笛卡尔积，不能直接声明三元组。
 
 - 对应平台被排除的开发机不能直接使用该配置，需要先调整规则。
-- 新增发行目标同时修改 TARGETS、架构配置与 lockfile。
+- 新增发行目标同时修改 TARGETS、SERVER_TARGETS、架构配置与 lockfile。
 - Linux 包要求 glibc，不适用于 Alpine/musl。
-- 全目标命令缺某平台依赖时告警跳过，全部缺失才失败；显式目标缺依赖则失败。
+- 本机缺少目标平台二进制时响亮失败并给出解锁提示；服务版只剩 linux-x64，
+  根配置默认即装它的预编译包。
 - 平台预检同时支持 .pnpm 虚拟 store 与 hoisted 布局。
 - node-pty、sharp、koffi、ripgrep 等平台工件会裁剪到目标系统。
 
@@ -64,8 +81,9 @@ supportedArchitectures 是 os × cpu × libc 笛卡尔积，不能直接声明�
 ## 2. 产物结构
 
 ```text
-（zip 根目录，解压即用，无版本目录层）
-├─ dsh-station.exe / start.ps1 / start.sh
+（服务版 zip 根目录，解压即用，无版本目录层；桌面版 portable zip 同构，
+  外层多一个桌面壳可执行文件与 runtime/node（仅完整版））
+├─ start.sh
 ├─ README.txt
 ├─ dsh-station.config.example.json
 ├─ package.json
@@ -111,7 +129,11 @@ relay、connector 与壳级 remote-privileged overlay 保持各自包位置，�
 
 Windows 进程树通过 taskkill /T /F 清理；只调用 child.kill() 不足以结束派生 shell。
 
-### Windows 托盘
+### Windows 托盘（已随 win 服务版退役）
+
+> win 服务版 zip 退役（D22）后，`packaging/win-launcher` 的托盘 exe 不再随任何发行介质
+> 构建，也没有打包入口编译它；Windows 上的托盘体验由桌面版（packages/desktop）提供。
+> 目录仍保留：`rsrc_windows_amd64.syso` 资源由桌面壳复用，源码去留见路线图待办。
 
 Go 标准库调用 Win32 API，无 cgo 或 Go 模块依赖。菜单提供打开 dsh 界面（relay 根路径，双击同此）、
 打开管理界面（`/_admin`）、启动/停止/重启、查看日志、开机自启动和退出。两个入口都经 relay，
@@ -135,7 +157,7 @@ relay 图标内联为模块，在 /_icon/ 提供固定字节，不占用 dsh fav
 
 ### 其他入口与首次设置
 
-start.ps1 需要 PowerShell 7；start.sh 使用 POSIX sh，并在归档中保留 0755 权限。
+服务版 zip 用 start.sh 启动（POSIX sh，归档中保留 0755 权限）。
 首次运行后，在启动日志给出的 loopback 控制台设置管理员密码、绑定 TOTP 并确认动态码。
 向导只对“无管理员 + loopback socket + loopback Host”开放。
 无桌面服务器使用 [部署说明](../deploy/README.md) 中的 CLI 初始化流程。
@@ -180,24 +202,27 @@ profile 装载与共享范围见 [决策](01-decisions.md)。
 ```powershell
 pnpm check:dependencies
 pnpm build
-pnpm release:win
+pnpm release:linux:full   # 本机不是 Linux x64 时，服务版 zip 可用 pack.mjs --target=linux-x64 显式交叉打包
 ```
 
-release 支持 `--skip-build` 复用 dist、`--skip-exe` 跳过 Windows exe、`--variant=<lite|full>`
-只打指定变体（默认全打）；不带 target 时选择当前平台。
-不要使用 `pnpm pack` 代替 release，它是 pnpm 自带的包归档命令。
+统一入口 `scripts/release.mjs` 支持 `--target=<win32-x64|linux-x64|darwin-arm64|all>`
+（默认 all = 本机桌面版 + Linux 服务版）、`--variant=<lite|full>` 只打指定变体（默认全打，
+对应 release:<平台>:<lite|full> 六个命令）、`--skip-build` 复用 dist，其余参数（如桌面版
+`--skip-installer`）原样透传给两个打包脚本。显式桌面目标与当前平台不符时在构建前报错，
+不白跑构建。不要使用 `pnpm pack` 代替 release，它是 pnpm 自带的包归档命令。
 
 打包流程：
 
-1. 构建所有工作区产物。
+1. 构建所有工作区产物（release.mjs 构建一次，两个打包脚本共用）。
 2. 检查目标平台依赖。
 3. 一次 pnpm deploy --filter=@dsh-station/launcher --prod 生成自洽依赖树。
-4. 从 `plugin-catalog.json` 生成根目录 `plugins/` 安装介质，再复制平台入口、说明与配置；Windows 额外编译托盘 exe。
+4. 从 `plugin-catalog.json` 生成根目录 `plugins/` 安装介质，再复制平台入口、说明与配置。
 5. 校验插件介质、壳级 overlay 和运行产物，并按目标裁剪平台依赖。
 6. 运行入口冒烟检查；当前平台在裁剪后运行，其他平台在裁剪前验证 JS 依赖图。
-7. 排除 pnpm registry 账本，按变体各写一个 zip：full 直接打包，lite 先剔除
-   引擎类重组件再打包（release/dsh-station-<version>-<zipTag>-<lite|full>.zip）；
-   条目直接放在 zip 根目录，没有版本目录层。
+7. 排除 pnpm registry 账本，按变体各写一个介质：服务版是 full 直接打包、lite 先剔除
+   引擎类重组件再打包的目录 zip（条目直接放在 zip 根目录，没有版本目录层）；桌面版
+   在此基础上再组装 setup（win NSIS / mac DMG / linux deb）与 portable zip，完整版
+   附加固定版本 Node 与桌面壳二进制并跑 `--selfcheck`。
 
 各包依赖保持真实嵌套关系，不手动拍平。任一必要工件或冒烟检查失败时不产出该包。
 

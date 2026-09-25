@@ -1,12 +1,14 @@
 /** 打桌面版安装介质（S8.2/S8.3），输出到 release/：
- *   dsh-station-<version>-<平台>-desktop-<variant>.zip      便携 zip（全平台）
+ *   dsh-station-<version>-<平台>-desktop-<variant>.zip        便携 zip（全平台）
  *   dsh-station-<version>-win-x64-desktop-<variant>-setup.exe  NSIS 安装包（Windows）
- *   dsh-station-<version>-linux-x64-desktop-<variant>.deb   deb 安装包（Linux）
+ *   dsh-station-<version>-linux-x64-desktop-<variant>.deb      deb 安装包（Linux）
+ *   dsh-station-<version>-darwin-arm64-desktop-<variant>.dmg   DMG 安装包（macOS）
  *
- * 桌面二进制依赖系统 WebView/CGO 工具链，只能在对应平台上构建：
- * 本脚本仅支持 target == 本机平台。变体遵循 D21/D22：
+ * 每个平台分 setup（安装包：win NSIS / linux deb / mac DMG）与 portable（便携 zip）
+ * 两种形态（D22），各打 lite/full 两档。桌面二进制依赖系统 WebView/CGO 工具链，
+ * 只能在对应平台上构建：本脚本仅支持 target == 本机平台。变体遵循 D21/D22：
  *   full：完整引擎 + 随包 Node（开箱即用）；lite：裁剪引擎 + 系统 Node。
- * 后台载荷与绿色包同一部署管线（pnpm deploy + 插件介质 + 平台裁剪）。
+ * 后台载荷与服务版 zip 同一部署管线（pnpm deploy + 插件介质 + 平台裁剪）。
  */
 /* oxlint-disable no-await-in-loop -- 目标共用 staging，必须串行部署和验收。 */
 import {
@@ -20,6 +22,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { spawnSync } from 'node:child_process'
@@ -57,6 +60,19 @@ const DESKTOP_README = join(ROOT, 'packaging', 'desktop', 'README.txt')
 const DESKTOP_INFO_PLIST = join(ROOT, 'packaging', 'desktop', 'Info.plist')
 const NODE_MANIFEST_FILE = join(ROOT, 'packaging', 'desktop-node.json')
 const TOOLCHAIN_CACHE = join(ROOT, '.dev', 'desktop-toolchain', 'desktop-node')
+
+/** 随包 Node 的下载地址：默认 nodejs.org 官方（GitHub CI 直接用）；国内本地打包可设
+ * DSH_STATION_NODE_DIST_MIRROR 指向镜像（如 https://npmmirror.com/mirrors/node）。
+ * 镜像沿用官方目录结构，只替换 https://nodejs.org/dist 前缀；文件与官方一致，
+ * SHA-256 仍按 desktop-node.json 里记录的官方校验值验收。 */
+const OFFICIAL_DIST_PREFIX = 'https://nodejs.org/dist'
+const mirrorBase = process.env.DSH_STATION_NODE_DIST_MIRROR?.trim().replace(/\/+$/u, '')
+
+function nodeArchiveUrl(entry) {
+  if (mirrorBase === undefined || mirrorBase === '') return entry.url
+  if (!entry.url.startsWith(OFFICIAL_DIST_PREFIX)) return entry.url
+  return mirrorBase + entry.url.slice(OFFICIAL_DIST_PREFIX.length)
+}
 
 function fail(message, hint) {
   console.error(`\n[pack-desktop] ${message}`)
@@ -162,8 +178,15 @@ function provisionNodeRuntime(targetKey, destination) {
   mkdirSync(archiveCache, { recursive: true })
   if (!existsSync(archivePath)) {
     say(`下载随包 Node ${manifest.version}（${targetKey}）`)
-    const download = spawnSync('curl', ['-sSL', '--retry', '3', '-o', archivePath, entry.url], { stdio: 'inherit' })
-    if (download.status !== 0) fail(`下载 ${entry.url} 失败。`, '网络可用时重试；也可手动下载后放到 ' + archiveCache)
+    const download = spawnSync('curl', ['-sSL', '--retry', '3', '-o', archivePath, nodeArchiveUrl(entry)], { stdio: 'inherit' })
+    if (download.status !== 0) {
+      fail(
+        `下载 ${nodeArchiveUrl(entry)} 失败。`,
+        '网络可用时重试；也可手动下载后放到 ' + archiveCache
+        + '。国内网络建议设 DSH_STATION_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node 走镜像'
+        + '（GitHub CI 不设，直接走 nodejs.org 官方）。',
+      )
+    }
   }
   const digest = createHash('sha256').update(readFileSync(archivePath)).digest('hex')
   if (digest !== entry.sha256) {
@@ -298,7 +321,7 @@ function writeInstallFiles(install, variantKey) {
     name: 'dsh-station-desktop',
     version,
     variant: variantKey,
-    dsh: manifest?.version ?? null,
+    node: manifest?.version ?? null,
   }, undefined, 2)}\n`)
 }
 
@@ -396,6 +419,24 @@ async function buildTarget(targetKey) {
     const zipBytes = await zipDirectory(install, portableZip)
     results.push({ kind: 'zip', output: portableZip, bytes: zipBytes, variantKey })
 
+    if (target.platform === 'darwin' && !skipInstaller) {
+      say('组装 DMG（拖入 Applications 安装的 setup 介质）')
+      // darwin 的 install/ 只含 .app；临时放一个 Applications 软链形成拖拽安装布局。
+      // hdiutil 把软链原样写进 DMG，打完即删——便携 zip 已在上一步写完，不受影响。
+      const applicationsLink = join(install, 'Applications')
+      symlinkSync('/Applications', applicationsLink)
+      const dmgOutput = join(context.release, `${prefix}-${target.zipTag}-desktop-${variant.zipTag}.dmg`)
+      rmSync(dmgOutput, { force: true })
+      const create = spawnSync('hdiutil', [
+        'create', '-volname', 'DSH 工作站', '-srcfolder', install, '-format', 'UDZO', '-ov', dmgOutput,
+      ], { stdio: 'inherit' })
+      rmSync(applicationsLink, { force: true })
+      if (create.status !== 0) {
+        fail('hdiutil 生成 DMG 失败。', 'DMG 只能在 macOS 上打（CI 由 macos 原生 runner 执行）。')
+      }
+      results.push({ kind: 'installer', output: dmgOutput, bytes: statSync(dmgOutput).size, variantKey })
+    }
+
     if (target.platform === 'win32' && !skipInstaller) {
       const makensis = spawnSync('makensis', ['-VERSION'], { encoding: 'utf8' })
       if (makensis.status !== 0) {
@@ -475,5 +516,6 @@ for (const item of built) {
   console.log(`       ${item.variantKey} · ${item.kind}（${formatSize(item.bytes)}）
          文件: ${item.output}`)
 }
+console.log('       每个平台各有 setup（安装包）与 portable（便携 zip）两种形态。')
 console.log('       完整版自带 Node 与 Office 引擎；轻量版要求系统 Node ≥ 22.19.0。')
 console.log('       macOS/Linux 的实机验收按计划 S10 执行，未验收平台不得宣传为已通过。\n')

@@ -23,11 +23,20 @@ Wails v2.16.0 + Go 原生层的桌面壳：托管自己的 Node launcher 后台�
 ```powershell
 pnpm dev:desktop                 # attach 开发模式（需先 pnpm dev 起 31809 栈；启动前探测端口，未就绪则提示后退出）
 pnpm dev:desktop -- --selfcheck  # 只检查参数，不创建窗口
-pnpm release:desktop:win         # 打 Windows 桌面安装包 + 便携 zip（lite/full）
+pnpm release:win:lite            # 只打 Windows 桌面轻量版（setup + 便携 zip；不下载随包 Node）
+pnpm release:win:full            # 只打 Windows 桌面完整版（首次下载随包 Node，之后走缓存）
+pnpm release:mac:lite / :full    # 同理，macOS 桌面介质（DMG + .app 便携 zip）
+pnpm release:linux:lite / :full  # Linux 桌面介质（deb + 便携 zip）+ 对应变体的服务版 zip
 ```
 
-打包脚本 `scripts/pack-desktop.mjs` 只能在目标平台上构建（Wails 依赖系统 WebView/CGO，
-不支持交叉编译）；mac/linux 桌面包由 CI 的原生 runner 产出。独立模式自检：
+每个桌面平台分 setup（安装包）与 portable（便携 zip）两种形态（D22），命令按平台 ×
+变体拆分。统一发布入口 `scripts/release.mjs`（`pnpm release` = 本机桌面版双变体 +
+Linux 服务版）构建一次后串起 `pack-desktop.mjs` 与服务版打包。打包脚本只能在目标平台
+上构建（Wails 依赖系统 WebView/CGO，不支持交叉编译）；mac/linux 桌面包由 CI 的原生
+runner 产出。完整版的随包 Node 按 `packaging/desktop-node.json` 的官方 SHA-256 下载
+验收，默认走 nodejs.org（GitHub CI）；国内本地打包设
+`DSH_STATION_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node` 走镜像。
+独立模式自检：
 
 ```powershell
 dsh-station.exe --selfcheck          # 校验载荷发现（package/ + runtime/node 或系统 Node）

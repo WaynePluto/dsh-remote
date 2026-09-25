@@ -1,28 +1,28 @@
 {
-  "$comment": "桌面版完整版内置的 Node 运行时清单（D21/D22）。sha256 是 nodejs.org 官方压缩包的校验值（2026-09-25 逐一下载核对）；升级版本时同步更新三平台条目。随包只提取 node 二进制与 LICENSE，许可证随包分发。轻量版桌面版不携带 Node，使用用户安装的 Node ≥ 22.19.0（launcher 自带版本门禁）。",
-  "version": "24.19.0",
+  "$comment": "桌面版完整版内置的 Node 运行时清单（D21/D22）。sha256 是 nodejs.org 官方压缩包的校验值（取自 v24.21.0 的 SHASUMS256.txt）；升级版本时同步更新三平台条目。随包只提取 node 二进制与 LICENSE，许可证随包分发。轻量版桌面版不携带 Node，使用用户安装的 Node ≥ 22.19.0（launcher 自带版本门禁）。",
+  "version": "24.21.0",
   "minimum": "22.19.0",
   "platforms": {
     "win32-x64": {
-      "archive": "node-v24.19.0-win-x64.zip",
-      "url": "https://nodejs.org/dist/v24.19.0/node-v24.19.0-win-x64.zip",
-      "sha256": "57f71ab3652e797d84acddc79c81cc9ff1c6ddb2a1974cdb83f00fee9bff4c73",
-      "binary": "node-v24.19.0-win-x64/node.exe",
-      "license": "node-v24.19.0-win-x64/LICENSE"
+      "archive": "node-v24.21.0-win-x64.zip",
+      "url": "https://nodejs.org/dist/v24.21.0/node-v24.21.0-win-x64.zip",
+      "sha256": "158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541",
+      "binary": "node-v24.21.0-win-x64/node.exe",
+      "license": "node-v24.21.0-win-x64/LICENSE"
     },
     "linux-x64": {
-      "archive": "node-v24.19.0-linux-x64.tar.gz",
-      "url": "https://nodejs.org/dist/v24.19.0/node-v24.19.0-linux-x64.tar.gz",
-      "sha256": "f625d97cd707df4ff96254916fbc5ff014f09c09effe5a1e0ca8f6d41a8789d4",
-      "binary": "node-v24.19.0-linux-x64/bin/node",
-      "license": "node-v24.19.0-linux-x64/LICENSE"
+      "archive": "node-v24.21.0-linux-x64.tar.gz",
+      "url": "https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-x64.tar.gz",
+      "sha256": "6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff",
+      "binary": "node-v24.21.0-linux-x64/bin/node",
+      "license": "node-v24.21.0-linux-x64/LICENSE"
     },
     "darwin-arm64": {
-      "archive": "node-v24.19.0-darwin-arm64.tar.gz",
-      "url": "https://nodejs.org/dist/v24.19.0/node-v24.19.0-darwin-arm64.tar.gz",
-      "sha256": "8294b7aa9b03997481c06babf1e8b270c859358f27da57a11509afe537ac381d",
-      "binary": "node-v24.19.0-darwin-arm64/bin/node",
-      "license": "node-v24.19.0-darwin-arm64/LICENSE"
+      "archive": "node-v24.21.0-darwin-arm64.tar.gz",
+      "url": "https://nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-arm64.tar.gz",
+      "sha256": "bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057",
+      "binary": "node-v24.21.0-darwin-arm64/bin/node",
+      "license": "node-v24.21.0-darwin-arm64/LICENSE"
     }
   }
 }

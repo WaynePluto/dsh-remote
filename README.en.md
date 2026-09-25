@@ -49,21 +49,31 @@ Every machine running dsh-station is **identical**: its own dsh, a console, and 
 | | Requirement |
 |---|---|
 | OS | Windows / Linux / macOS |
-| Node.js | **22.19+** (LTS from [nodejs.org](https://nodejs.org); check with `node -v`) |
+| Node.js | **22.19+ for the lite editions and the server zip** (LTS from [nodejs.org](https://nodejs.org); check with `node -v`); **the desktop full edition bundles its own Node — no install needed** |
 | Network | Exposed machines must reach the entry machine; the entry machine must be reachable if it is on the public internet |
 | dsh | **Not needed** — bundled in the package |
 
 ## Install
 
-Download the zip for **your platform** from [Releases](../../releases) and unpack (dsh is included). Each platform comes in **lite / full** (轻量版 / 完整版) variants — pick what you need:
+Download the media for **your platform** from [Releases](../../releases) (dsh is included). There are four release targets: the Windows / macOS / Linux desktop apps and the Linux server zip. Every medium comes in **lite / full** (轻量版 / 完整版) variants, and each desktop target further ships in **setup (installer)** and **portable zip** forms — pick what you need:
 
 | Feature | lite | full |
 |---|---|---|
 | dsh core features | ✅ | ✅ |
 | Office document preview | ❌ | ✅ |
+| Node runtime | **not bundled** — requires system Node ≥ 22.19.0 | bundled pinned Node |
 
-- **Windows**: double-click `dsh-station.exe`. The exe is unsigned; if SmartScreen complains, choose "More info → Run anyway". Or run `pwsh -File .\start.ps1`
-- **Linux / macOS**: `./start.sh`
+| Release target | setup (installer) | portable zip |
+|---|---|---|
+| Windows desktop | `…-desktop-<variant>-setup.exe` | `…-desktop-<variant>.zip` |
+| macOS desktop | `…-desktop-<variant>.dmg` (drag to Applications) | `…-desktop-<variant>.zip` (contains .app) |
+| Linux desktop | `…-desktop-<variant>.deb` | `…-desktop-<variant>.zip` |
+
+The fourth target is the **Linux server zip** (`…-linux-x64-server-<variant>.zip`): for headless servers, unpack and run `./start.sh`; it always requires system Node ≥ 22.19.0 and carries no Node binary.
+
+- **The lite edition does not bundle Node.js** — install Node ≥ 22.19.0 yourself before starting it; the full edition bundles a pinned Node and works out of the box.
+- Installers and executables are unsigned; SmartScreen / Gatekeeper may warn about an unknown publisher.
+- The macOS app is notarized neither — allow it under System Settings → Privacy & Security on first launch.
 
 > Packages are per-platform because dsh's dependencies ship prebuilt platform binaries; dsh-station's own code has zero native modules.
 
@@ -98,16 +108,15 @@ pnpm install
 pnpm release
 ```
 
-`pnpm release` builds first (skip with `--skip-build`), targets the host platform by default (`--target=all` for all), packs both lite and full variants per platform (filter with `--variant=lite`), and writes the zips to `release/` — unpack and start it as above. Packing requires pnpm >=10 (the project does not force a local pnpm version; CI pins 10.17.0 for reproducibility). The Windows `dsh-station.exe` is compiled with [Go](https://go.dev/dl/); without Go, add `--skip-exe` and that package starts via `start.ps1` only.
+Release commands are split per platform × variant: `pnpm release:win:lite` / `pnpm release:win:full` (same for mac/linux; `release:linux:<variant>` also packs the matching server zip), while `pnpm release` packs everything the current machine can produce (host desktop both variants + Linux server zip). The unified entry is `scripts/release.mjs`: it builds once and chains the two packers; `--skip-build` reuses dist. The full edition downloads its bundled Node (~30 MB per platform) on the first pack and caches it under `.dev/desktop-toolchain` afterwards (set `DSH_STATION_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node` in China to use the mirror); use the `:lite` commands to skip the download entirely. Desktop shells depend on the system WebView/CGO toolchain, so they can only be built on their own platform — the release workflow's native runners cover the rest. Packing requires pnpm >=10 (the project does not force a local pnpm version; CI pins 10.17.0 for reproducibility).
 
 ## First start
 
-Unpack and start on the machine you want as the **entry machine** (double-click `dsh-station.exe` on Windows, run `./start.sh` on Linux / macOS). The first start has no admin account yet, and the program hands you the setup address:
+**Desktop**: install (or unpack) and launch — no admin account is needed to use the local dsh workspace. The first time you open the admin console (the remote capability entry), a wizard guides you through creating the admin name, password, and TOTP.
 
-- **Windows**: the tray pops up a "setup not finished" notification — clicking it opens the setup page; started via `start.ps1`, the terminal prints the same address
-- **Linux / macOS**: the `./start.sh` terminal prints an address like `http://127.0.0.1:30809`
+**Linux server zip**: unpack and run `./start.sh` on the machine you want as the **entry machine**. The first start has no admin account yet; the terminal prints an address like `http://127.0.0.1:30809` — open it in a browser to finish setup. Headless servers can use the [CLI init flow](deploy/README.md) instead.
 
-Open it **on that machine** in a browser:
+Complete the wizard **on that machine**:
 
 1. Pick the account name (pre-filled `admin`; letters, digits and `. _ -`) and set the admin password (at least 6 characters, mixing at least 3 of: upper case, lower case, digits, symbols)
 2. Scan the QR code with an authenticator app (Microsoft / Google Authenticator, 1Password, …)
@@ -117,7 +126,7 @@ From then on, access from your phone or any other computer uses **that account n
 
 > 🔒 The setup wizard is **loopback-only** (`127.0.0.1`); anyone else on the LAN only sees "finish setup on that machine" and cannot hijack the admin account. On a headless server the wizard is out of reach — see "Emergency" below.
 
-Restart once and every access address is printed — in the terminal if you started it there, otherwise in the log shown by the tray menu's "View log":
+Restart once and every access address is printed — the server zip prints to the terminal, and the desktop app shows them on its "Remote admin" page:
 
 ```
   ✓ Node v22.19.0
@@ -246,7 +255,7 @@ so the installed link remains valid. Development conventions and the usual check
 | [docs/03-architecture.md](docs/03-architecture.md) | components, tunnel protocol, request flow |
 | [docs/04-security.md](docs/04-security.md) | auth design, threat model, accepted risks |
 | [docs/05-roadmap.md](docs/05-roadmap.md) | milestones and acceptance criteria |
-| [docs/06-packaging.md](docs/06-packaging.md) | portable package layout, launcher, dependencies |
+| [docs/06-packaging.md](docs/06-packaging.md) | release media, launcher, dependencies |
 
 ## Status
 
@@ -256,7 +265,7 @@ The tunnel, authentication, portable packages, and 20 functional plugin componen
 |---|---|
 | dsh version | `0.1.7-rc.1` (next channel, developer preview, **breaking changes expected**) |
 | dsh Node requirement | `^22.19.0 \|\| >=24.0.0` |
-| Runtime policy | current zips all use your local Node, no Node binary bundled; the desktop full edition (planned) will bundle a pinned Node |
+| Runtime policy | the Linux server zip and desktop lite editions use the system Node; desktop full editions bundle a pinned Node (verified against official SHA-256) |
 | Native modules | zero in our own code (scrypt from Node core); dsh ships prebuilt per-platform binaries, hence per-platform packages |
 
 ## License
