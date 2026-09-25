@@ -1,5 +1,6 @@
 ; DSH 工作站 Windows 安装包（NSIS）。
-; 由 scripts/pack-desktop.mjs 填充 {{OUTPUT}}（产物路径）与 {{INSTALL}}（待安装目录）后调用 makensis。
+; 由 scripts/pack-desktop.mjs 填充 {{OUTPUT}}（产物路径）、{{INSTALL}}（待安装目录）、
+; {{VERSION}} 与 {{ICON}}（packaging/dsh-station.ico）后调用 makensis。
 ; 安装到 Program Files\dsh-station，创建开始菜单/桌面快捷方式与卸载项；
 ; 用户数据在 ~/.dsh-station 与 ~/.dsh，卸载不触碰。
 Unicode true
@@ -13,7 +14,10 @@ Name "${APPNAME}"
 OutFile "{{OUTPUT}}"
 InstallDir "$PROGRAMFILES64\${APPID}"
 RequestExecutionLevel admin
-SetCompress off
+; 载荷是几百 MB 的 node_modules：存储模式（SetCompress off）会让 setup.exe 是便携 zip 的 3 倍多。
+SetCompressor /SOLID lzma
+Icon "{{ICON}}"
+UninstallIcon "{{ICON}}"
 
 Page directory
 Page instfiles
@@ -33,6 +37,7 @@ Section "install"
   WriteRegStr HKLM "${UNINSTKEY}" "DisplayVersion" "{{VERSION}}"
   WriteRegStr HKLM "${UNINSTKEY}" "Publisher" "dsh-station"
   WriteRegStr HKLM "${UNINSTKEY}" "UninstallString" "$INSTDIR\uninstall.exe"
+  WriteRegStr HKLM "${UNINSTKEY}" "DisplayIcon" "$INSTDIR\dsh-station.exe"
   WriteRegDWORD HKLM "${UNINSTKEY}" "NoModify" 1
   WriteRegDWORD HKLM "${UNINSTKEY}" "NoRepair" 1
 SectionEnd

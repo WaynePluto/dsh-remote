@@ -188,12 +188,13 @@ pnpm outdated -r
 升级前记下旧版本号，升级后全文搜索：
 
 ```powershell
-rg -n "<旧版本号>" README.md docs
+rg -n "<旧版本号>" README.md README.en.md docs
 ```
 
 已知承载 dsh 版本号的位置：
 
-- `README.md` 的环境表「dsh 版本」一行
+- `README.md`：顶部「当前内置 dsh」行，以及「当前进度」表的「dsh 版本」行；dsh 的 Node 要求变化时同步「dsh 要求 Node」行
+- `README.en.md`：顶部「Bundled dsh」行与 Status 表对应行，随中文版一起改
 - `docs/02-dsh-facts.md` 开头的「结论基于 dsh 版本 / git 提交」声明（同时更新 git 短哈希与 tag）
 - `docs/dsh/` 中受影响的现行契约与检查入口
 - `docs/05-roadmap.md` 中的当前版本与进度

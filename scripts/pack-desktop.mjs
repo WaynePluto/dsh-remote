@@ -56,6 +56,7 @@ import { directorySize, formatSize } from './pack/archive.mjs'
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const DESKTOP_SOURCE_DIR = join(ROOT, 'packages', 'desktop')
 const INSTALLER_TEMPLATE = join(ROOT, 'packaging', 'desktop-installer.nsi')
+const INSTALLER_ICON = join(ROOT, 'packaging', 'dsh-station.ico')
 const DESKTOP_README = join(ROOT, 'packaging', 'desktop', 'README.txt')
 const DESKTOP_INFO_PLIST = join(ROOT, 'packaging', 'desktop', 'Info.plist')
 const NODE_MANIFEST_FILE = join(ROOT, 'packaging', 'desktop-node.json')
@@ -257,7 +258,10 @@ function extractIconPng() {
 function buildDesktopBinary(target, output) {
   say(`编译桌面壳：${target.executable}`)
   const tags = context.platform === 'win32' ? 'production,wv2runtime.error' : 'production'
-  const result = spawnSync('go', ['build', '-tags', tags, '-o', output, '.'], {
+  // win32 裸 go build 产出控制台子系统：双击先弹黑终端再进主窗口，发行产物必须链成 GUI 子系统。
+  // dev:desktop 走 go run 不经过这里（保留控制台便于看日志）；--selfcheck 的 stdout 是管道，不受子系统影响。
+  const windowsGui = context.platform === 'win32' ? ['-ldflags', '-H=windowsgui'] : []
+  const result = spawnSync('go', ['build', '-tags', tags, ...windowsGui, '-o', output, '.'], {
     cwd: DESKTOP_SOURCE_DIR,
     stdio: 'inherit',
     env: { ...process.env, GOTOOLCHAIN: 'local' },
@@ -445,10 +449,13 @@ async function buildTarget(targetKey) {
       } else {
         const setupOutput = join(context.release, `${prefix}-${target.zipTag}-desktop-${variant.zipTag}-setup.exe`)
         const script = join(context.staging, 'desktop-installer.nsi')
-        writeFileSync(script, readFileSync(INSTALLER_TEMPLATE, 'utf8')
+        // 无 BOM 的 UTF-8 会被 makensis 按系统代码页解析（中文 Windows 是 GBK），含中文的脚本直接
+        // Bad text encoding；带 BOM 才强制按 UTF-8 读取。CI 的英文 locale 侥幸能过，本地中文必炸。
+        writeFileSync(script, '\uFEFF' + readFileSync(INSTALLER_TEMPLATE, 'utf8')
           .replaceAll('{{OUTPUT}}', setupOutput.replaceAll('/', '\\'))
           .replaceAll('{{INSTALL}}', install.replaceAll('/', '\\'))
-          .replaceAll('{{VERSION}}', version))
+          .replaceAll('{{VERSION}}', version)
+          .replaceAll('{{ICON}}', INSTALLER_ICON.replaceAll('/', '\\')))
         const compile = spawnSync('makensis', [script], { stdio: 'inherit' })
         if (compile.status !== 0) fail('NSIS 编译失败。')
         results.push({ kind: 'installer', output: setupOutput, bytes: statSync(setupOutput).size, variantKey })

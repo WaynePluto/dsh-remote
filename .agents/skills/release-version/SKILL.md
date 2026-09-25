@@ -64,6 +64,16 @@ pnpm check:dependencies                                         # 抓 version.ts
 pnpm --filter @dsh-station/launcher test                        # 固定版本断言
 ```
 
+**随包 Node 运行时（每轮发布检查一次）**：完整版（full）内置的 Node 跟随本项目发版节奏，
+不在发版间隙单独追新。发布时查一次 [nodejs.org](https://nodejs.org) 当时的最新 LTS，比
+`packaging/desktop-node.json` 的 `version` 新就更新该清单：`version`、三平台条目的
+`archive` / `url` / `binary` / `license` 与 `sha256`（取自官方 SHASUMS256.txt），
+`$comment` 里的版本号同步。新版必须满足根 `engines`（`^22.19.0 || >=24.0.0`）；
+`minimum` 字段跟随 engines 与轻量版门禁，不随 Node 升级而动。打包缓存按版本号归档
+（`.dev/desktop-toolchain` 下的文件名都带版本），升版本后自动重新下载并重过 SHA-256 校验，
+无需手动清缓存。改了版本就同步 README（中英文）安装表「Node 运行时」单元格里的内置版本号，
+并在 changelog 记一行「随包 Node <旧> → <新>」。没有新 LTS 时这步什么都不改。
+
 ## 步骤三：changelog
 
 - **预发布**：新建 `docs/changelog/<新版本>.md`，先吸收刚删掉的旧预发布文档的全部内容
