@@ -6,7 +6,7 @@ Wails v2.16.0 + Go 原生层的桌面壳：托管自己的 Node launcher 后台�
 - **独立模式（默认）**：双击即用。发现随包载荷（`package/`）与随包/系统 Node 后，
   以 `--desktop` 拉起 launcher，AssetServer 常驻「启动/故障状态页」，后台就绪后对根路径
   一次 HTTP 302 进入真实 relay origin；业务流量不走 AssetServer。托盘提供
-  **显示 / 打开 → 网页、管理 / 启动后台 / 停止后台 / 重启后台 / 退出**，悬停提示显示阶段。
+  **显示 / 在浏览器中打开 → 工作台、远程管理 / 启动后台 / 停止后台 / 重启后台 / 退出**，悬停提示显示阶段。
   退出（托盘）与崩溃（Windows Job Object KILL_ON_JOB_CLOSE）都会回收自有后台进程树。
 - **attach 开发模式（`--attach`）**：附着到已运行的 31809 开发栈（独立 home
   `~/.dsh-station-dev` + `~/.dsh-dev`，可与发行版实例同时运行），不管理它的进程；
@@ -21,7 +21,7 @@ Wails v2.16.0 + Go 原生层的桌面壳：托管自己的 Node launcher 后台�
 ## 命令
 
 ```powershell
-pnpm dev:desktop                 # attach 开发模式（需先 pnpm dev 起 31809 栈）
+pnpm dev:desktop                 # attach 开发模式（需先 pnpm dev 起 31809 栈；启动前探测端口，未就绪则提示后退出）
 pnpm dev:desktop -- --selfcheck  # 只检查参数，不创建窗口
 pnpm release:desktop:win         # 打 Windows 桌面安装包 + 便携 zip（lite/full）
 ```
@@ -52,7 +52,8 @@ launcher 以 `--desktop` 运行时（`packages/launcher/src/desktop-link.ts`）�
 窗口为 Wails `Frameless`，每次顶层导航后经 `OnDomReady` 向页面注入一条 36px 自绘标题栏
 （`chromebar.go`）：logo + DSH 工作站 + 页面/应用 + ─ ❐ ✕；主题跟随页面 body 背景色。
 脚本带 `location.origin` 守卫，只在 relay 页面注入（独立模式的状态页不注入）。
-`页面` 菜单含主页/管理（页面内切换）与「在浏览器中打开」回退；窗口控制是「业务页零 Go
+`转到` 菜单含工作台/远程管理（页面内切换）与「在浏览器中打开」回退；`工作站` 菜单含
+重新加载、隐藏到托盘与退出（与状态页「远程管理」、托盘子菜单用词一致）；窗口控制是「业务页零 Go
 bindings」的唯一书面例外：`Chrome` 绑定只含 Minimize/ToggleMaximize/Hide/Quit/
 OpenExternalHome/OpenExternalAdmin 六个无参方法，`BindingsAllowedOrigins` 仅追加本机
 relay origin。Wails v2.16 运行时（`window.go`）只存在于资产服务器主页面，relay 页面上
@@ -68,7 +69,7 @@ Go 不复制 launcher 的配置解析，BindingsAllowedOrigins 又无法运行�
 ## 后台状态页（独立模式）
 
 `statuspage.go` 在后台未就绪时渲染自刷新（1.5s）的轻量页面：阶段、原因提示、本机入口与
-管理台链接（仅 loopback 地址）。就绪后对 `/` 发一次 302 进入 relay。后台停止/失败时，
+远程管理链接（仅 loopback 地址）。就绪后对 `/` 发一次 302 进入 relay。后台停止/失败时，
 Go 把窗口导航回状态页；用户可从托盘「启动/重启后台」恢复。页面不携带任何凭据。
 
 ## 平台

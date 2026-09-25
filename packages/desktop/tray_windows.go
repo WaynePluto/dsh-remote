@@ -325,15 +325,15 @@ func (tray *desktopTrayState) init() (err error) {
 		desktopTrayDestroyMenu.Call(openMenu)
 		return err
 	}
-	if err = appendDesktopTrayMenu(openMenu, desktopTrayMFString, desktopTrayBrowser, "网页"); err != nil {
+	if err = appendDesktopTrayMenu(openMenu, desktopTrayMFString, desktopTrayBrowser, "工作台"); err != nil {
 		desktopTrayDestroyMenu.Call(openMenu)
 		return err
 	}
-	if err = appendDesktopTrayMenu(openMenu, desktopTrayMFString, desktopTrayAdmin, "管理"); err != nil {
+	if err = appendDesktopTrayMenu(openMenu, desktopTrayMFString, desktopTrayAdmin, "远程管理"); err != nil {
 		desktopTrayDestroyMenu.Call(openMenu)
 		return err
 	}
-	if err = appendDesktopTrayMenu(tray.menu, desktopTrayMFPopup, openMenu, "打开"); err != nil {
+	if err = appendDesktopTrayMenu(tray.menu, desktopTrayMFPopup, openMenu, "在浏览器中打开"); err != nil {
 		desktopTrayDestroyMenu.Call(openMenu)
 		return err
 	}

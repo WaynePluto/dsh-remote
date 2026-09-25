@@ -21,7 +21,7 @@ var chromebarLogoSVG string
 // 没有任意 URL、执行或文件能力。
 type Chrome struct {
 	currentWindow func() context.Context
-	// resolve 在调用时解析主页/管理地址：独立模式下 relay 端口由后台
+	// resolve 在调用时解析工作台/远程管理地址：独立模式下 relay 端口由后台
 	// 上报后才确定；attach 模式返回启动参数里的静态地址。
 	resolve func() (home string, admin string)
 }
@@ -68,7 +68,7 @@ func (c *Chrome) OpenExternalAdmin() {
 }
 
 // chromebarScript 是注入到每个顶层页面的自绘标题栏。
-// Wails 的 OnDomReady 在每次顶层导航（含 页面→主页/管理 的 location.assign）
+// Wails 的 OnDomReady 在每次顶层导航（含 转到→工作台/远程管理 的 location.assign）
 // 后都会触发；脚本以元素 ID 幂等，SPA 内重渲染不会重复创建。
 // 拖拽与边缘缩放按 v2.16 消息协议在本脚本内复刻（Wails 运行时不在 relay 页面）；
 // 主题取自页面 body 背景色。
@@ -159,14 +159,19 @@ const chromebarScript = `(function(){
     return wrap;
   };
   document.addEventListener('click',closeAll);
-  bar.appendChild(menu('页面',[
-    ['主页',function(){location.assign(RELAY)}],
-    ['管理',function(){location.assign(ADMIN)}],
+  bar.appendChild(menu('转到',[
+    ['工作台',function(){location.assign(RELAY)}],
+    ['远程管理',function(){location.assign(ADMIN)}],
     ['-'],
-    ['主页（在浏览器中打开）',call('OpenExternalHome')],
-    ['管理（在浏览器中打开）',call('OpenExternalAdmin')]
+    ['在浏览器中打开工作台',call('OpenExternalHome')],
+    ['在浏览器中打开远程管理',call('OpenExternalAdmin')]
   ]));
-  bar.appendChild(menu('应用',[['隐藏',call('Hide')],['退出',call('Quit')]]));
+  bar.appendChild(menu('工作站',[
+    ['重新加载',function(){location.reload()}],
+    ['-'],
+    ['隐藏到托盘',call('Hide')],
+    ['退出',call('Quit')]
+  ]));
   var spacer=document.createElement('div');
   spacer.style.cssText='flex:1;height:100%';
   bar.appendChild(spacer);

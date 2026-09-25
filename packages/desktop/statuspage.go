@@ -126,7 +126,7 @@ small{opacity:.6}
 	}
 	if status.HasURLs && (status.Phase == phaseReady || status.Phase == phasePlugins || status.Phase == phaseDsh || status.Phase == phaseRelay) {
 		builder.WriteString(`<div class="urls"><a href="` + html.EscapeString(status.URLs.Local) + `">在系统浏览器中打开</a>` +
-			` · <a href="` + html.EscapeString(status.URLs.Admin) + `">管理控制台</a>` +
+			` · <a href="` + html.EscapeString(status.URLs.Admin) + `">远程管理</a>` +
 			`<br><small>本机入口 <code>` + html.EscapeString(status.URLs.Local) + `</code></small></div>`)
 	}
 	builder.WriteString(`</main>`)

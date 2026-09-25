@@ -51,7 +51,7 @@ func TestBuildChromeBarScript(t *testing.T) {
 		}
 	}
 	if !strings.Contains(script, `'http://127.0.0.1:31809/'`) || !strings.Contains(script, `'http://127.0.0.1:31809/_admin'`) {
-		t.Fatal("脚本未包含主页/管理地址")
+		t.Fatal("脚本未包含工作台/远程管理地址")
 	}
 	if !strings.Contains(script, `'DSH 工作站'`) {
 		t.Fatal("独立模式标题不应带后缀")
