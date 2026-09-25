@@ -16,7 +16,7 @@
     "plugins:prepare": "node scripts/plugin-distributions.mjs .dev/plugins",
     "dev:runtime": "node scripts/dev-runtime.mjs",
     "desktop:prepare": "node scripts/prepare-desktop.mjs",
-    "dev:desktop": "pnpm desktop:prepare && go -C packages/desktop run -tags=production,wv2runtime.error . --attach --relay-url http://127.0.0.1:30809/",
+    "dev:desktop": "pnpm desktop:prepare && go -C packages/desktop run -tags=production,wv2runtime.error . --attach --relay-url http://127.0.0.1:31809/",
     "dev": "pnpm plugins:build && pnpm plugins:prepare && pnpm dev:runtime && node --import tsx scripts/dev-stack.mjs",
     "start": "node --import tsx scripts/dev-stack.mjs --built",
     "relay:init": "node scripts/relay-cli.mjs init",

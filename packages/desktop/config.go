@@ -30,7 +30,7 @@ func parseRunOptions(arguments []string) (runOptions, error) {
 	flags := flag.NewFlagSet("dsh-station-desktop", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	attach := flags.Bool("attach", false, "开发模式：连接到已有的开发栈，不管理它的进程")
-	address := flags.String("relay-url", "http://127.0.0.1:30809/", "现有开发栈的本机 relay URL（仅 --attach）")
+	address := flags.String("relay-url", "http://127.0.0.1:31809/", "现有开发栈的本机 relay URL（仅 --attach；默认端口见 scripts/local-config.mjs）")
 	appDir := flags.String("app-dir", "", "覆盖随包载荷目录（package/ 的父目录）；默认从 exe 位置发现")
 	selfCheck := flags.Bool("selfcheck", false, "只检查参数与载荷发现，不启动窗口或后台")
 	if err := flags.Parse(arguments); err != nil {
@@ -55,7 +55,7 @@ func parseRunOptions(arguments []string) (runOptions, error) {
 			selfCheck: *selfCheck,
 		}, nil
 	}
-	if *address != "http://127.0.0.1:30809/" {
+	if *address != "http://127.0.0.1:31809/" {
 		return runOptions{}, errors.New("--relay-url 只在 --attach 模式下有效；独立模式的后台自己决定端口")
 	}
 	return runOptions{mode: modeStandalone, appDir: *appDir, selfCheck: *selfCheck}, nil

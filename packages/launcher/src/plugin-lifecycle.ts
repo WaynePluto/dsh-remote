@@ -206,9 +206,13 @@ function copyRuntimeDependencyClosure(
       }
       fs.symlinkSync(shared, target, process.platform === 'win32' ? 'junction' : 'dir')
     } else {
-      fs.cpSync(source, target, {
+      // pnpm 的 node_modules 条目可能是 junction/symlink；cpSync 默认按符号
+      // 链接复制会在目标处再次创建符号链接，进程没有符号链接特权时 EPERM。
+      // 先解析到真实目录再复制，媒体得到自包含的真实文件。
+      const realSource = fs.realpathSync(source)
+      fs.cpSync(realSource, target, {
         recursive: true,
-        filter: path => path === source || basename(path) !== 'node_modules',
+        filter: path => path === realSource || basename(path) !== 'node_modules',
       })
     }
     if (isObject(manifest.dependencies)) pending.push(...Object.keys(manifest.dependencies))

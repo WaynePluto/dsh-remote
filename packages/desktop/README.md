@@ -8,8 +8,10 @@ Wails v2.16.0 + Go 原生层的桌面壳：托管自己的 Node launcher 后台�
   一次 HTTP 302 进入真实 relay origin；业务流量不走 AssetServer。托盘提供
   **显示 / 打开 → 网页、管理 / 启动后台 / 停止后台 / 重启后台 / 退出**，悬停提示显示阶段。
   退出（托盘）与崩溃（Windows Job Object KILL_ON_JOB_CLOSE）都会回收自有后台进程树。
-- **attach 开发模式（`--attach`）**：附着到已运行的 30809 开发栈，不管理它的进程；
-  无通知管道令牌，桌面通知点击定位在开发模式不可用（插件回落普通 toast）。
+- **attach 开发模式（`--attach`）**：附着到已运行的 31809 开发栈（独立 home
+  `~/.dsh-station-dev` + `~/.dsh-dev`，可与发行版实例同时运行），不管理它的进程；
+  窗口与自绘条标题带「 (dev)」后缀以便和发行版实例区分；无通知管道令牌，
+  桌面通知点击定位在开发模式不可用（插件回落普通 toast）。
 
 > **已知安全边界（S1.3 未完成）：** Wails v2.16.0 的 WebView2 默认自动允许网页权限请求；
 > 本壳没有原生网络/导航白名单，外站、iframe、WebSocket 和弹窗未隔离。`--relay-url` 只限定
@@ -19,7 +21,7 @@ Wails v2.16.0 + Go 原生层的桌面壳：托管自己的 Node launcher 后台�
 ## 命令
 
 ```powershell
-pnpm dev:desktop                 # attach 开发模式（需先 pnpm dev 起 30809 栈）
+pnpm dev:desktop                 # attach 开发模式（需先 pnpm dev 起 31809 栈）
 pnpm dev:desktop -- --selfcheck  # 只检查参数，不创建窗口
 pnpm release:desktop:win         # 打 Windows 桌面安装包 + 便携 zip（lite/full）
 ```

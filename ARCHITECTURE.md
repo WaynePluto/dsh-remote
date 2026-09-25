@@ -136,8 +136,10 @@ graph TD
 - `scripts/plugin-distributions.mjs` 从源码包生成可搬移介质：组合包的固定版本组件闭包位于其
   `node_modules/@dsh-station/`，独立包携带自身 patch、宿主与浏览器产物，`catalog.json` 描述安装项。
 - `pnpm run dev` 依次构建功能插件、生成 `.dev/plugins/`、由 `scripts/dev-runtime.mjs` 在仓库
-  同级准备无工作区同名安装锚的隔离 dsh 运行时，再启动 `dev-stack.mjs`。开发栈仍使用标准
-  DSH_HOME 和正式 profile，生命周期与发行版共用；不得与已安装实例并发运行。
+  同级准备无工作区同名安装锚的隔离 dsh 运行时，再启动 `dev-stack.mjs`。开发栈使用独立 home
+  （`~/.dsh-station-dev` + `~/.dsh-dev`）与错开的端口（relay 31809 / dsh 3180），可与已安装
+  发行版实例同时运行；profile 名仍为 `dsh-station-web`，生命周期与发行版共用。
+  `pnpm relay:init/passwd/totp-reset` 因此作用于开发 home。
 - 绿色打包通过 `scripts/pack.mjs` 在包根生成 `plugins/` 并归档；launcher production
   dependencies 只保留运行时和壳级 overlay，不再承担功能插件安装锚。打包检查覆盖介质目录、
   依赖闭包、宿主/浏览器产物、离线内容和可搬移路径。

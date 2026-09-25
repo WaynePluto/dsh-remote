@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strings"
 
@@ -113,7 +114,7 @@ const chromebarScript = `(function(){
   }
   bar.appendChild(logo);
   var title=document.createElement('span');
-  title.textContent='DSH 工作站';
+  title.textContent='DSH 工作站'+__TITLE_SUFFIX__;
   title.style.cssText='font-weight:600;margin-right:10px;white-space:nowrap';
   bar.appendChild(title);
   var panels=[];
@@ -235,7 +236,8 @@ const chromebarScript = `(function(){
 // buildChromeBarScript 把配置地址与 logo 注入脚本模板；地址来自启动参数校验结果，
 // 只能是规范的 http://127.0.0.1:<端口>/ 形式。logo 是多行 SVG，必须经 JSON 编码
 // 变成合法的 JS 字符串字面量，直接塞进单引号字符串会因换行破坏整个脚本。
-func buildChromeBarScript(relayURL, adminURL string) string {
+// titleSuffix 是 attach 开发模式的「 (dev)」标记，与窗口标题、任务栏区分开发壳。
+func buildChromeBarScript(relayURL, adminURL, titleSuffix string) string {
 	logoLiteral, err := json.Marshal(chromebarLogoSVG)
 	if err != nil {
 		logoLiteral = []byte(`''`)
@@ -246,6 +248,7 @@ func buildChromeBarScript(relayURL, adminURL string) string {
 		"__RELAY_ORIGIN__", origin,
 		"__ADMIN_URL__", adminURL,
 		"__LOGO_SVG__", string(logoLiteral),
+		"__TITLE_SUFFIX__", fmt.Sprintf("%q", titleSuffix),
 	).Replace(chromebarScript)
 }
 
@@ -258,6 +261,6 @@ func relayOrigin(relayURL string) string {
 	return parsed.Scheme + "://" + parsed.Host
 }
 
-func injectChromeBar(ctx context.Context, relayURL, adminURL string) {
-	runtime.WindowExecJS(ctx, buildChromeBarScript(relayURL, adminURL))
+func injectChromeBar(ctx context.Context, relayURL, adminURL, titleSuffix string) {
+	runtime.WindowExecJS(ctx, buildChromeBarScript(relayURL, adminURL, titleSuffix))
 }

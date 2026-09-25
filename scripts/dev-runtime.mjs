@@ -1,6 +1,17 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
@@ -57,6 +68,11 @@ if (!existsSync(dshBin) || !existsSync(installAnchor) || !existsSync(pnpmCli)) {
     '--ignore-workspace',
     '--prod',
     '--ignore-scripts',
+    // 生产 launcher 的随包模块目录来自 `pnpm deploy --legacy`，顶层可达任意
+    // 传递依赖；开发运行时必须用同一布局，否则插件依赖闭包在顶层找不到
+    // dsh-http-proxy 这类 dsh 的传递依赖（hoisted 同时消除了符号链接，
+    // 临时目录改名不会再产生断裂链接）。
+    '--config.node-linker=hoisted',
     '--dir',
     temporary,
   ], { cwd: root, stdio: 'inherit' })
@@ -64,6 +80,29 @@ if (!existsSync(dshBin) || !existsSync(installAnchor) || !existsSync(pnpmCli)) {
   if (result.status !== 0) throw new Error(`准备隔离 dsh 开发运行时失败（退出码 ${String(result.status)}）`)
   rmSync(runtime, { recursive: true, force: true })
   renameSync(temporary, runtime)
+  repairRenamedLinks(join(runtime, 'node_modules'), temporary, runtime)
+}
+
+/**
+ * pnpm 在 Windows 上把 node_modules 链接写成指向安装目录的绝对路径
+ * （junction / symlink）。安装目录从临时名改名到指纹名之后，这些链接
+ * 全部指向不存在的 `.tmp` 路径。改名后把目标里的临时路径统一改写为最终路径。
+ */
+function repairRenamedLinks(directory, temporary, finalDirectory) {
+  if (!existsSync(directory)) return
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const full = join(directory, entry.name)
+    if (entry.isSymbolicLink()) {
+      const target = readlinkSync(full)
+      if (target.includes(temporary)) {
+        const repaired = target.split(temporary).join(finalDirectory)
+        unlinkSync(full)
+        symlinkSync(repaired, full, process.platform === 'win32' ? 'junction' : 'dir')
+      }
+      continue
+    }
+    if (entry.isDirectory()) repairRenamedLinks(full, temporary, finalDirectory)
+  }
 }
 
 const descriptor = { fingerprint, runtime, dshBin, installAnchor, pnpmCli }

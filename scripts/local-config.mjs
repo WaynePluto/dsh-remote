@@ -3,7 +3,8 @@
  *
  * 范围：仅用于开发入口。发行绿色包使用 `@dsh-station/launcher`
  *（M3.1）启动 dsh + connector；此脚本还会启动 relay，
- * 以便单机验证完整的局域网链路。开发栈的运行数据沿用发行版默认 home。
+ * 以便单机验证完整的局域网链路。开发栈使用独立的 station home 与 dsh home、
+ * 错开的端口，可以与已安装的发行版实例同时运行（见下方常量注释）。
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
@@ -15,13 +16,22 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 export const ROOT = fileURLToPath(new URL('..', import.meta.url))
 /** `.dev` 只供隔离冒烟脚本使用，开发栈本身不写这里。 */
 export const DEV_DIRECTORY = join(ROOT, '.dev')
-/** 开发栈沿用发行版默认的 dsh-station home。 */
-export const DSH_STATION_HOME = join(homedir(), '.dsh-station')
+/**
+ * 开发栈的 station home，独立于发行版默认的 `~/.dsh-station`：relay.db、
+ * 设备密钥、membership 全部落在这里，与发行版实例互不可见。
+ * `pnpm relay:init/passwd/totp-reset` 因此作用于开发 home；
+ * 偶尔需要面向其他数据库时给 relay-cli 显式传 `--data`（显式值优先）。
+ */
+export const DSH_STATION_HOME = join(homedir(), '.dsh-station-dev')
 export const RELAY_DATABASE = join(DSH_STATION_HOME, 'relay.db')
 export const DEVICE_KEY_FILE = join(DSH_STATION_HOME, 'device.key')
 
-export const RELAY_PORT = 30_809
-export const DSH_PORT = 3080
+/** 开发栈的 dsh home，独立于发行版的标准 `~/.dsh`，两个 dsh 实例不共享任何状态。 */
+export const DSH_HOME_DEV = join(homedir(), '.dsh-dev')
+
+// 端口与发行版默认值（relay 30809 / dsh 3080）错开，两套栈可同时运行。
+export const RELAY_PORT = 31_809
+export const DSH_PORT = 3180
 export const DSH_PROFILE = 'dsh-station-web'
 
 // 冒烟脚本直接装载每个源码组件，便于精确归因；这不是 launcher 的第三方

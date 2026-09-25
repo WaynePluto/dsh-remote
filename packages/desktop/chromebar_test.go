@@ -44,16 +44,24 @@ func TestBindingOrigin(t *testing.T) {
 }
 
 func TestBuildChromeBarScript(t *testing.T) {
-	script := buildChromeBarScript("http://127.0.0.1:30809/", "http://127.0.0.1:30809/_admin")
-	for _, placeholder := range []string{"__RELAY_URL__", "__ADMIN_URL__", "__LOGO_SVG__"} {
+	script := buildChromeBarScript("http://127.0.0.1:31809/", "http://127.0.0.1:31809/_admin", "")
+	for _, placeholder := range []string{"__RELAY_URL__", "__ADMIN_URL__", "__LOGO_SVG__", "__TITLE_SUFFIX__"} {
 		if strings.Contains(script, placeholder) {
 			t.Fatalf("脚本仍含未替换占位符 %s", placeholder)
 		}
 	}
-	if !strings.Contains(script, `'http://127.0.0.1:30809/'`) || !strings.Contains(script, `'http://127.0.0.1:30809/_admin'`) {
+	if !strings.Contains(script, `'http://127.0.0.1:31809/'`) || !strings.Contains(script, `'http://127.0.0.1:31809/_admin'`) {
 		t.Fatal("脚本未包含主页/管理地址")
+	}
+	if !strings.Contains(script, `'DSH 工作站'`) {
+		t.Fatal("独立模式标题不应带后缀")
 	}
 	if !strings.Contains(script, `dsh-station-chromebar`) {
 		t.Fatal("脚本缺少自绘标题栏元素 ID")
+	}
+
+	devScript := buildChromeBarScript("http://127.0.0.1:31809/", "http://127.0.0.1:31809/_admin", " (dev)")
+	if !strings.Contains(devScript, `'DSH 工作站'+" (dev)"`) {
+		t.Fatal("attach 开发模式标题应拼接 (dev) 后缀")
 	}
 }

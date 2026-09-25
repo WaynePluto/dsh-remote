@@ -4,7 +4,8 @@
  * `pnpm dev` 通过 tsx 运行 TypeScript 源码；`pnpm start` 运行构建后的
  * `dist/` 产物。两者都会在明确的、需要认证的局域网 HTTP 模式下把 relay
  * 绑定到所有接口，因此手机或另一台机器可以访问，同时所有非 loopback 请求仍必须登录。
- * 运行数据沿用发行版默认的 `~/.dsh-station`，不要与发行版实例并发启动。
+ * 运行数据使用独立的开发 home（`~/.dsh-station-dev` + `~/.dsh-dev`），
+ * 端口（relay 31809 / dsh 3180）与发行版默认值错开，可与已安装的发行版实例同时运行。
  */
 
 import { spawn } from 'node:child_process'
@@ -18,13 +19,14 @@ import process from 'node:process'
 import { defaultMachineSlug } from '../packages/launcher/src/relay.ts'
 import { loadOrCreateJwtSecret, jwtSecretFilePath } from '../packages/launcher/src/jwt-secret.ts'
 import { preparePnpmShim, resolveBundledModulesDirectory, resolvePnpmVersion, withBundledPnpmPath } from '../packages/launcher/src/dsh.ts'
-import { ensureProfile, profileDirectory, resolveDshHome } from '../packages/launcher/src/profile.ts'
+import { ensureProfile, profileDirectory } from '../packages/launcher/src/profile.ts'
 import { synchronizePluginDistributions } from '../packages/launcher/src/plugin-lifecycle.ts'
 import { developmentProfileOptions } from './dev-profile.ts'
 import { issueDeviceEnrollToken, openRelayStore } from '../packages/relay/src/store/index.ts'
 import {
   DEVICE_KEY_FILE,
   DSH_STATION_HOME,
+  DSH_HOME_DEV,
   DSH_BIN,
   DSH_INSTALL_ANCHOR,
   DSH_PORT,
@@ -198,8 +200,10 @@ const lanIp = lanAddress()
 // authority。没有端口的条目匹配任意端口。
 const trustedHosts = ['127.0.0.1', 'localhost', ...lanIp === undefined ? [] : [lanIp]]
 
-// 开发与发行共用同一个 profile 和第三方插件生命周期；区别只有安装介质目录。
-const dshHome = resolveDshHome()
+// profile 名与发行版相同，但落在独立的开发 dsh home（~/.dsh-dev）里，
+// 两个 dsh 实例的 profile、会话与插件互不可见。dsh 子进程必须显式带上
+// DSH_HOME：dsh 按环境变量解析 home，继承外壳的 ambient 值会绕回 ~/.dsh。
+const dshHome = DSH_HOME_DEV
 const profileOptions = developmentProfileOptions(dshHome)
 const dshProfile = profileOptions.profile
 const { bootstrap: profileBootstrap } = ensureProfile(profileOptions)
@@ -241,7 +245,7 @@ start('dsh', process.execPath, [
   '--host', '127.0.0.1',
   '--port', String(DSH_PORT),
   '--trusted-host', ...trustedHosts,
-], runtimeEnvironment, (line) => {
+], { ...runtimeEnvironment, DSH_HOME: dshHome }, (line) => {
   if (dshTokenSeen) return
   const match = /dsh web:\s*(\S+)/u.exec(line)
   if (match === null) return
@@ -279,7 +283,8 @@ if (dshToken === undefined) {
 }
 
 // 开发栈显式拨本机 relay，不能像 launcher 一样从 membership 选择 hub；
-// 因此额外固定 machine id，使它仍与发行版 connector（未传 --slug）共用设备记录。
+// 固定 machine id 与 launcher 未传 --slug 时的默认派生保持一致
+// （开发 home 有自己的设备记录，与发行版实例无关）。
 start('connector', process.execPath, [
   ...connectorCliArguments(built),
   '--relay', `ws://127.0.0.1:${RELAY_PORT}`,

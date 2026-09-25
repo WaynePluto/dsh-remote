@@ -136,7 +136,13 @@ func main() {
 		bindingsURL string
 		notifyToken string
 	)
+	// 开发壳用标题后缀与发行版实例区分：同名窗口会让托盘/任务栏激活
+	// 与单实例 FindWindow 定位混淆。
+	windowTitle := "DSH 工作站"
+	barTitleSuffix := ""
 	if config.mode == modeAttach {
+		windowTitle = "DSH 工作站 (dev)"
+		barTitleSuffix = " (dev)"
 		relayURL = config.relayURL
 		adminURL = config.adminURL
 		bindingsURL = relayURL
@@ -199,7 +205,7 @@ func main() {
 	}
 
 	if err := wails.Run(&options.App{
-		Title: "DSH 工作站",
+		Title: windowTitle,
 		// 默认窗口取黄金比例（1618:1000≈1.618），在 1080p 下留出任务栏与边距；
 		// 页面以 body zoom=(高-36)/高 完整布局进自绘条以下区域。
 		Width:                  1360,
@@ -290,7 +296,7 @@ func main() {
 		OnDomReady: func(ctx context.Context) {
 			setWindowsTaskbarIcon()
 			home, admin := chrome.resolve()
-			injectChromeBar(ctx, home, admin)
+			injectChromeBar(ctx, home, admin, barTitleSuffix)
 		},
 		OnShutdown: func(_ context.Context) {
 			if value := stopTray.Load(); value != nil {
