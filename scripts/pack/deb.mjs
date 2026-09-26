@@ -5,14 +5,14 @@
  * gzip 用 zlib。不依赖系统 ar/tar，Windows 上也能构建，但最终
  * dpkg 可安装性要等 Linux 实机验收（S10.3）。
  */
-import { readdirSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'node:fs'
+import { readdirSync, readFileSync, readlinkSync, statSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
 import { gzipSync } from 'node:zlib'
 
 const USTAR_MAGIC = 'ustar\x0000'
 
-/** 512 字节 tar 头；typeflag '0' 文件、'5' 目录、'L' GNU 长名。 */
-function tarHeader(name, { mode = 0o644, size = 0, mtime = 0, typeflag = '0' } = {}) {
+/** 512 字节 tar 头；typeflag '0' 文件、'5' 目录、'2' 符号链接、'L' GNU 长名。 */
+function tarHeader(name, { mode = 0o644, size = 0, mtime = 0, typeflag = '0', linkname } = {}) {
   const header = Buffer.alloc(512)
   const write = (offset, length, value) => {
     header.write(value.length <= length ? value : value.slice(0, length), offset, 'utf8')
@@ -28,6 +28,7 @@ function tarHeader(name, { mode = 0o644, size = 0, mtime = 0, typeflag = '0' } =
   octal(136, 12, mtime)
   header.write('        ', 148, 'utf8') // 校验和先按空格计算
   header.write(typeflag, 156, 'utf8')
+  if (linkname !== undefined) write(157, 100, linkname)
   write(257, 8, USTAR_MAGIC)
   write(265, 32, 'root') // uname
   write(297, 32, 'root') // gname
@@ -58,6 +59,10 @@ function collectEntries(directory, dataRoot, posixTarget, executables) {
       } else if (entry.isFile()) {
         const mode = executables.has(absolute) ? 0o755 : 0o644
         entries.push({ name: targetPath, typeflag: '0', mode, size: statSync(absolute).size, absolute })
+      } else if (entry.isSymbolicLink()) {
+        // pnpm 在类 Unix 上用相对符号链接组织 node_modules/.bin 与包间引用；
+        // tar 以 '2' 条目原样保留 linkname，dpkg 解包后相对关系不变。
+        entries.push({ name: targetPath, typeflag: '2', mode: 0o777, size: 0, linkname: readlinkSync(absolute) })
       } else {
         throw new Error(`deb 打包不支持特殊文件：${absolute}`)
       }
