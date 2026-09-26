@@ -18,11 +18,6 @@ func adoptBackendProcess(*os.Process) error {
 	return nil
 }
 
-// spawnShellReplacement 在非 Windows 平台直接拉起新壳（无 Job 语义）。
-func spawnShellReplacement(executable string) error {
-	return exec.Command(executable).Start()
-}
-
 // killBackendTree 结束 launcher 进程；launcher 自己的信号处理会按
 // connector → relay → dsh 的顺序回收子进程。
 func killBackendTree(command *exec.Cmd) error {

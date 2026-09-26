@@ -91,17 +91,6 @@ func applyChildWindowPolicy(command *exec.Cmd) {
 	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 }
 
-// spawnShellReplacement 以脱离当前 Job 的方式拉起新壳：旧壳退出时
-// KILL_ON_JOB_CLOSE 只回收旧的后台进程树，不影响新壳。
-func spawnShellReplacement(executable string) error {
-	command := exec.Command(executable)
-	command.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: 0x01000000 | 0x00000008 | 0x00000200, // CREATE_BREAKAWAY_FROM_JOB | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-		HideWindow:    true,
-	}
-	return command.Start()
-}
-
 // killBackendTree 用 taskkill /T /F 结束整棵进程树；这是 Windows 上唯一
 // 能保证连同 shell 子进程一起退出的手段（supervisor 同款）。
 func killBackendTree(command *exec.Cmd) error {

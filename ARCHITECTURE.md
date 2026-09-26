@@ -27,7 +27,7 @@
 | 开发与验证脚本 | `scripts/dev-stack.mjs`、`dev-runtime.mjs`、`plugin-distributions.mjs`、`prepare-desktop.mjs`、`local-config.mjs`、`*-check.mjs` | 本地全链路、隔离 dsh 运行时、开发插件介质、插件契约冒烟与依赖检查 | launcher/relay 源码模块、Node；脚本各自声明环境前提 |
 | 发行打包 | `scripts/release.mjs`（统一入口）、`scripts/pack.mjs`（服务版 zip，仅 linux-x64）、`scripts/pack-desktop.mjs`（桌面 setup/portable）、`packaging/`、`.github/workflows/` | 四个发布端介质（D22：win/mac/linux 桌面版 + Linux 服务版，各 lite/full；桌面再分 setup/portable）、构建一次串行打包、产物检查、启动脚本、图标、CI | archiver、pnpm、Go 工具链；服务版不带 Node 二进制 |
 | Windows 托盘（已退役） | `packaging/win-launcher/*.go` | 菜单、单实例、自启动、日志轮转、Node launcher 生命周期；win 服务版退役（D22）后不再随介质构建，syso 资源仍供桌面壳，去留见路线图 | Go 标准库、Win32 API；同一 `package main`，无第三方 Go 包 |
-| 桌面应用 | `packages/desktop/{main,config,bootstrap,statuspage,backend,discover,notifypipe}.go`、`tray_windows.go` | Wails v2 单窗口：独立模式托管自有 launcher 后台（`--desktop` 状态行契约 + 实例锁 + 随包/系统 Node 发现），attach 模式附着开发栈；AssetServer 持有 webview 初始导航直到后台就绪再 302 进真实 origin；Win32 托盘含后台启停与自重启恢复；通知管道带共享令牌 | 独立 Go module `github.com/wailsapp/wails/v2@v2.16.0`；原生网络/权限隔离（S1.3）仍未实现，mac/Linux 托盘与实机验收待 S10 |
+| 桌面应用 | `packages/desktop/{main,config,bootstrap,statuspage,backend,discover,notifypipe}.go`、`tray_windows.go` | Wails v2 单窗口：独立模式托管自有 launcher 后台（`--desktop` 状态行契约 + 实例锁 + 随包/系统 Node 发现），attach 模式附着开发栈；AssetServer 持有 webview 初始导航直到后台就绪再 302 进真实 origin；Win32 托盘只含显示/浏览器打开/退出（后台启停不设入口，恢复靠退出重开）；通知管道带共享令牌 | 独立 Go module `github.com/wailsapp/wails/v2@v2.16.0`；原生网络/权限隔离（S1.3）仍未实现，mac/Linux 托盘与实机验收待 S10 |
 
 20 个功能组件按 `plugin-catalog.json` 分发为 4 个组合包与 6 个独立第三方 Bundle；首次默认安装，仍安装项随 dsh-station 配套升级，卸载后不自动补回。唯一随 `--patch` 传入的是 remote-privileged 的壳级 overlay，包含 connection 注入和模型 HMR 启动屏障，不属于第三方插件生命周期。`@dsh-station/plugin-ui` 是构建期辅助，也不进入分发清单。
 具体功能及使用限制见 [插件索引](docs/plugins.md) 和各包 README。
@@ -101,7 +101,7 @@ graph TD
 
 ### 桌面预览与后台所有权
 
-- `packages/desktop/` 有两种模式：默认独立模式托管自有后台（发现随包载荷与 Node、`--desktop` 拉起 launcher、实例锁防双开、Job Object 崩溃回收），`--attach` 开发模式附着已运行栈。托盘「启动/重启后台」通过壳自重启恢复（webview 初始导航一生一次，页面发起的跳转进不了 relay——见 statuspage.go 注释）。
+- `packages/desktop/` 有两种模式：默认独立模式托管自有后台（发现随包载荷与 Node、在 `wails.Run` 前拉起 launcher 与 WebView2 初始化并行、实例锁防双开、Job Object 崩溃回收），`--attach` 开发模式附着已运行栈（编排器先拉栈再起壳，启动同样并行）。托盘「启动/重启后台」通过壳自重启恢复（webview 初始导航一生一次，页面发起的跳转进不了 relay——见 statuspage.go 注释）。
 - Wails AssetServer 在 attach 模式对 `/` 发一次 302；独立模式持有初始导航直到 relay 端口监听再 302（launcher 先起 relay，插件同步与 dsh 就绪前的等待由 relay 自己的重试页承担；Wails v2 首次导航完成前不显示窗口，窗口出现时刻≈relay 监听时刻）。HTTP/WS、认证和插件资源均从真实 relay origin 加载，不对业务页提供除窗口控制外的 Go Bindings。桌面介质由 `scripts/pack-desktop.mjs` 在对应平台产出（win NSIS setup + 便携 zip、mac DMG + .app 便携 zip、linux deb + 便携 zip，统一入口 `scripts/release.mjs`），随包 Node 清单在 `packaging/desktop-node.json`。**没有原生网络/系统权限隔离（S1.3）**；参数校验只限定初始地址，风险及构建方式见 `packages/desktop/README.md`。
 
 ### 插件双端与运行期协作

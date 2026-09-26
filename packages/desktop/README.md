@@ -21,7 +21,7 @@ Wails v2.16.0 + Go 原生层的桌面壳：托管自己的 Node launcher 后台�
 ## 命令
 
 ```powershell
-pnpm dev:desktop                 # attach 开发模式（31809 栈未运行时自动拉起 pnpm dev；壳立即启动，relay 监听即开窗，等待期显示 relay 进度页；壳退出时停掉自己拉起的栈，外部启动的栈不受影响）
+pnpm dev:desktop                 # attach 开发模式（31809 栈未运行时自动拉起开发栈；壳立即启动，relay 监听即开窗，等待期显示 relay 进度页；壳退出时停掉自己拉起的栈，外部启动的栈不受影响）
 pnpm dev:desktop -- --selfcheck  # 只检查参数，不创建窗口
 pnpm release:win:lite            # 只打 Windows 桌面轻量版（setup + 便携 zip；不下载随包 Node）
 pnpm release:win:full            # 只打 Windows 桌面完整版（首次下载随包 Node，之后走缓存）
@@ -80,14 +80,20 @@ Go 不复制 launcher 的配置解析，BindingsAllowedOrigins 又无法运行�
 Wails v2 在首次导航完成前不显示窗口，而进入 relay 只能靠这次初始导航（页面自己发起的
 跳转会被 relay 的 cross-site 检查拒绝），因此两条模式都「持有」初始请求：
 
-- 独立模式（`statuspage.go`）：launcher 先启动 relay，其端口开始监听即对 `/` 发 302；
-  之后 dsh/connector 就绪前的等待由 relay 自己的重试页承担（每秒自动重试，机器上线后
-  303 进 dsh；loopback 请求得到的是极简启动 splash，不带管理页外观）。后台失败或超过 150s 上限才渲染状态页：阶段、原因提示、本机入口与远程
-  管理链接（仅 loopback 地址）；恢复走托盘「启动/重启后台」（壳自重启取得新的初始导航）。
+- 独立模式（`statuspage.go`）：后台在 `wails.Run` 之前就启动，与 WebView2/窗口初始化
+  并行（与 attach 模式对齐：那边编排器先拉栈再起壳）。launcher 先启动 relay，其端口
+  开始监听即对 `/` 发 302；之后 dsh/connector 就绪前的等待由 relay 自己的重试页承担
+  （每秒自动重试，机器上线后 303 进 dsh；loopback 请求得到的启动 splash 复刻 dsh 自己
+  的启动页——同样的 HARNESS 字标、20px 进度弧转圈与三元素布局，交接时视觉连续，像是
+  同一页换了底部文字；远程访客仍得带指引的离线页）。后台失败或超过 150s 上限才渲染状态页：阶段、原因提示、本机入口与远程
+  管理链接（仅 loopback 地址）；恢复方式是退出并重新打开（新壳取得新的初始导航），
+  托盘不提供后台启停——退出重开即等价于重启。
 - attach 模式（`bootstrap.go`）：同样持有到 relay 监听再 302；超时渲染开发栈指引页
+  （查 pnpm dev 终端或 dev-stack.log）。托盘只有显示 / 在浏览器中打开 / 退出：
+  后台启停已整体移除，开发栈本就属于 dev:desktop 编排器或外部终端
   （查 pnpm dev 终端或 dev-stack.log）。编排脚本 `dev-desktop.mjs` 因此不再等机器在线。
 
-窗口的实际出现时刻 ≈ relay 开始监听的时刻（实测便携版约 2 秒）。状态页不携带任何凭据。
+窗口的实际出现时刻 ≈ max(WebView2 初始化, relay 监听)（实测便携版约 2.2 秒，WebView2 初始化约占 2 秒）。状态页不携带任何凭据。
 
 ## 平台
 

@@ -224,11 +224,17 @@ ${options.body}
 }
 
 /**
- * 本机 loopback 的启动等待页：居中标志 + 转圈 + 一行状态，不带控制台外壳
- * （品牌头、卡片、主题切换器、管理链接都属于「网页」，会让应用启动看起来
- * 像点进了管理页）。背景用与 dsh UI 相同的 --page token，机器上线后进入
- * dsh 时背景色不变，视觉上是一段连续的启动过程。仍然无脚本，自动重试靠
- * meta refresh（每秒重访 `/`，上线后 relay 的下一次回答就是 303）。
+ * 本机 loopback 的启动等待页：复刻 dsh 自己的启动页（`packages/client/web/src/boot-page.ts`
+ * + `boot-page.module.css`）——同样的 HARNESS 字标、进度弧转圈与三元素卡片布局，
+ * 色值即上方 token（dsh 启动页回退值与本表同源同值）。这样等待 → dsh 的
+ * 「Loading plugins…」像是同一页只换了底部文字；进度弧固定在 dsh 的起始角 72°，
+ * 交接瞬间两者视觉一致。仍然无脚本，自动重试靠 meta refresh（每秒重访 `/`，
+ * 上线后 relay 的下一次回答就是 303）。
+ *
+ * 两个对齐细节：dsh 启动页没有 box-sizing reset（content-box），20px 内容宽 +
+ * 2px 边框的外径是 24px——本表 token 全局 border-box，因此写 24px 才与它等大；
+ * 旋转周期取 1s，与 meta refresh 间隔一致——每次重载时上一圈恰好转满整数圈，
+ * 相位归零不产生可见跳动（dsh 自己是 0.8s，交接后接管它的节奏）。
  * @param appearance 要渲染的外观。
  * @returns 独立的 HTML 文档。
  */
@@ -243,20 +249,23 @@ export function renderSplashPage(appearance: PageAppearance): string {
 ${ICON_LINKS}
 <style>
 ${TOKEN_STYLE}
-body{margin:0;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:24px;background:var(--page);color:var(--ink);font-family:var(--font);font-size:14px;line-height:22px;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
-.mark{width:40px;height:40px;border-radius:10px;display:block}
-.spin{width:26px;height:26px;border:2.5px solid var(--line);border-top-color:var(--brand);border-radius:50%;animation:splash-spin 1s linear infinite}
+html,body{height:100%;margin:0}
+body{display:grid;place-items:center;background:var(--page);color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.card{display:flex;flex-direction:column;align-items:center;gap:16px}
+.wordmark{font-size:16px;line-height:24px;font-weight:600;letter-spacing:.08em;color:var(--ink)}
+.hint{font-size:12px;line-height:18px;color:var(--ink-3)}
+.spin{position:relative;width:24px;height:24px;border-radius:50%;border:2px solid var(--line);animation:splash-spin 1s linear infinite}
+.spin::after{content:"";position:absolute;inset:-2px;border-radius:inherit;background:conic-gradient(var(--ink) 72deg,transparent 0);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 0);mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 0)}
 @keyframes splash-spin{to{transform:rotate(360deg)}}
-.state{margin:0}
-.hint{margin:0;font-size:12px;line-height:18px;color:var(--caption)}
 @media(prefers-reduced-motion:reduce){.spin{animation:none}}
 </style>
 </head>
 <body>
-<img class="mark" src="${ICON_SVG_PATH}" alt="" width="40" height="40">
-<span class="spin" aria-hidden="true"></span>
-<p class="state">正在启动 DSH 工作站…</p>
-<p class="hint">就绪后会自动进入工作台</p>
+<div class="card">
+<div class="wordmark">HARNESS</div>
+<div class="spin" aria-hidden="true"></div>
+<div class="hint">正在启动 DSH 工作站…</div>
+</div>
 </body></html>`
 }
 

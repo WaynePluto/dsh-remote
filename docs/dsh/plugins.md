@@ -124,6 +124,11 @@ global 行注入 `__DSH_TRANSPORT__`；browser-compat 用 head script 行在旧 
 Iterator/AbortSignal/Promise 能力，并建立当前页面内存中的诊断桥（函数体 `toString()` 序列化，
 必须自包含、不引用模块作用域）。client 半读取该桥显示临时日志，不向 Host 发 RPC。
 
+dsh web 自带 framework-free 启动页（wordmark HARNESS + “Loading plugins…” + 进度弧，`packages/client/web/src/boot-page.ts`）：
+boot 内核（`packages/client/web/src/boot.ts` 的 `AppWebEntry`）挂载 index 时立即绘制，随 client
+loader 条目激活增长；全部条目激活、React UI renderer 接管挂载点后卸载，插件加载失败时改为失败清单。
+它承担 relay 303 之后浏览器侧的插件加载等待，与工作站自己的启动 splash（服务侧等待，复刻此页样式）先后衔接。
+
 ## 设置写入（dsh 0.1.7 重写）
 
 出处：`packages/settings/settings/src/index.ts`（SettingsForms）、`packages/client/ui-settings/src/client/config-form.ts`（configForms 服务）、

@@ -68,37 +68,6 @@ func managerStatus(manager *backendManager) backendStatus {
 	return manager.Status()
 }
 
-var (
-	// respawning 标记「壳自重启」路径：退出钩子不得再停后台（新壳接管启动）。
-	respawning atomic.Bool
-	// singleInstanceRelease 由 standalone 模式的启动路径赋值；自重启前释放。
-	singleInstanceRelease func()
-)
-
-// shellRestart 是托盘「启动后台 / 重启后台」的统一实现：干净停止现有后台，
-// 释放单实例互斥体后重新拉起自己；新壳走正常启动路径（初始导航持有 → 302
-// 进 relay）。webview 的初始导航一生只有一次，页面发起的跳转进不了 relay，
-// 因此恢复/重启只能换一个新壳。
-func shellRestart(manager *backendManager) {
-	if manager != nil {
-		manager.StopAndWait()
-	}
-	if singleInstanceRelease != nil {
-		singleInstanceRelease()
-		singleInstanceRelease = nil
-	}
-	executable, err := os.Executable()
-	if err != nil {
-		log.Printf("自重启失败（找不到自身路径）：%v", err)
-		return
-	}
-	if err := spawnShellReplacement(executable); err != nil {
-		log.Printf("自重启失败：%v", err)
-		return
-	}
-	respawning.Store(true)
-}
-
 func main() {
 	config, err := parseRunOptions(os.Args[1:])
 	if err != nil {
@@ -140,6 +109,8 @@ func main() {
 	// 与单实例 FindWindow 定位混淆。
 	windowTitle := "DSH 工作站"
 	barTitleSuffix := ""
+	// 载荷发现失败的原因要原样进状态页，不能被后续启动失败覆盖。
+	var discoveryFailure error
 	if config.mode == modeAttach {
 		windowTitle = "DSH 工作站 (dev)"
 		barTitleSuffix = " (dev)"
@@ -152,6 +123,7 @@ func main() {
 		adminURL = "http://127.0.0.1:30809/_admin"
 		bindingsURL = relayURL
 		payload, discoveryErr := discoverPayload(config.appDir)
+		discoveryFailure = discoveryErr
 		notifyToken = newNotifyToken()
 		manager = newBackendManager(payload, notifyToken, nil)
 		if discoveryErr != nil {
@@ -181,7 +153,6 @@ func main() {
 			return
 		}
 		defer release()
-		singleInstanceRelease = release
 	}
 
 	// 阶段状态变化：更新托盘提示；就绪/失败时确保窗口可见。
@@ -201,6 +172,19 @@ func main() {
 			if value := stopTray.Load(); value != nil {
 				value.(*desktopTrayHandle).SetTip(trayTipText(status))
 			}
+		}
+	}
+
+	// 独立模式：后台与 WebView2/窗口初始化并行启动（与 attach 模式对齐——
+	// 那边编排器先拉栈再起壳，栈启动同样与壳初始化重叠）。窗口出现时刻是
+	// max(WebView2 就绪, relay 监听)，launcher 约 1~2 秒的启动被这段初始化
+	// 重叠掉。失败路径不变：phaseFailed 让初始导航落到状态页；wails.Run 失败
+	// 直接退出时由 Job Object 回收已拉起的后台。载荷发现失败则不启动，
+	// 保留发现原因作为状态页信息。
+	if manager != nil && discoveryFailure == nil {
+		if err := manager.Start(); err != nil {
+			log.Printf("启动后台失败：%v", err)
+			manager.setStatus(backendStatus{Phase: phaseFailed, Detail: err.Error()})
 		}
 	}
 
@@ -249,30 +233,8 @@ func main() {
 					_, admin := chrome.resolve()
 					runtime.BrowserOpenURL(ctx, admin)
 				},
-				onStart: func() {
-					if manager == nil {
-						return
-					}
-					shellRestart(manager)
-					runtime.Quit(ctx)
-				},
-				onStop: func() {
-					if manager == nil {
-						return
-					}
-					if err := manager.Stop(); err != nil {
-						log.Printf("停止后台失败：%v", err)
-					}
-				},
-				onRestart: func() {
-					if manager == nil {
-						return
-					}
-					shellRestart(manager)
-					runtime.Quit(ctx)
-				},
 				onQuit: func() {
-					if manager != nil && !respawning.Load() {
+					if manager != nil {
 						manager.StopAndWait()
 					}
 					runtime.Quit(ctx)
@@ -284,13 +246,6 @@ func main() {
 			}
 			stopTray.Store(trayHandle)
 			trayHandle.SetTip(trayTipText(managerStatus(manager)))
-			if manager != nil {
-				// 独立模式双击即用：窗口初始就是状态页，就绪后自动 302 进 relay。
-				if err := manager.Start(); err != nil {
-					log.Printf("启动后台失败：%v", err)
-					manager.setStatus(backendStatus{Phase: phaseFailed, Detail: err.Error()})
-				}
-			}
 		},
 		// 每次顶层导航（主页/管理互切、状态页 302、引导 302）后重建自绘标题栏并校正任务栏图标。
 		OnDomReady: func(ctx context.Context) {
@@ -302,7 +257,7 @@ func main() {
 			if value := stopTray.Load(); value != nil {
 				value.(*desktopTrayHandle).Stop()
 			}
-			if manager != nil && !respawning.Load() {
+			if manager != nil {
 				manager.StopAndWait()
 			}
 		},

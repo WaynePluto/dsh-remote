@@ -11,9 +11,6 @@ type desktopTrayCallbacks struct {
 	onShow    func()
 	onBrowser func()
 	onAdmin   func()
-	onStart   func()
-	onStop    func()
-	onRestart func()
 	onQuit    func()
 }
 

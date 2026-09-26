@@ -20,7 +20,7 @@ const bootstrapHoldSeconds = 150
 // 被 relay 的原始安全检查正确拒绝。因此这里「持有」初始请求，直到
 // relay 端口开始监听（launcher 先起 relay，dsh/connector 就绪前的等待
 // 由 relay 自己的重试页承担）就发一次 302；后台失败或超时才回答状态页，
-// 恢复走托盘「启动后台」（壳会自重启取得新的初始导航）。
+// 恢复方式是退出并重新打开（新壳拿到新的初始导航；托盘不再提供后台启停）。
 func statusHandler(manager *backendManager) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -97,14 +97,11 @@ func phaseLabel(phase backendPhase) string {
 func phaseAdvice(status backendStatus) string {
 	switch status.Phase {
 	case phaseFailed:
-		if status.Detail != "" {
-			return "原因：" + status.Detail
-		}
-		return "原因未知，可从托盘菜单「查看日志」了解详情。"
+		return "请退出并重新打开应用。"
 	case phaseOffline:
-		return "从托盘菜单选择「启动后台」重新开始（应用会自动重启并进入工作台）。"
+		return "请退出并重新打开应用。"
 	case phaseStopping:
-		return "后台正在按既有顺序回收子进程；完成后可从托盘重新启动。"
+		return "后台正在按既有顺序回收子进程；完成后请退出并重新打开应用。"
 	case phaseRestarting:
 		return "远程入口变更会短暂重启 dsh；本机入口保持不变。"
 	}

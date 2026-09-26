@@ -13,9 +13,9 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process'
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs'
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs'
 import { connect } from 'node:net'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
@@ -84,18 +84,17 @@ function parseArguments(argv) {
 function startStack() {
   mkdirSync(join(STACK_LOG, '..'), { recursive: true })
   const log = openSync(STACK_LOG, 'w')
-  // 不经过 pnpm.cmd/pnpm.exe：它们的启动器在 detached 无控制台场景下会把
-  // stdio 句柄弄丢（日志全空）。node + pnpm.cjs 行为可靠，且跨平台一致。
-  const pnpmCjs = join(root, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs')
-  if (!existsSync(pnpmCjs)) {
+  // 直接以 tsx 跑栈入口（与 `pnpm dev` 等价），省掉一层 pnpm CLI 启动。
+  const tsxPackage = join(root, 'node_modules', 'tsx')
+  if (!existsSync(tsxPackage)) {
     closeSync(log)
-    die(`[dsh-station] 找不到随仓库安装的 pnpm CLI：${pnpmCjs}（先运行 pnpm install）`)
+    die(`[dsh-station] 找不到 tsx：${tsxPackage}（先运行 pnpm install）`)
   }
-  // win32 不能用 detached：DETACHED_PROCESS 会剥掉 node 的控制台，pnpm
-  // 转头用 cmd.exe 跑 dev 脚本时 Windows 只能为它新建一个可见终端（空 cmd）。
-  // windowsHide 给 node 一个隐藏控制台供整条 cmd→node 链继承；POSIX 维持
+  // win32 不能用 detached：DETACHED_PROCESS 会剥掉 node 的控制台，栈内
+  // 再起 cmd.exe 时 Windows 只能为它新建一个可见终端（空 cmd）。
+  // windowsHide 给 node 一个隐藏控制台供整条子进程链继承；POSIX 维持
   // detached 进程组，stopProcessTree 的 -pid 信号依赖它。
-  const command = spawn(process.execPath, [pnpmCjs, 'dev'], {
+  const command = spawn(process.execPath, ['--import', 'tsx', join(root, 'scripts', 'dev-stack.mjs')], {
     detached: process.platform !== 'win32',
     windowsHide: true,
     stdio: ['ignore', log, log],
@@ -103,6 +102,17 @@ function startStack() {
   closeSync(log)
   command.unref()
   return command
+}
+
+/** 与 scripts/prepare-desktop.mjs 相同的 syso 新鲜度检查；并入本进程，省一次 node 启动。 */
+function prepareDesktopResource() {
+  const source = join(root, 'packaging', 'win-launcher', 'rsrc_windows_amd64.syso')
+  const target = join(root, 'packages', 'desktop', 'rsrc_windows_amd64.syso')
+  if (!existsSync(source)) die(`[desktop] 缺少 Windows 图标与 DPI 资源：${source}`)
+  mkdirSync(dirname(target), { recursive: true })
+  if (existsSync(target) && readFileSync(source).equals(readFileSync(target))) return
+  copyFileSync(source, target)
+  say(`[desktop] Windows 资源已准备：${target}`)
 }
 
 /** 读栈日志尾部，帮助定位自动启动失败。 */
@@ -177,6 +187,7 @@ if (isSelfCheck) {
   })
 }
 
+prepareDesktopResource()
 say('[dsh-station] 立即启动桌面壳（attach 模式）；relay 监听前的等待由壳持有，机器上线前的等待由 relay 进度页承担……')
 // win32 与发行版一致链成 GUI 子系统：console 子系统的 dev 壳在部分启动方式下
 // 会弹出独立终端窗口；日志仍经继承的句柄流回本终端。
