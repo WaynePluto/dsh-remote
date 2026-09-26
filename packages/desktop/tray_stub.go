@@ -27,3 +27,11 @@ func startWindowsTray(desktopTrayCallbacks) (*desktopTrayHandle, error) {
 func acquireSingleInstance() (bool, func()) {
 	return true, func() {}
 }
+
+// setWindowsTaskbarIcon 非 Windows 无任务栏图标重试语义，直接视为完成，
+// 让 main.go 的后台重试循环立刻退出。
+func setWindowsTaskbarIcon() bool { return true }
+
+// focusMainWindow 非 Windows 没有 Win32 置前，恢复交给 wails 的
+// WindowUnminimise/WindowShow 与窗口管理器。
+func focusMainWindow() {}

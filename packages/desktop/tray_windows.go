@@ -453,6 +453,16 @@ func desktopTrayIconEnumProc(hwnd uintptr, lparam uintptr) uintptr {
 	return 0
 }
 
+// focusMainWindow 找到本进程主窗口并抢到前台；已显示的窗口 WindowShow
+// 不会抢前台，通知点击定位必须显式置前。
+func focusMainWindow() {
+	desktopTrayFoundWindow = 0
+	desktopTrayEnumWindows.Call(desktopTrayEnumProc, 0)
+	if hwnd := desktopTrayFoundWindow; hwnd != 0 {
+		desktopTraySetForegroundWindow.Call(hwnd)
+	}
+}
+
 // setWindowsTaskbarIcon 把 exe 资源图标设为主窗口的大/小图标与窗口类图标。
 // 无边框窗口没有标题栏图标可看，但任务栏按钮、hover 预览左上角和 Alt+Tab
 // 都取自窗口/类图标；不设置时会退回系统默认程序图标。

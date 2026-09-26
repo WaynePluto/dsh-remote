@@ -117,11 +117,7 @@ func installNotifyActivation(currentWindow func() context.Context) {
 		runtime.WindowUnminimise(ctx)
 		runtime.WindowShow(ctx)
 		// 已显示的窗口 WindowShow 不会抢前台，点击通知必须置前。
-		desktopTrayFoundWindow = 0
-		desktopTrayEnumWindows.Call(desktopTrayEnumProc, 0)
-		if hwnd := desktopTrayFoundWindow; hwnd != 0 {
-			desktopTraySetForegroundWindow.Call(hwnd)
-		}
+		focusMainWindow()
 		log.Printf("通知点击激活：args=%q", args)
 		runtime.WindowExecJS(ctx,
 			"window.dispatchEvent(new CustomEvent('dsh-station:open-session',{detail:"+jsonString(sessionID)+"}))")
