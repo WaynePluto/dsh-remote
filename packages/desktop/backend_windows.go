@@ -84,6 +84,13 @@ func adoptBackendProcess(process *os.Process) error {
 	return nil
 }
 
+// applyChildWindowPolicy：GUI 壳（-H=windowsgui）本身没有控制台；直接
+// spawn console 子进程时 Windows 会为它新建可见终端窗口——双击启动的
+// 用户先看到黑窗、后台跑完才看到主窗口。HideWindow 让新控制台隐藏创建。
+func applyChildWindowPolicy(command *exec.Cmd) {
+	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+}
+
 // spawnShellReplacement 以脱离当前 Job 的方式拉起新壳：旧壳退出时
 // KILL_ON_JOB_CLOSE 只回收旧的后台进程树，不影响新壳。
 func spawnShellReplacement(executable string) error {

@@ -38,6 +38,7 @@ export {
   ADMIN_WAKEUP_PATH,
   renderOfflinePage,
 } from './console/shell.js'
+export { renderSplashPage } from './shared.js'
 
 export type { AdminConsoleRequestListener, AdminConsoleSession } from './console/request-context.js'
 

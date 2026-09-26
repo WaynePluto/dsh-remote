@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -16,9 +17,10 @@ const bootstrapHoldSeconds = 150
 // statusHandler 是独立模式下 AssetServer 的唯一处理器。
 // webview 的初始导航是唯一能进入 relay 的入口：任何由页面发起的后续
 // 跳转（meta-refresh、JS location）都会带 Sec-Fetch-Site: cross-site，
-// 被 relay 的原始安全检查正确拒绝。因此这里「持有」初始请求直到后台
-// 就绪再发一次 302（与 attach 模式的引导跳转同一条安全边界）；失败或
-// 超时才回答状态页，恢复走托盘「启动后台」（壳会自重启取得新的初始导航）。
+// 被 relay 的原始安全检查正确拒绝。因此这里「持有」初始请求，直到
+// relay 端口开始监听（launcher 先起 relay，dsh/connector 就绪前的等待
+// 由 relay 自己的重试页承担）就发一次 302；后台失败或超时才回答状态页，
+// 恢复走托盘「启动后台」（壳会自重启取得新的初始导航）。
 func statusHandler(manager *backendManager) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -30,23 +32,33 @@ func statusHandler(manager *backendManager) http.Handler {
 			return
 		}
 		deadline := time.Now().Add(bootstrapHoldSeconds * time.Second)
-		status := manager.Status()
-		for status.Phase != phaseReady {
+		relayHost := ""
+		for {
+			status := manager.Status()
 			if status.Phase == phaseFailed || status.Phase == phaseOffline {
 				break
+			}
+			if status.Phase == phaseReady && status.HasURLs {
+				redirectToRelay(w, r, status.URLs.Local)
+				return
+			}
+			if status.HasURLs {
+				if relayHost == "" {
+					if parsed, err := url.Parse(status.URLs.Local); err == nil {
+						relayHost = parsed.Host
+					}
+				}
+				if relayHost != "" && tcpReachable(relayHost) {
+					redirectToRelay(w, r, status.URLs.Local)
+					return
+				}
 			}
 			if !time.Now().Before(deadline) {
 				break
 			}
-			status, _ = manager.WaitForChange(2 * time.Second)
+			time.Sleep(200 * time.Millisecond)
 		}
-		if status.Phase == phaseReady && status.HasURLs {
-			w.Header().Set("Cache-Control", "no-store")
-			w.Header().Set("Referrer-Policy", "no-referrer")
-			http.Redirect(w, r, status.URLs.Local, http.StatusFound)
-			return
-		}
-		body := renderStatusPage(status)
+		body := renderStatusPage(manager.Status(), "")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Content-Length", fmt.Sprint(len(body)))
@@ -54,16 +66,20 @@ func statusHandler(manager *backendManager) http.Handler {
 	})
 }
 
+func redirectToRelay(w http.ResponseWriter, r *http.Request, local string) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	http.Redirect(w, r, local, http.StatusFound)
+}
+
 func phaseLabel(phase backendPhase) string {
 	switch phase {
 	case phaseConfig:
 		return "正在准备配置"
-	case phasePlugins:
-		return "正在准备插件"
-	case phaseDsh:
-		return "正在启动 dsh"
 	case phaseRelay:
 		return "正在启动本机入口"
+	case phaseDsh:
+		return "正在启动 dsh"
 	case phaseReady:
 		return "就绪"
 	case phaseRestarting:
@@ -97,7 +113,8 @@ func phaseAdvice(status backendStatus) string {
 
 // renderStatusPage 输出轻量的启动/故障页（只描述阶段与地址，不带凭据）。
 // 页面绝不自刷新或用 JS 跳转：那类跳转进不了 relay（见 statusHandler 注释）。
-func renderStatusPage(status backendStatus) []byte {
+// adviceOverride 用于没有后台管理器的 attach 模式给出开发栈专属指引。
+func renderStatusPage(status backendStatus, adviceOverride string) []byte {
 	var builder strings.Builder
 	builder.WriteString(`<!doctype html><html lang="zh-CN"><meta charset="utf-8">` +
 		`<title>DSH 工作站</title>` +
@@ -121,7 +138,11 @@ small{opacity:.6}
 	if status.Detail != "" {
 		builder.WriteString(`<p class="detail">` + html.EscapeString(status.Detail) + `</p>`)
 	}
-	if advice := phaseAdvice(status); advice != "" {
+	advice := adviceOverride
+	if advice == "" {
+		advice = phaseAdvice(status)
+	}
+	if advice != "" {
 		builder.WriteString(`<p class="detail">` + html.EscapeString(advice) + `</p>`)
 	}
 	if status.HasURLs && (status.Phase == phaseReady || status.Phase == phasePlugins || status.Phase == phaseDsh || status.Phase == phaseRelay) {

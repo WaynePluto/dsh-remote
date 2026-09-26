@@ -23,7 +23,9 @@
 - [x] concise 与 concise-ptc 两个简洁预设，PTC 复用官方工具执行链。
 - [x] 固定 YOLO，用户提问保留人工回答。
 - [x] dsh 0.1.7 能力吸收：25 个插件包补显示元数据（locale/{en,zh}.json 的 meta + exports/files）；launcher 检测 dsh Bundle 静默跳过诊断并响亮警告；peer 准入与打包约定写入 docs/dsh/plugins.md。
-- [x] dsh 0.1.7-rc.1 适配；代码迁移与各冒烟 check 已完成，真实链路验收（登录 → 发消息 → 流式输出）已于 2026-09-24 在桌面预览壳内置窗口实测通过（会话日志记录完整轮次，流式经 relay 长连接），复核入口见 [源码依据](02-dsh-facts.md)。
+- [x] dsh 0.1.7-rc.1 适配：代码迁移与各冒烟 check 已完成，真实链路验收（登录 → 发消息 → 流式输出）于 2026-09-24 在桌面预览壳内置窗口实测通过（会话日志记录完整轮次，流式经 relay 长连接），复核入口见 [源码依据](02-dsh-facts.md)。
+- [x] dsh 0.1.7-rc.2 升级（2026-09-26）：传输/认证/插件契约逐条核对无破坏，favorite-models 补 `ModelDirectoryState.pending` 字段；14 个冒烟 check 与全仓 test/typecheck/build 通过，开发栈实测启动正常。rc.2 下真实链路（登录 → 发消息 → 流式输出）待用户复测。
+- [x] 启动体验修复（2026-09-26，二轮）：弹终端与启动慢双双修复。空 cmd 根因是 dev 栈以 DETACHED_PROCESS 拉起、pnpm 的 cmd.exe 只能新建可见控制台，改 windowsHide 隐藏控制台后消失；Wails v2 首次导航完成前不显示窗口且进 relay 只能靠初始导航 302，因此把 relay 提到一切构建/同步之前（launcher 与 dev 栈都重排），等待页改为 relay 自己的重试页（每秒 meta refresh，机器上线 303 进 dsh；本机 loopback 是极简启动 splash——居中标志+转圈+一行状态、dsh 同源背景，远程访客保留带指引的离线页）；插件快路径以介质内容指纹替代开发栈 forceRefresh。实测：dev:desktop 开窗约 4 秒（原 25+）、机器在线约 12 秒；便携版开窗约 2.1–2.6 秒、dsh 可用约 6.2 秒（dsh 插件树加载为上游成本），全程 0 个控制台窗口。
 - [ ] 上游已知问题：dsh 0.1.7-rc.1 停用 yolo-mode Bundle 时 session-controller 重挂载竞态（file-upload Agent resolver 二次注册失败，重启可恢复；concise-mode-check 已按签名精确豁免并标注）。等上游修复后移除豁免。
 - [ ] 实机对比验收 dsh 0.1.7 原生 Open In… Explorer（`openWorkspacePath`，等待交接应答、不置前）与 remote-settings 现有通道（spawn 即返回 + 异步置前）：按结果决定收敛或保留置前兼容层（见 [工作区](dsh/workspace.md)）。
 - [x] 插件第三方化与组合分发（D20）代码已完成：20 个功能组件分为 4 个组合包与 6 个独立包，首次默认安装；配套升级所有仍安装项并保留 Bundle/组件停用，卸载后不补回，可从发行版 `plugins/` 或开发 `.dev/plugins/` 重装。directory-picker 独立；模型组两个启动屏障组件不可单独停用；connection 注入与模型 HMR 屏障仍为壳级 overlay。10 个 Bundle 的在线停用/启用自动检查与隔离启动已通过，实机界面验收仍见下一项及 [计划](plugin-optional-plan.md)。

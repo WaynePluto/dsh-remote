@@ -47,16 +47,10 @@ const DARK_TOKENS = `
 `.trim()
 
 /**
- * 所有 relay 页面共用的基础样式表。采用内联方式，因为登录页必须在隧道存在前渲染，
- * 因此没有可向未认证浏览器提供样式表的路由。
- *
- * 配色、字号比例和几何尺寸使用 dsh 自己的设计 token，复制自
- * `packages/client/ui-theme/src/styles/design-platform.css` 和 `ui-primitives` 组件样式
- * （input h32/r8、胶囊按钮 h36/r18、card r12、dialog r24），使 relay 页面与其后的 dsh UI
- * 看起来像同一个产品。dsh 用内联脚本解析 `system`；这些页面完全没有脚本（`default-src 'none'`），
- * 因此通过 media query 解析，两个显式选项则由 server 从 cookie 渲染成 attribute。
+ * 主题与字体 token（深色两处使用完全相同的 DARK_TOKENS），以及所有 relay
+ * 文档共用的最小 reset。独立成块供非控制台外壳的页面（启动等待页）复用。
  */
-const PAGE_STYLE = `
+const TOKEN_STYLE = `
 :root{
 --font:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",Helvetica,Arial,sans-serif;
 --mono:"SF Mono","JetBrains Mono","Fira Code",Consolas,"Liberation Mono",Menlo,Courier,"PingFang SC","Microsoft YaHei";
@@ -81,6 +75,20 @@ ${DARK_TOKENS}
 /* 始终预留滚动条轨道；页面在可滚动与不可滚动之间切换时，
    卡片不会横向偏移。 */
 html{scrollbar-gutter:stable}
+`.trim()
+
+/**
+ * 所有 relay 页面共用的基础样式表。采用内联方式，因为登录页必须在隧道存在前渲染，
+ * 因此没有可向未认证浏览器提供样式表的路由。
+ *
+ * 配色、字号比例和几何尺寸使用 dsh 自己的设计 token，复制自
+ * `packages/client/ui-theme/src/styles/design-platform.css` 和 `ui-primitives` 组件样式
+ * （input h32/r8、胶囊按钮 h36/r18、card r12、dialog r24），使 relay 页面与其后的 dsh UI
+ * 看起来像同一个产品。dsh 用内联脚本解析 `system`；这些页面完全没有脚本（`default-src 'none'`），
+ * 因此通过 media query 解析，两个显式选项则由 server 从 cookie 渲染成 attribute。
+ */
+const PAGE_STYLE = `
+${TOKEN_STYLE}
 body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:24px 16px;background:var(--page);color:var(--ink);font-family:var(--font);font-size:14px;line-height:22px;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 main{width:min(100%,440px);border:1px solid var(--line);border-radius:24px;background:var(--card);box-shadow:var(--shadow);overflow:hidden}
 .brand{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px 0;font-size:13px;line-height:20px;font-weight:500;color:var(--ink-2)}
@@ -181,7 +189,8 @@ function themeSwitcher(appearance: PageAppearance): string {
 /**
  * 将页面内容包进共享 relay 文档外壳。
  * @param options 页面标题、面板主体 markup、追加在共享样式表后的可选页面专属 CSS，
- * 以及要渲染的外观。
+ * 要渲染的外观，以及可选的自动重试间隔（秒）——这些页面没有脚本
+ * （`default-src 'none'`），自动重试只能用 meta refresh 表达。
  * @returns 完整的 HTML 文档。
  */
 export function renderPage(options: {
@@ -189,14 +198,18 @@ export function renderPage(options: {
   body: string
   extraStyle?: string
   appearance?: PageAppearance
+  refreshSeconds?: number
 }): string {
   const extra = options.extraStyle === undefined ? '' : `\n${options.extraStyle}`
+  const refresh = options.refreshSeconds === undefined
+    ? ''
+    : `\n<meta http-equiv="refresh" content="${String(Math.max(1, Math.floor(options.refreshSeconds)))}">`
   const appearance = options.appearance ?? DEFAULT_APPEARANCE
   return `<!doctype html>
 <html lang="zh-CN" data-theme="${appearance.theme}">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">${refresh}
 <title>${escapeHtml(options.title)}</title>
 ${ICON_LINKS}
 <style>
@@ -208,6 +221,43 @@ ${PAGE_STYLE}${extra}
 <section class="panel">
 ${options.body}
 </section></main></body></html>`
+}
+
+/**
+ * 本机 loopback 的启动等待页：居中标志 + 转圈 + 一行状态，不带控制台外壳
+ * （品牌头、卡片、主题切换器、管理链接都属于「网页」，会让应用启动看起来
+ * 像点进了管理页）。背景用与 dsh UI 相同的 --page token，机器上线后进入
+ * dsh 时背景色不变，视觉上是一段连续的启动过程。仍然无脚本，自动重试靠
+ * meta refresh（每秒重访 `/`，上线后 relay 的下一次回答就是 303）。
+ * @param appearance 要渲染的外观。
+ * @returns 独立的 HTML 文档。
+ */
+export function renderSplashPage(appearance: PageAppearance): string {
+  return `<!doctype html>
+<html lang="zh-CN" data-theme="${appearance.theme}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="1">
+<title>DSH 工作站</title>
+${ICON_LINKS}
+<style>
+${TOKEN_STYLE}
+body{margin:0;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:24px;background:var(--page);color:var(--ink);font-family:var(--font);font-size:14px;line-height:22px;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.mark{width:40px;height:40px;border-radius:10px;display:block}
+.spin{width:26px;height:26px;border:2.5px solid var(--line);border-top-color:var(--brand);border-radius:50%;animation:splash-spin 1s linear infinite}
+@keyframes splash-spin{to{transform:rotate(360deg)}}
+.state{margin:0}
+.hint{margin:0;font-size:12px;line-height:18px;color:var(--caption)}
+@media(prefers-reduced-motion:reduce){.spin{animation:none}}
+</style>
+</head>
+<body>
+<img class="mark" src="${ICON_SVG_PATH}" alt="" width="40" height="40">
+<span class="spin" aria-hidden="true"></span>
+<p class="state">正在启动 DSH 工作站…</p>
+<p class="hint">就绪后会自动进入工作台</p>
+</body></html>`
 }
 
 /** 读取表单字段；客户端可能将其作为文件发送，也可能完全省略。 */

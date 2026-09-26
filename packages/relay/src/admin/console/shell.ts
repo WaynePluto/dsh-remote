@@ -210,6 +210,12 @@ export function confirmPage(options: {
 
 /**
  * 目标机器没有活动控制信道时，浏览器导航得到的 502 响应体。
+ *
+ * 页面承担两种等待：桌面壳双击后 dsh/connector 尚未就绪的启动期，以及机器
+ * 真正关机后的离线期。两种情况都无法由页面跳转进入 relay（cross-site 会被
+ * 原始安全检查拒绝），因此用 meta refresh 每秒重试同一 URL：机器上线后
+ * relay 对 `/` 的下一次回答就是 303，浏览器顺着它进入 dsh。纯 CSS 动画示意
+ * 进行中；页面保持无脚本（`default-src 'none'`）。
  * @param slug 浏览器请求的机器。
  * @param appearance 要渲染的外观；返回路径是浏览器当前所在的 URL，因此外观切换会重新渲染同一页面。
  * @returns 独立的 HTML 文档。
@@ -217,11 +223,20 @@ export function confirmPage(options: {
 export function renderOfflinePage(slug: string, appearance: PageAppearance): string {
   return renderPage({
     title: '机器离线 · DSH 工作站',
-    extraStyle: CONSOLE_STYLE,
+    extraStyle: `${CONSOLE_STYLE}
+.wait{display:flex;align-items:center;gap:10px}
+.spin{flex:none;width:20px;height:20px;border:2px solid var(--line);border-top-color:var(--brand);border-radius:50%;animation:offline-spin 1s linear infinite}
+@keyframes offline-spin{to{transform:rotate(360deg)}}
+.bar{position:relative;height:4px;margin:18px 0 0;border-radius:999px;background:var(--inset);overflow:hidden}
+.bar:after{content:"";position:absolute;top:0;bottom:0;left:-40%;width:40%;border-radius:999px;background:var(--brand);animation:offline-slide 1.4s ease-in-out infinite}
+@keyframes offline-slide{to{left:100%}}
+@media(prefers-reduced-motion:reduce){.spin{animation:none}.bar:after{animation:none;left:30%}}`,
     appearance,
-    body: `<p class="eyebrow">Machine offline</p><h1>${escapeHtml(slug)} 当前离线</h1>
+    refreshSeconds: 1,
+    body: `<div class="wait"><span class="spin" aria-hidden="true"></span><p class="eyebrow">等待机器上线</p></div><h1>${escapeHtml(slug)} 当前离线</h1>
 <p class="intro">${escapeHtml(slug)} 上的 connector 没有连过来，所以现在没法把请求送到它的 dsh。</p>
-<p class="empty">让那台机器开机并启动 DSH 工作站 即可；connector 会自动重连，届时刷新本页就能继续使用，不需要在这里做任何设置。</p>
+<div class="bar" aria-hidden="true"></div>
+<p class="empty">本页每秒自动重试：机器正在启动时无需任何操作，connector 连上后会自动进入工作台；如果那台机器已经关机，开机并启动 DSH 工作站 即可，不需要在这里做任何设置。</p>
 <div class="actions"><a class="open" href="${ADMIN_PATH_PREFIX}">看看能打开哪些机器 →</a></div>
 <p class="foot">DSH 工作站 / relay</p>`,
   })

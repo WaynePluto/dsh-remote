@@ -302,6 +302,88 @@ describe('third-party plugin lifecycle', () => {
     expect(readManifest(home).dsh.profile.bundles).toContain(old)
   })
 
+  it('skips media refresh and the package manager when nothing changed since the last sync', async () => {
+    const { home, media } = fixture()
+    ensureProfile({ home, profile: 'dsh-station-web', bundles: BASE_PROFILE_BUNDLES })
+    await synchronizePluginDistributions({ home, profile: 'dsh-station-web', mediaDirectory: media,
+      installAnchor: import.meta.filename, profileCreated: true })
+    const directory = profileDirectory(home, 'dsh-station-web')
+    // 快路径用 profile node_modules 里的包存在性校验链接完好；mock 的包管理器
+    // 不会真的安装，这里手动补齐等价物。
+    for (const item of PLUGIN_DISTRIBUTIONS) {
+      const target = join(directory, 'node_modules', ...item.name.split('/'))
+      fs.mkdirSync(target, { recursive: true })
+      fs.writeFileSync(join(target, 'package.json'), JSON.stringify({ name: item.name, version: '1.2.3' }))
+    }
+    const stateBefore = fs.readFileSync(join(directory, 'dsh-station-bundles-state.json'), 'utf8')
+    const manifestBefore = fs.readFileSync(join(directory, 'package.json'), 'utf8')
+    runPluginCommand.mockClear()
+
+    const result = await synchronizePluginDistributions({ home, profile: 'dsh-station-web', mediaDirectory: media,
+      installAnchor: import.meta.filename, profileCreated: false })
+
+    expect(runPluginCommand).not.toHaveBeenCalled()
+    expect(result.installed).toEqual([])
+    expect(result.upgraded).toEqual([])
+    expect(fs.readFileSync(join(directory, 'dsh-station-bundles-state.json'), 'utf8')).toBe(stateBefore)
+    expect(fs.readFileSync(join(directory, 'package.json'), 'utf8')).toBe(manifestBefore)
+  })
+
+  it('leaves the fast path when a media version changes even with intact links', async () => {
+    const { home, media } = fixture()
+    ensureProfile({ home, profile: 'dsh-station-web', bundles: BASE_PROFILE_BUNDLES })
+    await synchronizePluginDistributions({ home, profile: 'dsh-station-web', mediaDirectory: media,
+      installAnchor: import.meta.filename, profileCreated: true })
+    const directory = profileDirectory(home, 'dsh-station-web')
+    for (const item of PLUGIN_DISTRIBUTIONS) {
+      const target = join(directory, 'node_modules', ...item.name.split('/'))
+      fs.mkdirSync(target, { recursive: true })
+      fs.writeFileSync(join(target, 'package.json'), JSON.stringify({ name: item.name, version: '1.2.3' }))
+    }
+    const first = PLUGIN_DISTRIBUTIONS[0] as (typeof PLUGIN_DISTRIBUTIONS)[number]
+    const catalogPath = join(media, 'catalog.json')
+    const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8')) as { plugins: { name: string, version: string }[] }
+    const entry = catalog.plugins.find(item => item.name === first.name)
+    if (entry === undefined) throw new Error('catalog entry missing')
+    entry.version = '1.3.0'
+    fs.writeFileSync(catalogPath, JSON.stringify(catalog))
+    runPluginCommand.mockClear()
+
+    const result = await synchronizePluginDistributions({ home, profile: 'dsh-station-web', mediaDirectory: media,
+      installAnchor: import.meta.filename, profileCreated: false })
+
+    expect(runPluginCommand).toHaveBeenCalled()
+    expect(result.upgraded).toContain(first.name)
+  })
+
+  it('leaves the fast path when media content changes without a version bump', async () => {
+    const { home, media } = fixture()
+    ensureProfile({ home, profile: 'dsh-station-web', bundles: BASE_PROFILE_BUNDLES })
+    await synchronizePluginDistributions({ home, profile: 'dsh-station-web', mediaDirectory: media,
+      installAnchor: import.meta.filename, profileCreated: true })
+    const directory = profileDirectory(home, 'dsh-station-web')
+    for (const item of PLUGIN_DISTRIBUTIONS) {
+      const target = join(directory, 'node_modules', ...item.name.split('/'))
+      fs.mkdirSync(target, { recursive: true })
+      fs.writeFileSync(join(target, 'package.json'), JSON.stringify({ name: item.name, version: '1.2.3' }))
+    }
+    // 开发栈每次构建都重写 .dev/plugins，版本号不变而内容会变：
+    // 内容指纹必须让快路径失效并重新物化。
+    const first = PLUGIN_DISTRIBUTIONS[0] as (typeof PLUGIN_DISTRIBUTIONS)[number]
+    const pluginDirectory = join(media, first.name.slice(first.name.lastIndexOf('/') + 1).replace(/^dsh-plugin-/u, ''))
+    fs.mkdirSync(join(pluginDirectory, 'dist'), { recursive: true })
+    fs.writeFileSync(join(pluginDirectory, 'dist', 'index.js'), 'export const rebuilt = true\n')
+    runPluginCommand.mockClear()
+
+    const result = await synchronizePluginDistributions({ home, profile: 'dsh-station-web', mediaDirectory: media,
+      installAnchor: import.meta.filename, profileCreated: false })
+
+    expect(runPluginCommand).toHaveBeenCalled()
+    expect(result.upgraded).toContain(first.name)
+    expect(fs.readFileSync(join(profileDirectory(home, 'dsh-station-web'), '.dsh-station-plugin-media',
+      pluginDirectory.slice(media.length + 1), 'dist', 'index.js'), 'utf8')).toBe('export const rebuilt = true\n')
+  })
+
   it('migrates legacy bundles and preserves component and files removal choices', async () => {
     const { home, media } = fixture()
     const allComponents = PLUGIN_DISTRIBUTIONS.flatMap(item => item.components.map(component => component.name))

@@ -13,12 +13,12 @@ import process from 'node:process'
 /** 状态行前缀；桌面壳按它过滤，普通日志绝不包含这个字节序列。 */
 export const DESKTOP_LINE_PREFIX = '@@DSH_STATION '
 
-/** 后台生命周期阶段；顺序即启动顺序。 */
+/** 后台生命周期阶段；顺序即启动顺序（relay 最先起，等待页由它承担）。 */
 export type DesktopPhase =
   | 'config'
+  | 'relay'
   | 'plugins'
   | 'dsh'
-  | 'relay'
   | 'ready'
   | 'restarting'
   | 'stopping'

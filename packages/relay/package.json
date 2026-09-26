@@ -20,7 +20,7 @@
     "@dsh-station/protocol": "workspace:*",
     "@hono/node-server": "1.19.17",
     "commander": "15.0.0",
-    "hono": "4.13.8",
+    "hono": "4.13.9",
     "jose": "6.2.12",
     "otplib": "13.5.0",
     "pino": "10.3.1",

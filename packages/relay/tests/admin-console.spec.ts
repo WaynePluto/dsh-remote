@@ -1,4 +1,7 @@
 import { once } from 'node:events'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   ENROLL_TOKEN_SHOWN_ONCE_NOTICE,
@@ -327,6 +330,49 @@ describe('M2.5 admin console', () => {
     expect(lastIssuedTokenId(fixture.store)).toBeUndefined()
   })
 
+  it('shows local loopback visitors a minimal splash instead of the console-styled offline page', async () => {
+    // directSlug 让 127.0.0.1 Host 解析到机器（生产 launcher 总是传它）；
+    // home 指到临时目录，避免 relay 的自挂条目写进真实 dsh-station home。
+    const home = await mkdtemp(join(tmpdir(), 'relay-splash-'))
+    const fixture = await startAuthenticatedRelayFixture({
+      jwtSecret: JWT_SECRET,
+      account: {
+        kind: 'existing-user',
+        input: {
+          id: 'console-test-user',
+          username: 'admin',
+          passwordHash: 'test-password-hash',
+          totpSecret: 'test-totp-secret',
+          totpEnabled: true,
+        },
+      },
+      relay: { streamConnectTimeoutMs: 2_000, directSlug: MACHINE_SLUG, home },
+      device: { mode: 'offline', machineId: MACHINE_ID, slug: MACHINE_SLUG },
+    })
+    fixtures.push(fixture)
+    try {
+      const local = await httpRequest({
+        port: fixture.port,
+        path: '/',
+        headers: {
+          host: `127.0.0.1:${String(fixture.port)}`,
+          cookie: fixture.sessionCookie,
+          accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+      })
+      expect(local.status).toBe(502)
+      expect(local.headers['content-type']).toContain('text/html')
+      expect(local.body).toContain('正在启动 DSH 工作站')
+      expect(local.body).toContain('class="spin"')
+      expect(local.body).toContain('<meta http-equiv="refresh" content="1">')
+      // 启动等待是应用体验的一部分：不得出现管理页的痕迹。
+      expect(local.body).not.toContain('当前离线')
+      expect(local.body).not.toContain(ADMIN_PATH_PREFIX)
+    } finally {
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
   it('answers an offline machine with an HTML page only for browser navigation', async () => {
     const fixture = await startFixture({ online: false })
 
@@ -343,6 +389,9 @@ describe('M2.5 admin console', () => {
     expect(navigation.headers['content-type']).toContain('text/html')
     expect(navigation.body).toContain('<!doctype html>')
     expect(navigation.body).toContain('pc1 当前离线')
+    // 离线页承担启动等待：meta refresh 每秒重试，机器上线后顺着 303 进 dsh。
+    expect(navigation.body).toContain('<meta http-equiv="refresh" content="1">')
+    expect(navigation.body).toContain('自动重试')
 
     const api = await httpRequest({
       port: fixture.port,

@@ -164,6 +164,7 @@ func (m *backendManager) startLocked() error {
 	// 通知管道令牌经环境传给 launcher → dsh → notify 插件；
 	// 没有它插件不会连桌面壳，Web/CLI 行为完全不变。
 	command.Env = append(os.Environ(), "DSH_STATION_NOTIFY_TOKEN="+m.token)
+	applyChildWindowPolicy(command)
 
 	if err := command.Start(); err != nil {
 		return fmt.Errorf("后台启动失败：%w", err)

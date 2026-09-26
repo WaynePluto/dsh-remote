@@ -102,7 +102,7 @@ graph TD
 ### 桌面预览与后台所有权
 
 - `packages/desktop/` 有两种模式：默认独立模式托管自有后台（发现随包载荷与 Node、`--desktop` 拉起 launcher、实例锁防双开、Job Object 崩溃回收），`--attach` 开发模式附着已运行栈。托盘「启动/重启后台」通过壳自重启恢复（webview 初始导航一生一次，页面发起的跳转进不了 relay——见 statuspage.go 注释）。
-- Wails AssetServer 在 attach 模式对 `/` 发一次 302；独立模式持有初始导航直到后台就绪再 302。HTTP/WS、认证和插件资源均从真实 relay origin 加载，不对业务页提供除窗口控制外的 Go Bindings。桌面介质由 `scripts/pack-desktop.mjs` 在对应平台产出（win NSIS setup + 便携 zip、mac DMG + .app 便携 zip、linux deb + 便携 zip，统一入口 `scripts/release.mjs`），随包 Node 清单在 `packaging/desktop-node.json`。**没有原生网络/系统权限隔离（S1.3）**；参数校验只限定初始地址，风险及构建方式见 `packages/desktop/README.md`。
+- Wails AssetServer 在 attach 模式对 `/` 发一次 302；独立模式持有初始导航直到 relay 端口监听再 302（launcher 先起 relay，插件同步与 dsh 就绪前的等待由 relay 自己的重试页承担；Wails v2 首次导航完成前不显示窗口，窗口出现时刻≈relay 监听时刻）。HTTP/WS、认证和插件资源均从真实 relay origin 加载，不对业务页提供除窗口控制外的 Go Bindings。桌面介质由 `scripts/pack-desktop.mjs` 在对应平台产出（win NSIS setup + 便携 zip、mac DMG + .app 便携 zip、linux deb + 便携 zip，统一入口 `scripts/release.mjs`），随包 Node 清单在 `packaging/desktop-node.json`。**没有原生网络/系统权限隔离（S1.3）**；参数校验只限定初始地址，风险及构建方式见 `packages/desktop/README.md`。
 
 ### 插件双端与运行期协作
 

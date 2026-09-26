@@ -31,6 +31,7 @@ const EMPTY_DIRECTORY: ModelDirectoryState = {
   groups: [],
   failures: [],
   status: 'idle',
+  pending: null,
   error: null,
 }
 const noopSubscribe = (): (() => void) => () => {}

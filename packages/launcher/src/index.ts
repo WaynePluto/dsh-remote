@@ -167,23 +167,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   const pnpmCli = resolvePnpmCli()
   const pnpmShimDirectory = preparePnpmShim(join(config.home, 'runtime', 'pnpm-bin'), pnpmCli)
   const dshEnvironment = withBundledPnpmPath(process.env, pnpmCli, pnpmShimDirectory)
-  if (config.dsh.profile === 'dsh-station-web') {
-    emit('plugins')
-    const mediaDirectory = resolvePluginMediaDirectory({ launcherDirectory: launcherDirectory() })
-    const pluginSync = await synchronizePluginDistributions({
-      home: dshHome,
-      profile: config.dsh.profile,
-      mediaDirectory,
-      installAnchor: resolveDshInstallAnchor(),
-      runtimeModulesDirectory: resolveBundledModulesDirectory(pnpmCli),
-      profileCreated: bootstrap === 'created',
-      packageManager: { command: process.execPath, args: [pnpmCli], version: resolvePnpmVersion(pnpmCli) },
-      onOutput: text => process.stdout.write(text),
-    })
-    say(`插件介质：${mediaDirectory}`)
-    if (pluginSync.migrated) say('已把旧受管 Bundle 迁移为可卸载的第三方插件。')
-    if (pluginSync.skippedRemoved.length > 0) say(`${pluginSync.skippedRemoved.join('、')} 已被卸载，本次不自动补回。`)
-  }
+  // 插件同步在 relay 启动之后进行（见下方 emit('relay') 处的说明）。
 
   // Mode A：relay 原样转发浏览器的 Host，因此 dsh 必须信任
   // 浏览器可能用来访问这台机器的每个 authority（铁律 7）。
@@ -233,8 +217,8 @@ export async function run(argv: readonly string[]): Promise<number> {
     shuttingDown = true
     emit('stopping')
     stopTrustWatcher?.()
-    // 按反向启动顺序停止，使 connector 在它
-    // 拨号的 relay 消失前停止拨号，并使 dsh 比两个客户端都晚退出。
+    // 按反向启动顺序停止：connector 在它拨号的 relay 消失前停止拨号，
+    // dsh 随后退出，最先启动的隧道枢纽 relay 最后回收。
     await supervisor.stopAll()
     lock.release()
     settle?.(code)
@@ -289,6 +273,51 @@ export async function run(argv: readonly string[]): Promise<number> {
       },
     })
   }
+  // relay 先于插件同步与 dsh 启动：桌面壳在 relay 端口开始监听时即 302 放行
+  // 初始导航，插件同步（首次或介质内容变化时约 15 秒）与 dsh 就绪前的等待
+  // 由 relay 自己的重试页承担。relay 不依赖 profile/插件状态，先起没有
+  // 顺序风险；connector 仍等 dsh 的登录 token。
+  emit('relay')
+  supervisor.start({
+    name: RELAY_CHILD,
+    command: process.execPath,
+    args: relayArguments(relayEntry, {
+      host: config.relay.host,
+      port: config.relay.port,
+      slug: config.relay.slug,
+      ...config.relay.domain === undefined ? {} : { domain: config.relay.domain },
+      data: config.relay.data,
+      home: config.home,
+    }),
+    env: relayEnv,
+  })
+
+  if (config.dsh.profile === 'dsh-station-web') {
+    emit('plugins')
+    // 同步可能失败（介质缺失、pnpm 报错），而 relay 已经在跑：
+    // 失败必须走 shutdown 收掉它，不能把异常抛给顶层退出路径留下孤儿。
+    try {
+      const mediaDirectory = resolvePluginMediaDirectory({ launcherDirectory: launcherDirectory() })
+      const pluginSync = await synchronizePluginDistributions({
+        home: dshHome,
+        profile: config.dsh.profile,
+        mediaDirectory,
+        installAnchor: resolveDshInstallAnchor(),
+        runtimeModulesDirectory: resolveBundledModulesDirectory(pnpmCli),
+        profileCreated: bootstrap === 'created',
+        packageManager: { command: process.execPath, args: [pnpmCli], version: resolvePnpmVersion(pnpmCli) },
+        onOutput: text => process.stdout.write(text),
+      })
+      say(`插件介质：${mediaDirectory}`)
+      if (pluginSync.migrated) say('已把旧受管 Bundle 迁移为可卸载的第三方插件。')
+      if (pluginSync.skippedRemoved.length > 0) say(`${pluginSync.skippedRemoved.join('、')} 已被卸载，本次不自动补回。`)
+    } catch (error) {
+      reportFailure(error)
+      await shutdown(1)
+      return finished
+    }
+  }
+
   emit('dsh')
   startDshChild(trustedHosts)
 
@@ -304,21 +333,6 @@ export async function run(argv: readonly string[]): Promise<number> {
     await shutdown(1)
     return finished
   }
-
-  emit('relay')
-  supervisor.start({
-    name: RELAY_CHILD,
-    command: process.execPath,
-    args: relayArguments(relayEntry, {
-      host: config.relay.host,
-      port: config.relay.port,
-      slug: config.relay.slug,
-      ...config.relay.domain === undefined ? {} : { domain: config.relay.domain },
-      data: config.relay.data,
-      home: config.home,
-    }),
-    env: relayEnv,
-  })
 
   // 端口会在插件树稳定前响应，而 token 行稍后才出现；
   // 如果 token 始终没到，机器仍提供除

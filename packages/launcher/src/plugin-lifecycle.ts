@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import { createRequire, findPackageJSON } from 'node:module'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
@@ -30,6 +30,8 @@ interface LifecycleState {
   readonly schemaVersion: 2
   readonly offered: readonly string[]
   readonly versions: Readonly<Record<string, string>>
+  /** 介质目录内容指纹；旧状态文件缺失时走一次完整同步后补齐。 */
+  readonly stamps?: Readonly<Record<string, string>>
 }
 
 interface PackageManagerCommand {
@@ -92,8 +94,15 @@ function readState(directory: string): LifecycleState | { readonly ensured: read
     const value = readJson(join(directory, STATE_FILE))
     if (!isObject(value)) return undefined
     if (value.schemaVersion === 2 && Array.isArray(value.offered) && value.offered.every(item => typeof item === 'string')
-      && isObject(value.versions) && Object.values(value.versions).every(item => typeof item === 'string')) {
-      return { schemaVersion: 2, offered: value.offered, versions: value.versions as Record<string, string> }
+      && isObject(value.versions) && Object.values(value.versions).every(item => typeof item === 'string')
+      && (value.stamps === undefined
+        || (isObject(value.stamps) && Object.values(value.stamps).every(item => typeof item === 'string')))) {
+      return {
+        schemaVersion: 2,
+        offered: value.offered,
+        versions: value.versions as Record<string, string>,
+        ...value.stamps === undefined ? {} : { stamps: value.stamps as Record<string, string> },
+      }
     }
     if (Array.isArray(value.ensured) && value.ensured.every(item => typeof item === 'string')) {
       return { ensured: value.ensured }
@@ -102,6 +111,31 @@ function readState(directory: string): LifecycleState | { readonly ensured: read
     return undefined
   }
   return undefined
+}
+
+/**
+ * 介质目录的内容指纹：目录树内全部相对路径与文件字节一并哈希。
+ * 开发栈每次构建都会重写 `.dev/plugins`，版本号不变内容也会变，
+ * 因此快路径不能只比对版本；目录按名称排序保证不同平台遍历顺序稳定。
+ */
+function directoryStamp(directory: string): string {
+  const hash = createHash('sha256')
+  const walk = (current: string, prefix: string): void => {
+    const entries = fs.readdirSync(current, { withFileTypes: true })
+      .toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    for (const entry of entries) {
+      const relative = prefix === '' ? entry.name : `${prefix}/${entry.name}`
+      hash.update(`${relative}\0`)
+      if (entry.isDirectory()) {
+        walk(join(current, entry.name), relative)
+        continue
+      }
+      // 符号链接按目标内容哈希（readFileSync 跟随链接），与物化复制语义一致。
+      if (entry.isFile() || entry.isSymbolicLink()) hash.update(fs.readFileSync(join(current, entry.name)))
+    }
+  }
+  walk(directory, '')
+  return hash.digest('hex')
 }
 
 function readMedia(directory: string): readonly MediaEntry[] {
@@ -377,8 +411,6 @@ export async function synchronizePluginDistributions(options: {
     || sourceMedia.some((entry, index) => !sameDistribution(PLUGIN_DISTRIBUTIONS[index] as PluginDistribution, entry))) {
     throw new Error('插件安装介质与 launcher 清单不一致')
   }
-  // profile 可能与安装介质分处不同 Windows 盘符；先复制到同盘缓存再交给 pnpm 建 link。
-  const media = materializeProfileMedia(directory, sourceMedia, options.runtimeModulesDirectory, options.installAnchor)
   const before = profileManifest(manifestPath)
   const dependencies = new Set(Object.keys(before.dependencies))
   const selected = new Set(before.dsh.profile.bundles)
@@ -387,6 +419,30 @@ export async function synchronizePluginDistributions(options: {
   const legacyEnsured = new Set(previousState !== undefined && 'ensured' in previousState ? previousState.ensured : [])
   const hasLegacySelection = PLUGIN_DISTRIBUTIONS.some(item => item.components.some(component => selected.has(component.name)))
   const migrate = currentState === undefined && (legacyEnsured.size > 0 || hasLegacySelection)
+
+  // 启动快路径：状态文件记录的版本与介质指纹一致、profile 依赖与链接完好时，
+  // 介质物化和 pnpm 升级检查（约 15 秒的复制 + 安装）都是无操作，直接跳过。
+  // 任一条件不满足（新介质条目、版本或内容变化、链接缺失、迁移）走完整路径。
+  if (currentState !== undefined && !migrate && !options.profileCreated
+    && sourceMedia.every((entry) => {
+      if (!currentState.offered.includes(entry.name)) return false
+      if (!dependencies.has(entry.name)) return true
+      if (currentState.versions[entry.name] !== entry.version) return false
+      if (currentState.stamps?.[entry.name] !== directoryStamp(entry.directory)) return false
+      return fs.existsSync(join(directory, 'node_modules', ...entry.name.split('/'), 'package.json'))
+    })) {
+    return {
+      installed: [],
+      upgraded: [],
+      skippedRemoved: sourceMedia
+        .filter(entry => currentState.offered.includes(entry.name) && !dependencies.has(entry.name))
+        .map(entry => entry.name),
+      migrated: false,
+    }
+  }
+
+  // profile 可能与安装介质分处不同 Windows 盘符；先复制到同盘缓存再交给 pnpm 建 link。
+  const media = materializeProfileMedia(directory, sourceMedia, options.runtimeModulesDirectory, options.installAnchor)
   const offered = new Set(currentState?.offered ?? [])
   const install: MediaEntry[] = []
   const enabled = new Set<string>()
@@ -484,11 +540,17 @@ export async function synchronizePluginDistributions(options: {
   const after = profileManifest(manifestPath)
   after.dsh.profile.bundles = insertDistributions(after.dsh.profile.bundles, enabled)
   writeTextAtomically(manifestPath, `${JSON.stringify(after, undefined, 2)}\n`)
+  // 指纹从源介质计算：物化副本是逐字节复制，两者一致，而源是快路径比对的对象。
   const versions = Object.fromEntries(install.map(entry => [entry.name, entry.version]))
+  const stamps = Object.fromEntries(install.map((entry) => {
+    const source = sourceMedia.find(candidate => candidate.name === entry.name)
+    return [entry.name, directoryStamp((source ?? entry).directory)]
+  }))
   writeTextAtomically(join(directory, STATE_FILE), `${JSON.stringify({
     schemaVersion: 2,
     offered: [...offered],
     versions,
+    stamps,
   } satisfies LifecycleState, undefined, 2)}\n`)
 
   return {

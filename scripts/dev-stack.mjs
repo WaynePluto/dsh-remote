@@ -1,11 +1,15 @@
 /**
- * 本地开发栈：单机运行 dsh + connector + relay。
+ * 本地开发栈：单机运行 relay + dsh + connector。
  *
  * `pnpm dev` 通过 tsx 运行 TypeScript 源码；`pnpm start` 运行构建后的
  * `dist/` 产物。两者都会在明确的、需要认证的局域网 HTTP 模式下把 relay
  * 绑定到所有接口，因此手机或另一台机器可以访问，同时所有非 loopback 请求仍必须登录。
  * 运行数据使用独立的开发 home（`~/.dsh-station-dev` + `~/.dsh-dev`），
  * 端口（relay 31809 / dsh 3180）与发行版默认值错开，可与已安装的发行版实例同时运行。
+ *
+ * relay 最先启动（tsx 源码即可运行，不依赖任何构建），插件构建与介质同步
+ * 在其后进行：dev:desktop 的窗口在 relay 监听后即显示，等待期由 relay 的
+ * 重试页覆盖。任何构建失败都会连 relay 一起停掉整个栈。
  */
 
 import { spawn } from 'node:child_process'
@@ -144,7 +148,7 @@ function createEnrollToken() {
 function killTree(child) {
   if (child.exitCode !== null || child.signalCode !== null) return
   if (process.platform === 'win32') {
-    spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
+    spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
     return
   }
   child.kill('SIGTERM')
@@ -191,6 +195,38 @@ const environment = relayEnvironment(jwtSecret)
 const pnpmShimDirectory = preparePnpmShim(join(DSH_STATION_HOME, 'runtime', 'pnpm-bin'), PNPM_CLI)
 const runtimeEnvironment = withBundledPnpmPath(environment, PNPM_CLI, pnpmShimDirectory)
 const lanIp = lanAddress()
+
+// relay 先于插件构建与 dsh 启动：桌面壳（dev:desktop）只在 relay 端口监听后
+// 放行初始导航并显示窗口，dsh/插件就绪前的等待由 relay 自己的重试页承担。
+// relay 只依赖上面的 jwt/数据库参数，先起没有顺序风险；connector 仍等 dsh 的 token。
+start('relay', process.execPath, [
+  ...relayCliArguments(built),
+  'serve',
+  '--host', '0.0.0.0',
+  '--port', String(RELAY_PORT),
+  '--direct-slug', machineSlug,
+  '--scheme', 'http',
+  '--lan-http',
+  '--data', RELAY_DATABASE,
+  '--home', DSH_STATION_HOME,
+], environment)
+
+/** 运行根 package.json 的一个脚本；用仓库锁定的 pnpm CLI，输出原样流入本进程。 */
+async function runRootScript(name) {
+  const child = spawn(process.execPath, [PNPM_CLI, 'run', name], { cwd: ROOT, stdio: 'inherit' })
+  const code = await new Promise((resolve) => child.once('exit', (exitCode) => resolve(exitCode ?? 1)))
+  if (code !== 0) {
+    console.error(`\n[dsh-station] pnpm ${name} 失败（退出码 ${String(code)}），正在停止本地栈。`)
+    for (const running of children.values()) killTree(running)
+    process.exit(code)
+  }
+}
+
+// 插件构建链在这里而不是根 dev 脚本里：窗口显示只等 relay，构建耗时
+// 由 relay 的重试页覆盖；产物仍是 .dev/plugins 与开发运行时目录。
+await runRootScript('plugins:build')
+await runRootScript('plugins:prepare')
+await runRootScript('dev:runtime')
 
 // 不预加载 proxy：出站 proxy 在 dsh 自己的
 // Settings → Proxy 页面由 `@dsh-station/dsh-plugin-proxy` 配置，
@@ -259,18 +295,6 @@ start('dsh', process.execPath, [
   dshTokenSeen = true
   noteDshToken(token)
 })
-
-start('relay', process.execPath, [
-  ...relayCliArguments(built),
-  'serve',
-  '--host', '0.0.0.0',
-  '--port', String(RELAY_PORT),
-  '--direct-slug', machineSlug,
-  '--scheme', 'http',
-  '--lan-http',
-  '--data', RELAY_DATABASE,
-  '--home', DSH_STATION_HOME,
-], environment)
 
 // connector 需要 dsh 的 token 才能认证，因此栈在这里等待 URL 行。
 // 即使 dsh 从未打印它，流量仍会隧道转发。

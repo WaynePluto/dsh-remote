@@ -17,6 +17,11 @@ profile 的 `dependencies` 是第三方 Bundle 是否安装的事实，`dsh.prof
 启用的事实，profile patch 中目标行的 `disabled` 则是组件是否停用的事实，三者不能混用。
 项目首次默认安装第三方 Bundle，配套升级只处理仍在 dependencies 中的包，并保留后两种状态；
 卸载后不得仅凭“默认清单”重新加入 dependency 或 bundles。
+升级判定用状态文件（`dsh-station-bundles-state.json`）记录的介质版本与内容指纹（目录树
+路径+字节的 sha256）：两者与介质一致且 profile `node_modules` 链接完好时启动跳过介质物化
+与 pnpm（快路径）；版本或内容变化、链接缺失、迁移走完整路径。指纹覆盖了开发栈每次构建
+重写 `.dev/plugins` 的同版本变化，因此开发栈不再需要强制刷新参数；旧状态文件没有指纹，
+升级后第一次运行会走一次完整路径补齐。
 
 profile patch 执行时，末尾 overlay 插入的行还不存在，所以覆盖普通项目插件 config 需要更靠后的 patch，
 且目标行必须有稳定 id。用户可编辑的插件字段通过带 volatile Config 的插件行和 configForms 写入；
@@ -174,7 +179,7 @@ settings.section 没有 icon 字段，导航 shell 按 id 选择图标，未知 
 项目的代理、通知、全局提示词和浏览器日志使用局部导航标记和注入样式，不替换 React 节点。
 当前图标映射为 `IconGlobeOutlineMedium`、`IconAlarmClockOutlineMedium`、`IconListPenOutlineMedium` 和
 `IconCodeOutlineMedium`；`settings.section` 没有 icon 字段，因此插件调用这些原生 component 并将
-返回的 SVG element 序列化成导航 mask。已安装的 0.1.7-rc.1
+返回的 SVG element 序列化成导航 mask。已安装的 0.1.7-rc.2
 `@deepseek-ai/dsh-client-ui-primitives/lib/index.js` 中，这些 component 返回的 React element
 先以纯函数 Artwork 为 `type`，Artwork 再返回原生 `<svg>`；项目公共 helper 必须有界展开函数包装，
 不能只接受 `type === 'svg'`，否则四个设置页插件启动即失败。
@@ -368,7 +373,8 @@ dsh `0.1.5-rc.2` 将通用文件图标统一为 `FileTypeIcon`（用 `path` 或 
 - **显示元数据**：插件页/设置清单的标题与描述来自各包 `locale/{en,zh}.json` 的
   `meta.title/description`（exports 需含 `./package.json` 与 `./locale/*.json`，
   files 带 `locale`）。文案与 docs/plugins.md 词表一致；`icon` 暂不声明，用默认图。
-- **Bundle 静默跳过**：dsh 0.1.7 对解析/清单/patch 失败的 Bundle 不再启动即败，改为
-  stderr 打 `dsh: skipping profile bundle "<包名>": <原因>` 后跳过。launcher 在 dsh
-  输出行里检测该诊断并响亮警告（`skippedBundleFromLine`）；分发管线的
+- **Bundle 静默跳过**：dsh 0.1.7 对解析/清单/patch 失败的 Bundle 不再启动即败。0.1.7-rc.2 起
+  profile 装载把跳过项收进 `Profile.skippedBundles`（装载过程本身不打印），CLI 装载完成后调用
+  `reportSkippedBundles` 每次启动向 stderr 打一次 `dsh: skipping profile bundle "<包名>": <原因>`。
+  launcher 在 dsh 输出行里检测该诊断并响亮警告（`skippedBundleFromLine`）；分发管线的
   「缺少宿主/浏览器产物」预检因此仍是必要的前置防线。

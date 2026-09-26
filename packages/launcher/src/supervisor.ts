@@ -91,7 +91,7 @@ interface SupervisedChild {
 function killTree(child: ChildProcess, force: boolean): void {
   if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return
   if (process.platform === 'win32') {
-    spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
+    spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
     return
   }
   child.kill(force ? 'SIGKILL' : 'SIGTERM')

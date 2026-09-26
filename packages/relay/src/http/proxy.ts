@@ -5,8 +5,9 @@ import http, {
 } from 'node:http'
 import type { Duplex } from 'node:stream'
 import type { Logger } from 'pino'
-import { renderOfflinePage } from '../admin/console-app.js'
+import { renderOfflinePage, renderSplashPage } from '../admin/console-app.js'
 import { PAGE_CSP, type PageAppearance } from '../admin/shared.js'
+import { isLoopbackBrowserRequest } from '../auth/loopback.js'
 import { TunnelError, type MachineRegistry } from '../tunnel/registry.js'
 import { upstreamHeaders } from './security.js'
 
@@ -45,7 +46,11 @@ function sendOfflinePage(
     res.destroy()
     return
   }
-  const body = renderOfflinePage(slug, appearance)
+  // 本机（桌面壳/本机浏览器）得到极简启动等待页：这段等待是应用启动的
+  // 一部分，不能长得像管理网页；远程访客仍得到带指引的离线页。
+  const body = isLoopbackBrowserRequest(req)
+    ? renderSplashPage(appearance)
+    : renderOfflinePage(slug, appearance)
   res.writeHead(502, {
     'cache-control': 'no-store',
     'content-security-policy': PAGE_CSP,

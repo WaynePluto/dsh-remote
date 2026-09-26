@@ -73,11 +73,11 @@ async function waitFor(check: () => boolean, timeoutMs = 5_000): Promise<void> {
 }
 
 describe('shutdown order', () => {
-  it('starts dsh, then the relay, then the connector', () => {
-    expect([...CHILD_START_ORDER]).toEqual(['dsh', 'relay', 'connector'])
+  it('starts the relay, then dsh, then the connector', () => {
+    expect([...CHILD_START_ORDER]).toEqual(['relay', 'dsh', 'connector'])
   })
 
-  it('stops the connector before the relay, and the relay before dsh', async () => {
+  it('stops the connector before dsh, and dsh before the relay', async () => {
     const exits: ChildExit[] = []
     const supervisor = createSupervisor({ onUnexpectedExit: exit => exits.push(exit), write: () => undefined })
     for (const name of CHILD_START_ORDER) {
@@ -97,7 +97,7 @@ describe('shutdown order', () => {
     }
     await stopping
 
-    expect(stopped).toEqual(['connector', 'relay', 'dsh'])
+    expect(stopped).toEqual(['connector', 'dsh', 'relay'])
     // 主动停止的子进程不算意外退出。
     expect(exits).toEqual([])
   })
@@ -110,8 +110,8 @@ describe('shutdown order', () => {
     }
     // harness.children 跨用例累积；这里只认刚刚启动的三个。
     const firstRound = harness.children.slice(-CHILD_START_ORDER.length)
-    const [firstDsh, relay, connector] = firstRound
-    if (firstDsh === undefined || relay === undefined || connector === undefined) {
+    const [relay, firstDsh, connector] = firstRound
+    if (relay === undefined || firstDsh === undefined || connector === undefined) {
       throw new Error('fake children were not spawned in start order')
     }
 
@@ -145,8 +145,8 @@ describe('shutdown order', () => {
     }
     await shuttingDown
 
-    // 替换发生在原位置：重启过的 dsh 仍然最后退出。
-    expect(stopped).toEqual(['connector', 'relay', 'dsh'])
+    // 替换发生在原位置：重启过的 dsh 仍在 relay 之前退出。
+    expect(stopped).toEqual(['connector', 'dsh', 'relay'])
     expect(exits).toEqual([])
   })
 })

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -106,6 +107,29 @@ func TestStatusHandlerHoldsUntilReady(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusFound || response.Header().Get("Location") != "http://127.0.0.1:30809/" {
 		t.Fatalf("持有期间就绪应 302 进 relay: %d %q", response.Code, response.Header().Get("Location"))
+	}
+}
+
+func TestStatusHandlerRedirectsOnceRelayListens(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	manager := newTestManager()
+	// dsh 仍在启动（phaseDsh），但 relay 端口已监听：初始导航应立即放行，
+	// 剩余等待由 relay 自己的重试页承担。
+	manager.setStatus(backendStatus{
+		Phase:   phaseDsh,
+		HasURLs: true,
+		URLs:    backendURLs{Local: "http://" + listener.Addr().String() + "/", Admin: "http://" + listener.Addr().String() + "/_admin", Dsh: "http://127.0.0.1:3080/"},
+	})
+	handler := statusHandler(manager)
+	request := httptest.NewRequest(http.MethodGet, "http://wails.localhost/", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusFound || response.Header().Get("Location") != "http://"+listener.Addr().String()+"/" {
+		t.Fatalf("relay 监听后应 302 进本机 relay: %d %q", response.Code, response.Header().Get("Location"))
 	}
 }
 
