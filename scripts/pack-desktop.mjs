@@ -297,6 +297,20 @@ function zipDirectory(directory, output) {
   return archive.finalize().then(() => finished).then(() => archive.pointer())
 }
 
+/** 找 makensis：先 PATH，再 choco/官方安装器的默认目录（两者都不改 PATH）。 */
+function resolveMakensis() {
+  if (spawnSync('makensis', ['-VERSION'], { encoding: 'utf8' }).status === 0) return 'makensis'
+  const candidates = [process.env['ProgramFiles(x86)'], process.env.ProgramFiles]
+    .filter(Boolean)
+    .map(root => join(root, 'NSIS', 'makensis.exe'))
+  for (const candidate of candidates) {
+    if (existsSync(candidate) && spawnSync(candidate, ['-VERSION'], { encoding: 'utf8' }).status === 0) {
+      return candidate
+    }
+  }
+  return null
+}
+
 function runSelfCheck(target, install) {
   const executable = join(install, target.executable)
   const result = spawnSync(executable, ['--selfcheck'], { cwd: install, encoding: 'utf8' })
@@ -442,8 +456,8 @@ async function buildTarget(targetKey) {
     }
 
     if (target.platform === 'win32' && !skipInstaller) {
-      const makensis = spawnSync('makensis', ['-VERSION'], { encoding: 'utf8' })
-      if (makensis.status !== 0) {
+      const makensis = resolveMakensis()
+      if (makensis === null) {
         say('警告：没有找到 makensis，跳过 NSIS 安装包（只产出便携 zip）。')
         say('       CI 上通过 choco install nsis 安装；本地安装后重跑 --skip-build 可补安装包。')
       } else {
@@ -456,7 +470,7 @@ async function buildTarget(targetKey) {
           .replaceAll('{{INSTALL}}', install.replaceAll('/', '\\'))
           .replaceAll('{{VERSION}}', version)
           .replaceAll('{{ICON}}', INSTALLER_ICON.replaceAll('/', '\\')))
-        const compile = spawnSync('makensis', [script], { stdio: 'inherit' })
+        const compile = spawnSync(makensis, [script], { stdio: 'inherit' })
         if (compile.status !== 0) fail('NSIS 编译失败。')
         results.push({ kind: 'installer', output: setupOutput, bytes: statSync(setupOutput).size, variantKey })
       }
